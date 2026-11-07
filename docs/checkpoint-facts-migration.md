@@ -2,6 +2,8 @@
 
 2026-11-07。承接[接入设计](checkpoint-facts-integration-design.md)及用户对生产迁移的授权。本文说明正式调用数据和持久表示的变更，不把实验模型变成另一套运行对象。
 
+本文保留首次生产迁移的实施与测量记录；下文的“本轮”“未完成”和兼容安排均指当时阶段，不是当前待办或兼容承诺。后续已完成增量选择，且当前只接受 Frame v6、Conversation schema 8 / Observer schema 6 的完整当前库，不迁移旧库、解析旧 v5 或读取旧文本交互。当前契约见 [Checkpoint](checkpoints.md)，增量选择及后续验证见[增量引用选择](checkpoint-selection.md)。
+
 ## 1. 已采用的决定
 
 这轮沿用之前逐次验证的决定：Context/Relation 持有固定事实，Invocation 协调活动，CP 消费同一份依据。没有新增 FactCall、Progress、Action 实体，没有改用重放或要求长任务切段。
@@ -111,6 +113,6 @@ Memory、Conversation SQLite 和 Observer SQLite 已适配。Conversation 数据
 
 已明确保留的成本：完整 refs 数组重复提交、作者全量 check、大 state 重编码、首次隔离大输入、实体每个 revision 首次构造完整快照、活调用持有全部关系，以及冷恢复完整认证。它们不因本轮已固定旧正文而自动变成常量。
 
-这次迁移不将未完成的 many API、实体分块、内存卸载或保留策略打包成新框架概念。后续按实际成本继续推进，也不把强制 continue-as-new 当作解决这些问题的前提。
+当轮未同时实施 many 增量 API、实体分块、内存卸载或保留策略；后续 many 增量选择已经完成，见文首现行入口。实体分块等仍是独立问题，不把强制 continue-as-new 当作解决这些问题的前提。
 
 基线提交后的首个小闭环见[关系查询优化与复验](checkpoint-relation-query-validation.md)。它保持存储读回和引用认证范围，只复用准确未变行的解析结果；本节性能数字仍指上面这轮迁移本身。

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { restoreLegacyCheckpointTables } from './fixtures/checkpoint-storage.mjs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -154,31 +153,4 @@ test('damaged exchange effect indexes fail closed without fabricating another co
   const store = files.open();
   assert.throws(() => store.exchanges.load(entity.id), PersistenceError);
   assert.throws(() => store.assertAvailable(), PersistenceError);
-});
-
-test('v3 migration adds empty exchange storage without rewriting content, current CP bodies or old interactions', (t) => {
-  const files = fixture(t);
-  const initial = files.open();
-  const content = loadConversationContent(initial);
-  content.transcript.append({ role: 'user', content: 'preserved' });
-  initial.checkpoints.save({ id: 'image', formatVersion: 5, contract: { key: 'fixture', version: 1 }, point: 'waiting', frame: { owner: { contextId: 'root', kind: 'scene' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: {}, references: {} }, 0);
-  const state = initial.load();
-  const head = initial.checkpoints.read('root');
-  initial.close();
-  const original = files.sql((database) => {
-    restoreLegacyCheckpointTables(database);
-    for (const row of database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) database.exec(`DROP TRIGGER ${row.name}`);
-    database.exec('DROP TABLE archive_usage; DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; PRAGMA user_version = 3;');
-    database.prepare('INSERT INTO completion_interactions VALUES (?, ?, ?)').run('legacy', 0, JSON.stringify({ untouched: 'opaque historical payload' }));
-    return { images: database.prepare('SELECT * FROM checkpoint_images').all(), heads: database.prepare('SELECT * FROM checkpoint_heads').all(), interactions: database.prepare('SELECT * FROM completion_interactions').all() };
-  });
-  const migrated = files.open();
-  assert.deepEqual(migrated.load(), state);
-  assert.deepEqual(migrated.checkpoints.read('root'), head);
-  assert.deepEqual(migrated.exchanges.list(), { items: [] });
-  migrated.close();
-  files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 7);
-    assert.deepEqual({ images: database.prepare('SELECT * FROM checkpoint_images').all(), heads: database.prepare('SELECT * FROM checkpoint_heads').all(), interactions: database.prepare('SELECT * FROM completion_interactions').all() }, original);
-  });
 });

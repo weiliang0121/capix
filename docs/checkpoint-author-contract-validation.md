@@ -1,5 +1,7 @@
 # CP 作者契约：引用选择、检查范围与局部材料
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07，第六轮独立实验。承接[稳定事实与增量检查点](stable-facts-head-validation.md)。本轮只修改 `examples/checkpoint-facts-study` 并增加报告；不迁移生产 Invocation、Frame、Work、服务声明或持久库，不修改现行“保持原引用”契约。
 
 后续：[第七轮真实 ToolLoop 策略对照](checkpoint-tool-policy-validation.md) 已验证完整作者检查与实体确认的区别、显式失效的 A/B 检查、多值 key 查询及独立前缀表示。本报告的 206 项和规模数据保留为第六轮结果，不混入后续新增测试。

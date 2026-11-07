@@ -3,7 +3,7 @@ import { encodeCheckpointData, decodeCheckpointData } from './encoding.js';
 import { cloneCheckpointValue, CHECKPOINT_MAX_BYTES } from './value.js';
 
 const format = 'capix.checkpoint.record@1';
-type RecordKind = 'head' | 'child' | 'value';
+type RecordKind = 'head' | 'child' | 'value' | 'selection' | 'occurrence';
 
 /** Small metadata has its own checksum; large value bodies are separately authenticated. */
 export function encodeCheckpointRecord(kind: RecordKind, value: unknown): string {
@@ -13,8 +13,7 @@ export function encodeCheckpointRecord(kind: RecordKind, value: unknown): string
 
 export function isCheckpointRecord(body: string): boolean {
   if (Buffer.byteLength(body) > CHECKPOINT_MAX_BYTES) throw new Error('Checkpoint metadata exceeds byte limit');
-  // Metadata is written in this canonical envelope. Detection must not parse an
-  // entire legacy compressed payload before the legacy cache can inspect it.
+  // The canonical envelope can be identified without parsing its body.
   return body.startsWith(`{"format":"${format}",`);
 }
 

@@ -559,7 +559,7 @@ Scene 等待维护结束 → 返回已保存的回答
 
 CLI/Web 已通过共用装配接入此链路。工具模式准备当前正式问题与活跃记忆；`search_history` 按受限页搜索问题之前的准确 Transcript 前缀，`read_message` 按真实索引读取受限片段。当前问题及之后的消息不进入工具历史范围；后续追加不扩大原问题的读取范围。工具回复带来源与继续读取位置，局部材料不冒充完整历史。模型和工具阶段来自实际直属子调用，不要求开启记录；正式助手消息和维护仍沿用公共接纳链路。
 
-SQLite v5 引入按集合 ID 载入和分页目录，当前 v6 延续此接口；启动不加载所有旧交换正文，v4 集合迁为未锚定只读。`store.archiveUsage()` 联合统计交换及元数据、当前 Interaction、每个调用当前 CP 镜像及已有终态交付的逻辑 JSON 字节，计数跟随事务；CP 按未压缩编码计量。被替代镜像只保留拒重身份，不保留正文。**material/tools 两种模式都安装归档入口门槛**：当前存量加在途回复估算和入口余量，必须低于参考阈值。默认阈值 **2 GiB**、余量 **512 MiB**、每个在途回复估算 **2 MiB**，嵌入宿主可通过 `archivePolicy` 覆盖。
+当前 SQLite 为 schema 8，支持按集合 ID 载入和分页目录，启动不加载所有交换正文。旧版本或不完整表形状拒绝打开，不迁移或清空；保留旧文件后可用 `--db` 显式选择新路径。`store.archiveUsage()` 联合统计交换及元数据、当前 Interaction、CP 当前头、值块及元数据、关系、选择出现项和终态交付的已存编码字节，计数跟随事务；压缩正文按未压缩编码计量，区别于完整逻辑 Frame 的展开额度。被替代镜像只保留拒重身份，不保留正文。**material/tools 两种模式都安装归档入口门槛**：当前存量加在途回复估算和入口余量，必须低于参考阈值。默认阈值 **2 GiB**、余量 **512 MiB**、每个在途回复估算 **2 MiB**，嵌入宿主可通过 `archivePolicy` 覆盖。
 
 这些数值是当前实测的经验参考，不是硬配额或增长上界。`assertArchiveAdmission(usage, interactions.pendingCount, policy)` 只在入口使用，不预留空间，不阻止已接纳调用和晚到独立反馈保存；存量仍可能超过阈值。门槛拒绝新运行／恢复后，只读消息、提交接回和恢复候选仍可查询。没有自动退休、删除或 VACUUM，View 排除和 use 释放也不删除归档。具体边界见 [宿主与持久化](../../docs/conversation-host.md) 和 [宿主设计](../../docs/native-tool-host-integration.md)。
 
@@ -567,4 +567,4 @@ SQLite v5 引入按集合 ID 载入和分页目录，当前 v6 延续此接口�
 
 运行 `pnpm build && node examples/tool-conversation.mjs` 可验证生产 Provider、工具节点、独立 ModelExchanges 与正式对话的装配。示例使用离线 HTTP 样本，不读取凭据、不评价模型能力。CLI/Web 通过 `--answer-mode tools` 选装，默认仍使用原材料回答；此选项是宿主启动配置，页面不修改运行中的结构。
 
-宿主持久化时，`store.exchanges.load/initialize/commit` 对接独立交换实体。旧 `conversation.completion.v1` 文本交互经 `store.interactions.readHistory(id)` 原形状读取；新 v2 入口拒绝旧数据，不自动添加不存在的原生材料。正式消息、记忆和 View 不迁移含义。
+宿主持久化时，`store.exchanges.load/initialize/commit` 对接独立交换实体。模型交互只接受当前 `conversation.completion.v2` 契约；旧文本交互没有 `readHistory` 兼容入口，也不补造不存在的原生材料。当前格式库中的正式消息、记忆和 View 按各自契约恢复。

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { cloneCheckpointImage, cloneCheckpointDelivery, cloneCheckpointHead, cloneCheckpointValue, checkpointSaveReceipt, checkpointFinishReceipt, checkCheckpointSaveReceipt, checkCheckpointFinishReceipt } from '@capix/checkpoint';
 
 function image() {
-  return { id: 'image', formatVersion: 5, contract: { key: 'fixture', version: 1 }, point: 'saved', frame: { owner: { contextId: 'call', kind: 'node' }, round: 1, phase: 'execute', input: { text: 'original' }, currentInput: null, nextChildOrder: 0, children: [] }, state: { value: 'fixed' }, references: {} };
+  return { id: 'image', formatVersion: 6, contract: { key: 'fixture', version: 1 }, point: 'saved', frame: { owner: { contextId: 'call', kind: 'node' }, round: 1, phase: 'execute', input: { text: 'original' }, currentInput: null, nextChildOrder: 0, children: [] }, state: { value: 'fixed' }, references: {} };
 }
 
 test('whole-image certification is reusable only for the exact deeply fixed object', () => {

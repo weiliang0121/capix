@@ -48,7 +48,7 @@ test('a host can use checkpoint storage and shared diagnostics without loading a
     import { RuntimeError } from '@capix/contracts';
     const store = new MemoryCheckpointStore();
     const saved = store.save({
-      id: 'snapshot', formatVersion: 5, contract: { key: 'standalone', version: 1 }, point: 'prepared',
+      id: 'snapshot', formatVersion: 6, contract: { key: 'standalone', version: 1 }, point: 'prepared',
       frame: { owner: { contextId: 'call', kind: 'node' }, round: 1, phase: 'execute', input: 'input', currentInput: 'input', nextChildOrder: 0, children: [] },
       state: { text: 'prepared' }, references: {},
     }, 0);

@@ -105,29 +105,30 @@ test('new conversation metadata and empty entity identities are installed in one
   }
 });
 
-test('v2 single-conversation migration preserves identities, indexes, source ownership and chooses one default', async (t) => {
+test('v2 single-conversation content is refused without changing its identities or records', async (t) => {
   const disk = fixture(t);
   const host = disk.open();
   const id = host.list().defaultConversationId;
   const environment = host.open(id);
-  await environment.runner.run({ messages: [{ role: 'user', content: ' \n '.repeat(40) + '原有对话' }] }, { settings });
-  const saved = host.persistence.loadContent(id);
-  delete saved.transcript.appends;
-  delete saved.memories.applies;
-  const recording = host.persistence.loadRecording(id);
+  await environment.runner.run({ messages: [{ role: 'user', content: '原有对话' }] }, { settings });
   host.close();
   const database = new DatabaseSync(disk.path);
-  database.exec(`CREATE TABLE metadata(singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversation_checkpoint_runs; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE conversations; DROP TABLE transcript_appends; DROP TABLE memory_applies; DROP TABLE file_creations; PRAGMA user_version = 2;`);
+  database.exec(`PRAGMA user_version = 2;`);
+  const before = {
+    conversations: database.prepare('SELECT * FROM conversations').all(),
+    transcripts: database.prepare('SELECT * FROM transcripts').all(),
+    messages: database.prepare('SELECT * FROM messages').all(),
+    records: database.prepare('SELECT * FROM records').all(),
+    schema: database.prepare('SELECT * FROM sqlite_master ORDER BY name').all(),
+  };
   database.close();
-  const migrated = disk.open();
-  const current = migrated.list();
-  assert.equal(current.conversations.length, 1);
-  assert.equal(current.conversations[0].transcriptId, saved.transcript.id);
-  assert.equal(current.conversations[0].title, '原有对话');
-  assert.deepEqual(migrated.persistence.loadContent(current.defaultConversationId), saved);
-  assert.deepEqual(migrated.persistence.loadRecording(current.defaultConversationId), { ...recording, archives: recording.archives.map((archive) => ({ ...archive, state: 'sealed' })) });
-  const created = migrated.create();
-  assert.equal(migrated.list().conversations.length, 2);
-  assert.notEqual(created.id, current.defaultConversationId);
-  assert.equal(migrated.content(created.id).transcript.length, 0);
+  assert.throws(() => disk.open(), /Unsupported Observer persistence schema/);
+  const after = new DatabaseSync(disk.path);
+  try {
+    assert.equal(after.prepare('PRAGMA user_version').get().user_version, 2);
+    for (const table of ['conversations', 'transcripts', 'messages', 'records']) assert.deepEqual(after.prepare(`SELECT * FROM ${table}`).all(), before[table]);
+    assert.deepEqual(after.prepare('SELECT * FROM sqlite_master ORDER BY name').all(), before.schema);
+  } finally {
+    after.close();
+  }
 });

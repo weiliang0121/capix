@@ -31,28 +31,31 @@ export class Measurement {
     const original = work.checkpoint;
     return {
       ...work,
-      checkpoint: (options) => {
-        const slot = { id: this.samples.length, owner, point: options.point.name, ...describe(options), succeeded: false, checkpointMs: null, storeMs: this.mode === 'timing' ? 0 : null, storeCalls: 0 };
-        const previous = this.#current;
-        const before = this.mode === 'diagnostic' ? { ...this.counters } : undefined;
-        this.samples.push(slot);
-        this.#current = slot;
-        const started = this.mode === 'timing' ? performance.now() : 0;
-        try {
-          const result = original(options);
-          slot.succeeded = true;
-          return result;
-        } finally {
-          if (this.mode === 'timing') slot.checkpointMs = performance.now() - started;
-          this.#current = previous;
-          if (before)
-            slot.codecCalls = Object.fromEntries(
-              Object.entries(this.counters)
-                .map(([key, count]) => [key, count - (before[key] ?? 0)])
-                .filter(([, count]) => count),
-            );
-        }
-      },
+      checkpoint: Object.assign(
+        (options) => {
+          const slot = { id: this.samples.length, owner, point: options.point.name, ...describe(options), succeeded: false, checkpointMs: null, storeMs: this.mode === 'timing' ? 0 : null, storeCalls: 0 };
+          const previous = this.#current;
+          const before = this.mode === 'diagnostic' ? { ...this.counters } : undefined;
+          this.samples.push(slot);
+          this.#current = slot;
+          const started = this.mode === 'timing' ? performance.now() : 0;
+          try {
+            const result = original(options);
+            slot.succeeded = true;
+            return result;
+          } finally {
+            if (this.mode === 'timing') slot.checkpointMs = performance.now() - started;
+            this.#current = previous;
+            if (before)
+              slot.codecCalls = Object.fromEntries(
+                Object.entries(this.counters)
+                  .map(([key, count]) => [key, count - (before[key] ?? 0)])
+                  .filter(([, count]) => count),
+              );
+          }
+        },
+        { select: original.select },
+      ),
     };
   }
 
@@ -93,9 +96,18 @@ export class Measurement {
               slot.fieldBytes = { input: bytes(image.frame.input), currentInput: image.frame.currentInput.id === image.frame.input.id ? 0 : bytes(image.frame.currentInput), children: byteLength(image.children), state: bytes(image.state), references: bytes(image.references) };
               slot.valueBlocks = image.values.length;
               slot.relationEntries = image.children.length;
-              const refs = Object.values(body(image.references) ?? {}).flatMap((value) => (Array.isArray(value) ? value : [value]));
-              // Both checks now use context-id indexes; this counts indexed lookups, not CPU instructions.
-              slot.inferredReferenceComparisons = 2 * refs.length;
+              if (image.references.kind === 'slots') {
+                slot.fieldBytes.references = byteLength({ references: image.references, selectionChanges: image.selectionChanges ?? [] });
+                slot.selectionAppends = (image.selectionChanges ?? []).reduce((sum, change) => sum + (change.append?.length ?? 0), 0);
+                slot.selectionRemovals = (image.selectionChanges ?? []).reduce((sum, change) => sum + (change.remove?.length ?? 0), 0);
+                slot.selectionChanges = image.selectionChanges?.length ?? 0;
+                // Submission counts do not infer how many checks the layers perform.
+                slot.inferredReferenceComparisons = null;
+              } else {
+                const refs = Object.values(body(image.references) ?? {}).flatMap((value) => (Array.isArray(value) ? value : [value]));
+                // Both checks use context-id indexes; this is inferred work, not CPU instructions.
+                slot.inferredReferenceComparisons = 2 * refs.length;
+              }
             } else {
               slot.fieldBytes = Object.fromEntries(['input', 'currentInput', 'children'].map((key) => [key, byteLength(image.frame[key])]));
               slot.fieldBytes.state = byteLength(image.state);

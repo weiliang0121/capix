@@ -41,13 +41,40 @@ const point = checkpointPoint()({
     assert.equal(facts.children.require(a, facts.references.chosen.ref), facts.references.chosen);
     assert.equal(facts.children.get(facts.references.chosen.ref), facts.references.chosen);
     assert.throws(() => facts.children.require(b, facts.references.chosen.ref), /different declaration/);
-    assert.equal(Object.isFrozen(facts.references.all), true);
+    const selected = facts.references.all;
+    assert.equal(Array.isArray(selected), true);
+    assert.deepEqual(
+      selected.map((fact) => fact.returned.output),
+      ['second', 'first'],
+    );
+    assert.equal(selected.at(-1), facts.references.chosen);
+    assert.equal(Object.isFrozen(selected[0]), true, 'queried facts remain immutable snapshots');
+    assert.throws(() => {
+      selected[0] = facts.references.chosen;
+    }, /read-only/);
+    assert.throws(() => {
+      selected.length = 0;
+    }, /read-only/);
+    assert.throws(() => selected.pop(), /read-only/);
+    assert.deepEqual(
+      selected.map((fact) => fact.returned.output),
+      ['second', 'first'],
+      'rejected writes preserve the exact ordered selection',
+    );
   },
   resume: {
     uses: [a, b, plain],
     run: (work, state, saved) => {
       const chosen = work.children.facts.get(saved.chosen);
       assert.equal(work.children.facts.require(a, saved.chosen).ref, saved.repeated);
+      assert.equal(Array.isArray(saved.all), true);
+      assert.equal(saved.all.at(-1), saved.chosen);
+      const selected = [...saved.all];
+      assert.throws(() => {
+        saved.all[0] = saved.chosen;
+      }, /read-only/);
+      assert.throws(() => saved.all.pop(), /read-only/);
+      assert.deepEqual([...saved.all], selected, 'resumed reference ports preserve their original occurrences');
       assert.equal(calls, 0, 'saved successful deliveries must not execute');
       return { state, output: chosen.returned.output, all: saved.all.map((ref) => work.children.facts.get(ref).returned.output), plain: work.children.facts.requireUnique(plain, { parentRound: 1 }).returned.output, children: work.children.facts.values().length, same: saved.chosen === saved.repeated };
     },

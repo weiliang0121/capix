@@ -38,7 +38,7 @@ export function material(bytes, pattern = 'seeded', seed = 123456789) {
 
 function requirePlan(value) {
   const plan = { valueBytes: 64, check: 'local', pattern: 'seeded', diagnosticSaves: 16, ...value };
-  if (!['timing', 'diagnostic', 'control'].includes(plan.mode) || !['memory', 'sqlite'].includes(plan.store) || !['growth', 'input'].includes(plan.family) || !['current', 'all'].includes(plan.refs) || !['local', 'full'].includes(plan.check) || !['seeded', 'repeat'].includes(plan.pattern)) throw new TypeError('Unknown benchmark plan');
+  if (!['timing', 'diagnostic', 'control'].includes(plan.mode) || !['memory', 'sqlite'].includes(plan.store) || !['growth', 'input'].includes(plan.family) || !['current', 'all', 'incremental'].includes(plan.refs) || !['local', 'full'].includes(plan.check) || !['seeded', 'repeat'].includes(plan.pattern)) throw new TypeError('Unknown benchmark plan');
   for (const key of ['n', 'inputBytes', 'valueBytes', 'diagnosticSaves']) ensureInteger(plan[key]);
   if (plan.n > 4096 || plan.inputBytes > 8 * 1024 * 1024 || plan.valueBytes > 1024 * 1024 || plan.diagnosticSaves < 1 || plan.diagnosticSaves > 256) throw new RangeError('Benchmark configuration exceeds harness bounds');
   return plan;
@@ -83,7 +83,10 @@ function fixture(plan, measurement, progress) {
     if ((last?.order ?? -1) !== state.expectedOrder) throw new Error('Benchmark reference order differs');
     if (plan.check === 'full') {
       const all = facts.children.values();
-      for (const [index, fact] of all.entries()) if (fact.order !== index) throw new Error('Benchmark history order differs');
+      for (const [index, fact] of all.entries()) {
+        if (plan.mode === 'diagnostic') measurement.increment('group.historyVisits');
+        if (fact.order !== index) throw new Error('Benchmark history order differs');
+      }
     }
   };
   const noResume = () => {
@@ -93,13 +96,14 @@ function fixture(plan, measurement, progress) {
   const group = new Group({ checkpoint: { key: 'benchmark.computation.group', version: 1, input: groupInput, output: groupOutput, receptions: [acceptedValue], points: Object.values(points) } }).add({ node });
   group.run = async (original) => {
     const work = measurement.work(original, 'group', (options) => ({ phase: options.state.phase, step: options.state.step, n: progress.created, r: options.refs.children.length, a: options.state.phase === 'dispatch' ? 1 : 0 }));
-    let refs = [];
+    let refs = plan.refs === 'incremental' ? work.checkpoint.select(node) : [];
     for (let step = 0; step < plan.n; step++) {
       progress.step = step;
       progress.phase = 'create';
       const child = work.children.create(node, String(step).padStart(8, '0'));
       progress.created = step + 1;
-      refs = plan.refs === 'all' ? [...refs, child.ref] : [child.ref];
+      if (plan.refs === 'incremental') refs.add(child.ref);
+      else refs = plan.refs === 'all' ? [...refs, child.ref] : [child.ref];
       if (plan.family === 'growth') {
         progress.phase = 'dispatch';
         work.checkpoint({ point: points.dispatch, state: { step, expectedOrder: step, phase: 'dispatch' }, refs: { children: refs } });

@@ -144,7 +144,7 @@ Sequence 以 `new Sequence([node, {node, input?, result?, delta?}, …])` 一次
 
 output.result 验证收到的是已经固定的最终值，必须返回该值本身；delta 经声明转换后固定并交付。内容固定不代表输出最终成功：清理、取消、严格观测或必要持久化仍可阻止成功。
 
-恢复点使用 `work.checkpoint?.({point,state,refs})`，checkpoint 配置含 key/version、codecs、points 和可选 receptions。具名 reception 是恢复编码契约，属于 checkpoint；普通接收不要求它，也不增加全节点 accept 阶段。恢复点的 resume.deps/uses 明确当前恢复行动，ResumeWork 保留历史事实查询接口。新保存为 Frame v6：固定事实首次编码后按准确引用复用，Store 仍重建完整逻辑 Frame；新运行只有一轮，v5 仅保留低层只读核验，旧 round 2/continuation 的执行恢复也明确拒绝。详情见 [Checkpoint](checkpoints.md)。
+恢复点使用 `work.checkpoint?.({point,state,refs})`，checkpoint 配置含 key/version、codecs、points 和可选 receptions。具名 reception 是恢复编码契约，属于 checkpoint；普通接收不要求它，也不增加全节点 accept 阶段。恢复点的 resume.deps/uses 明确当前恢复行动，ResumeWork 保留历史事实查询接口。Frame v6 将固定事实首次编码后按准确引用复用，many refs 支持完整数组或显式有序选择；冷读取仍重建完整逻辑 Frame。旧 CP 格式不读取或迁移，旧 round 2/continuation 不恢复。详情见 [Checkpoint](checkpoints.md) 和[增量引用选择](checkpoint-selection.md)。
 
 保留的边界是：返回、父接纳、实体落实和 CP 提交各自独立；接纳排空后才关闭窗口；最终交付等待已启动子调用退出；未启动关系不阻塞；不自动接纳或停止兄弟。Interaction 独立生存，本地取消不重发请求、不取消外部发送。记录和恢复不能替代实体自己的固定效果凭据。
 

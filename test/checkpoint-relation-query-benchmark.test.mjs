@@ -35,3 +35,31 @@ test('relation query diagnostic separates actual SQL reads, repeated parsing and
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('incremental selections keep the same saves while avoiding selected-history SQL reads', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'capix-selection-query-'));
+  try {
+    const plan = { family: 'growth', n: 16, inputBytes: 1024, valueBytes: 64 };
+    const all = await relationQuerySample({ ...plan, refs: 'all' }, join(directory, 'all.sqlite'));
+    const incremental = await relationQuerySample({ ...plan, refs: 'incremental' }, join(directory, 'incremental.sqlite'));
+    assert.equal(all.status, 'completed');
+    assert.equal(incremental.status, 'completed');
+    assert.deepEqual(incremental.saved, all.saved);
+    assert.equal(incremental.changedParentRelations, all.changedParentRelations);
+    assert.ok(incremental.counts.relationSqlReads < all.counts.relationSqlReads / 2);
+    const parent = incremental.report.samples.filter((sample) => sample.owner === 'group');
+    assert.equal(
+      parent.reduce((sum, sample) => sum + sample.selectionAppends, 0),
+      plan.n,
+    );
+    assert.equal(
+      parent.reduce((sum, sample) => sum + sample.selectionRemovals, 0),
+      0,
+    );
+    assert.ok(parent.filter((sample) => sample.phase !== 'dispatch').every((sample) => sample.selectionChanges === 0));
+    assert.ok(incremental.counts.selectionSqlReads <= 2 * plan.n + 1);
+    assert.equal(incremental.counts.occurrenceSqlReads, plan.n, 'only appended identities need point reads');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

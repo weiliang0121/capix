@@ -179,32 +179,35 @@ const loop = createToolLoop({
 function filtered(work) {
   return {
     ...work,
-    checkpoint(options) {
-      const state = options.state;
-      let omission;
-      let boundary;
-      if (options.point.name === 'tools') {
-        if (state.active) {
-          omission = 'dispatch';
-          boundary = state.active.name === 'effect' ? 'dispatch-success' : 'dispatch-failure';
-        } else if (state.cursor === 1) {
-          omission = 'success';
-          boundary = 'accepted-success';
-        } else if (state.cursor === 2) {
-          omission = 'handled';
-          boundary = 'handled-failure';
-        } else if (state.cursor === 3) {
-          omission = 'rejected';
-          boundary = 'rejected-checkpoint';
-        } else if (options.refs.models.length === 2) {
-          omission = 'final';
-          boundary = 'final-processing';
-        }
-      } else if (options.point.name === 'completed') boundary = 'completed';
-      if (omission && removed.has(omission)) event('skip', { point: options.point.name, omission, boundary });
-      else work.checkpoint(options);
-      if (boundary) hit(boundary);
-    },
+    checkpoint: Object.assign(
+      (options) => {
+        const state = options.state;
+        let omission;
+        let boundary;
+        if (options.point.name === 'tools') {
+          if (state.active) {
+            omission = 'dispatch';
+            boundary = state.active.name === 'effect' ? 'dispatch-success' : 'dispatch-failure';
+          } else if (state.cursor === 1) {
+            omission = 'success';
+            boundary = 'accepted-success';
+          } else if (state.cursor === 2) {
+            omission = 'handled';
+            boundary = 'handled-failure';
+          } else if (state.cursor === 3) {
+            omission = 'rejected';
+            boundary = 'rejected-checkpoint';
+          } else if (options.refs.models.length === 2) {
+            omission = 'final';
+            boundary = 'final-processing';
+          }
+        } else if (options.point.name === 'completed') boundary = 'completed';
+        if (omission && removed.has(omission)) event('skip', { point: options.point.name, omission, boundary });
+        else work.checkpoint(options);
+        if (boundary) hit(boundary);
+      },
+      { select: work.checkpoint.select },
+    ),
   };
 }
 const originalRun = loop.run;

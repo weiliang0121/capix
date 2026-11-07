@@ -8,10 +8,9 @@ import { Interaction } from '@capix/interaction';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { CompletionInteraction } from '@capix/conversation-service';
-import { requireModelReply } from '@capix/model-provider';
 import { PersistenceError } from '@capix/diagnostics';
 
-async function fixture(t, mutate = (value) => value) {
+async function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'capix-model-legacy-'));
   const path = join(directory, 'content.sqlite');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -21,7 +20,7 @@ async function fixture(t, mutate = (value) => value) {
   const old = new Interaction({ messages: [{ role: 'user', content: 'old question' }] }, { contract: { key: 'conversation.completion.v1', request: (v) => v, reply: (v) => v } });
   old.start(async () => ({ id: 'old-reply', model: 'old-model', text: 'old answer', finishReason: 'stop', usage: null }));
   await old.settled();
-  const state = mutate(structuredClone(old.exportState()));
+  const state = old.exportState();
   const sql = new DatabaseSync(path);
   sql.prepare('INSERT INTO completion_interactions VALUES (?, ?, ?)').run(state.id, state.revision, JSON.stringify(state));
   sql.close();
@@ -30,22 +29,11 @@ async function fixture(t, mutate = (value) => value) {
   return { store, state };
 }
 
-test('saved text v1 stays readable in its original shape and cannot become native continuation', async (t) => {
+test('saved text v1 is rejected without a historical decoder or fabricated native continuation', async (t) => {
   const { store, state } = await fixture(t);
-  assert.deepEqual(store.interactions.readHistory(state.id), state);
-  assert.throws(() => store.interactions.read(state.id), { code: 'INTERACTION_PERSISTENCE_CONFLICT' });
-  store.assertAvailable();
-  assert.equal(CompletionInteraction.key, 'conversation.completion.v2');
-  assert.throws(() => requireModelReply(state.feedback.payload), TypeError);
-  assert.throws(() => Interaction.restore(state, { contract: CompletionInteraction }));
-  assert.deepEqual(store.interactions.readHistory(state.id), state);
-});
-
-test('historical decoder rejects extra fields rather than hiding corrupt stored facts', async (t) => {
-  const { store, state } = await fixture(t, (state) => {
-    state.feedback.payload.native = { format: 'invented' };
-    return state;
-  });
-  assert.throws(() => store.interactions.readHistory(state.id), PersistenceError);
+  assert.equal('readHistory' in store.interactions, false);
+  assert.throws(() => store.interactions.read(state.id), PersistenceError);
   assert.throws(() => store.assertAvailable(), PersistenceError);
+  assert.equal(CompletionInteraction.key, 'conversation.completion.v2');
+  assert.throws(() => Interaction.restore(state, { contract: CompletionInteraction }));
 });

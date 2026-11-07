@@ -81,7 +81,7 @@ test('checkpoint installation reuses the host SQLite connection and recovers met
   next.close();
 });
 
-for (const formatVersion of [1, 2, 3, 4, 99]) {
+for (const formatVersion of [1, 2, 3, 4, 5, 99]) {
   test(`checkpoint format ${formatVersion} refuses recovery without preventing healthy content and new calls`, async (t) => {
     const path = temporary(t);
     const host = new ObserverConversations(provider, [], { persistence: SqliteObserverStore.open(path) });
@@ -97,7 +97,7 @@ for (const formatVersion of [1, 2, 3, 4, 99]) {
     const rows = database.prepare('SELECT id, context_id FROM checkpoint_images WHERE body IS NOT NULL').all();
     const images = rows.map((row) => ({ row, image: checkpoints.read(row.context_id).image }));
     for (const { row, image: current } of images) {
-      // A historical Frame is a complete old image, not a corrupt new metadata envelope.
+      // Old full-image rows have no current facts envelope and are not migrated.
       const image = { ...current, formatVersion };
       database.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify(image), row.id);
     }
@@ -107,8 +107,8 @@ for (const formatVersion of [1, 2, 3, 4, 99]) {
     const restored = new ObserverConversations(provider, [], { persistence });
     t.after(() => restored.close());
     assert.deepEqual(restored.content(conversation.id).transcript.exportState(), original);
-    assert.throws(() => persistence.checkpoints.read(run.rootContextId), { code: 'CHECKPOINT_FORMAT_UNSUPPORTED' });
-    await assert.rejects(restored.recover(conversation.id, run.rootContextId), { code: 'CHECKPOINT_FORMAT_UNSUPPORTED' });
+    assert.throws(() => persistence.checkpoints.read(run.rootContextId), { code: 'CHECKPOINT_STORAGE_FAILURE' });
+    await assert.rejects(restored.recover(conversation.id, run.rootContextId), { code: 'CHECKPOINT_STORAGE_FAILURE' });
     const current = restored.open(conversation.id);
     await current.runner.run({ messages: [{ role: 'user', content: 'after upgrade' }] }, { settings });
     assert.equal(current.transcript.length, 4);

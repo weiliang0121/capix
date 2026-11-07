@@ -81,7 +81,7 @@ export class InvocationChildReferences {
   }
 
   fromSaved(value: CheckpointReference): ChildReference {
-    const relation = this.parent.children.values().find((item) => item.invocation.context.id === value.contextId);
+    const relation = this.parent.children.byContextId(value.contextId);
     if (!relation || value.parentContextId !== this.parent.context.id || relation.round !== value.parentRound || relation.order !== value.order || relation.declarationPosition !== value.target.position) return this.reject(new Error('Saved child reference does not match the installed relationship'));
     return this.entry(relation).ref;
   }

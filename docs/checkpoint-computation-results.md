@@ -1,5 +1,7 @@
 # Checkpoint 单步计算基准实测
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 日期：2026-11-06。对应 [基准设计](checkpoint-computation-benchmark.md) 和 [可执行示例](../examples/checkpoint-computation/README.md)。
 
 这轮验证了计算范围问题：**即便串行处理、只有一个活动子调用、只引用当前子调用、作者只做局部检查，保存仍会重复处理全部已完成历史。** 全部 refs 随历史保留时，又叠加逐引用查找全部关系的成本。固定输入则形成另一个独立的重复处理维度。

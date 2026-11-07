@@ -155,4 +155,4 @@ Runner 固定本次 options 顶层；根校验再固定模型配置。本次模�
 
 环境在调用或外部交互仍在途时拒绝关闭。正常关闭解除内容观察、关闭交互及 CP 观测、seal 当前记录、释放来源，最后按所有权关闭内容及数据库；正常关闭不标为来源不完整。每项清理均尝试，即使其他项失败。
 
-`environment.recover(rootContextId)` 核对恢复登记与内容／配置，Runner 的 validate 再检查准确依据，二者共享同一 CP 存储。Scene / ConversationGroup / GenerateAnswer 契约版本为 5 / 7 / 5，Frame 仍为 v5。回答的一次再生成使用显式业务状态、handled 拒绝事实与新子调用，不再使用调用 round 2。旧声明版本及旧 round 2/continuation 镜像拒绝恢复；交互不重发，历史对话内容和记录仍可读取。
+`environment.recover(rootContextId)` 核对恢复登记与内容／配置，Runner 的 validate 再检查准确依据，二者共享同一 CP 存储。Scene / ConversationGroup / GenerateAnswer 契约版本为 5 / 7 / 5，CP 使用 Frame v6。回答的一次再生成使用显式业务状态、handled 拒绝事实与新子调用，不再使用调用 round 2。旧 CP 格式、旧声明版本及旧 round 2/continuation 镜像拒绝；交互不重发。当前格式库中的对话内容和记录可读取，旧库拒绝打开，见[持久化](persistence.md)。

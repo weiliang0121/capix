@@ -77,7 +77,7 @@ Invocation 默认固定到原 deployment；应用需保持端点对应的代码�
 
 - **内容是权威实体。** Transcript 与 Memories 先提交持久变更，再更新内存并通知；已保存消息、记忆可恢复，不需要重做旧调用。参见 [内容持久化](persistence.md)。
 - **外部请求与调用寿命已分开。** Interaction 固定请求和反馈，A1 等待结束后 A2 可以读同一交互。保存的完整模型反馈可再次解释；无反馈的恢复交互明确 unavailable，不自动重发。参见 [交互边界](interactions.md)。
-- **返回和接纳已有独立表达。** InvocationChildren / InvocationRelation 区分子调用返回、父层开始接纳和接纳结果，不需要为了恢复重新发明这几个事实。参见 [relation.ts](../server/runtime/src/invocation/relation.ts) 的 `returnedWith`、`accept`。
+- **返回和接纳已有独立表达。** InvocationChildren / InvocationRelation 区分子调用返回、父层开始接纳和接纳结果，不需要为了恢复重新发明这几个事实。参见 relation.ts（历史路径：`../server/runtime/src/invocation/relation.ts`） 的 `returnedWith`、`accept`。
 - **声明、资源与单次调用有边界。** 可重建绑定结构，新建 Context/Invocation；资源入口受控。这为以后限定恢复能力提供接缝，不等于已经拥有恢复契约。
 - **客户端反馈独立。** 接回仅查询和 follow 原提交，消息同步另行进行。服务执行不会因网络重连而重做。参见 [客户端接回](client-runtime.md)。
 
@@ -93,7 +93,7 @@ Invocation 默认固定到原 deployment；应用需保持端点对应的代码�
 | Submission           | 有界进程内 Map，不跨重启                                       | 若承诺同一工作继续，需持久身份与状态，不能只改 follow |
 | 文件保存             | 发布文件后返回凭据；未与数据库推进状态共用事务                 | 发布结果如何核实，同一次效果如何识别                  |
 
-代码入口：[Invocation.run](../server/runtime/src/invocation/invocation.ts)（193 行）、[Context](../server/runtime/src/context/context.ts)（13 行）、[Sequence.run](../server/runtime/src/composition/sequence.ts)（72 行）、[E.execute](../services/observer/src/conversation/task.ts)（69–125 行）、[bindResources（资源捕获）](../server/runtime/src/resource/bindings.ts)（207 行）、[BoundChildren](../server/runtime/src/binding/children/bound.ts)（原 binding/children.ts，35 行）、[Submission 保留](../services/observer/src/conversation/submission.ts)（294 行）。行号对应本文基线。
+代码入口：Invocation.run（历史路径：`../server/runtime/src/invocation/invocation.ts`）（193 行）、Context（历史路径：`../server/runtime/src/context/context.ts`）（13 行）、Sequence.run（历史路径：`../server/runtime/src/composition/sequence.ts`）（72 行）、E.execute（历史路径：`../services/observer/src/conversation/task.ts`）（69–125 行）、bindResources（资源捕获）（历史路径：`../server/runtime/src/resource/bindings.ts`）（207 行）、[BoundChildren](../server/runtime/src/binding/children/bound.ts)（原 binding/children.ts，35 行）、[Submission 保留](../services/observer/src/conversation/submission.ts)（294 行）。行号对应本文基线。
 
 `key: 'decision'` 会在 E 循环中多次出现，当前随机 Context ID、结构 ID、资源 supplyId 也各有原职责。不能直接挑一个字段作为持久步骤身份。若选择重放，通常需要逻辑工作、组合位置、迭代位置与声明版本的匹配规则；这些可以是内部地址，不必变成新的 REOA 层级或大量公共实体。
 
@@ -127,7 +127,7 @@ Invocation 默认固定到原 deployment；应用需保持端点对应的代码�
 | 记忆整批已提交，调用收尾未保存             | Memories 已有新事实                  | 整批原子性不等于重复消费幂等；重跑 create 仍可能新增               |
 | 服务工作已结束，客户端反馈丢失             | 进程内提交、正式内容可能仍在         | 当前 follow 已处理这类问题，不需要启动执行恢复                     |
 
-具体位置：输入先于 E 建立，见 [entry 流程](../server/runtime/src/structure/execution.ts)（72–95 行）与 [输入追加](../services/observer/src/conversation/accept.ts)（35 行）；父层追加回答见 [receiveAnswer](../services/observer/src/conversation/task.ts)（144 行）；`InvocationRelation.accept` 先运行接纳函数，再标记 accepted（83–90 行）；交互发送/保存见 [Interaction](../server/interaction/src/interaction.ts)（64–107 行）；文件发布见 [WorkspaceFiles](../services/observer/src/files/workspace.ts)（136 行起）。
+具体位置：输入先于 E 建立，见 entry 流程（历史路径：`../server/runtime/src/structure/execution.ts`）（72–95 行）与 [输入追加](../services/observer/src/conversation/accept.ts)（35 行）；父层追加回答见 receiveAnswer（历史路径：`../services/observer/src/conversation/task.ts`）（144 行）；`InvocationRelation.accept` 先运行接纳函数，再标记 accepted（83–90 行）；交互发送/保存见 [Interaction](../server/interaction/src/interaction.ts)（64–107 行）；文件发布见 [WorkspaceFiles](../services/observer/src/files/workspace.ts)（136 行起）。
 
 这些中断窗口说明：**恢复粒度不能只按 E、O、A 名称选择，而要看一个边界两侧的事实能否对应起来。** 一个 A 内也可能有多个效果；一个父层 accept 也可能不只是纯数据转换。
 

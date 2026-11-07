@@ -133,7 +133,7 @@ Recorder、RecordBook、RecordTree、记录载体与 Helper 从 `@capix/records`
 
 `ExecutionRecordSnapshot` 仍是 Observer 查询选定任务的跨端名字，正文为 `execution`、通用 `calls`、`rootCall`、可选中间 `ancestors`、`boundaries` 及内容/资源变化；它不是内核 E 层。记录包的 CallableRecordHelper 允许显式选择任意调用子树，不负责判断业务任务。
 
-Checkpoint Frame v5 与声明版本分别核验。`@capix/checkpoint` 持有 Frame/Image/Head/Delivery、引用纯值、数据检查、CheckpointStore 与 MemoryCheckpointStore；`@capix/invocation` 持有活动捕获、Context/关系安装、续接和观测，Runtime 负责结构契约解算与恢复 Work 适配。Store 的同步 read/save/finish 是宿主机制端口，不借用已结束的业务资源窗口。旧 round 2/continuation 执行恢复拒绝，历史诊断仍可读取。v1/v2/v3/v4 明确拒绝续接，不影响健康历史内容与记录读取。详见 [Checkpoint](checkpoints.md)。
+Checkpoint Frame v6 与声明版本分别核验。`@capix/checkpoint` 持有 Frame/Image/Head/Delivery、固定值与引用认证、CheckpointStore 和 MemoryCheckpointStore；`@capix/invocation` 持有稳定调用事实、变化发布、Context/关系安装、续接与观测，Runtime 负责结构契约解算和恢复 Work 适配。Store 的同步 read/save/finish 是宿主机制端口，不借用已结束的业务资源窗口。热保存提交新增事实与显式选择变化，冷读取完整重建；旧 CP 格式不读取或迁移，旧 round 2/continuation 不恢复。宿主数据库只打开当前格式。详见 [Checkpoint](checkpoints.md) 与[增量引用选择](checkpoint-selection.md)。
 
 ## 服务、客户端与公开入口
 

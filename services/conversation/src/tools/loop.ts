@@ -5,7 +5,7 @@ import { cloneCheckpointValue } from '@capix/checkpoint';
 import { modelReplyText, requireModelRequest, type ModelReply, type ModelToolCall } from '@capix/model-provider';
 import { ModelExchangeResource, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference } from '@capix/model-exchanges';
 import type { ResourcesOf } from '@capix/resources';
-import { Group, checkpointPoint, childReferences, reception, type ChildCallable, type ChildReference, type ChildCall, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildReferenceSlot } from '@capix/structure';
+import { Group, checkpointPoint, childReferences, reception, type ChildCallable, type ChildReference, type ChildCall, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildReferenceSlot, type CheckpointSelection } from '@capix/structure';
 import { codec, stringCodec } from '../recovery/codecs.js';
 import { createToolCompletion, ToolModelResource } from './model.js';
 import { createToolCatalog, selectTool, type ToolCatalog, type ToolSelection } from './catalog.js';
@@ -43,7 +43,8 @@ const deps = { exchanges: ModelExchangeResource.request(), model: ToolModelResou
 type ResourceValues = ResourcesOf<typeof deps>;
 type Work = GroupWork<ToolLoopInput, string, ResourceValues, ChildCallable, string> | ResumeWork<'group', ToolLoopInput, string, ResourceValues, ChildCallable, string>;
 type RestoredWork = ResumeWork<'group', ToolLoopInput, string, ResourceValues, ChildCallable, string>;
-type Refs = Readonly<Record<string, readonly ChildReference<ChildCallable>[]>>;
+type Refs = Readonly<Record<string, readonly ChildReference<ChildCallable>[] | CheckpointSelection<ChildCallable>>>;
+type RestoredRefs = Readonly<Record<string, readonly ChildReference<ChildCallable>[]>>;
 type Slots = Readonly<Record<string, ChildReferenceSlot<ChildCallable, true>>>;
 interface State {
   readonly exchanges: readonly ExchangeReference[];
@@ -60,7 +61,7 @@ function refsAt(refs: Refs, name: string) {
   return value;
 }
 function referenceAt(refs: Refs, name: string, index: number) {
-  const value = refsAt(refs, name)[index];
+  const value = refsAt(refs, name).at(index);
   if (!value) throw new Error('Tool checkpoint references a missing child');
   return value;
 }
@@ -134,6 +135,17 @@ export class ToolLoop extends Group<ToolLoopInput, string, ResourceValues, strin
     });
     if (recoverable) this.checkpoint = { key: 'conversation.tools.loop', version: 2, input: toolLoopInputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [waiting, processing, completed] };
     const save = (work: Work, name: 'waiting' | 'processing' | 'completed', state: State, refs: Refs) => work.checkpoint?.({ point: name === 'waiting' ? waiting : name === 'processing' ? processing : completed, state, refs });
+    // Selection ownership is the current invocation. Both points explicitly use
+    // the same choices; normal calls without checkpoints keep ordinary arrays.
+    const selections = (work: Work, saved?: RestoredRefs): Refs => Object.fromEntries(Object.entries(slots).map(([name, slot]) => [name, work.checkpoint ? work.checkpoint.select(slot.definition, saved?.[name]) : (saved?.[name] ?? [])]));
+    const append = (refs: Refs, name: string, reference: ChildReference<ChildCallable>): Refs => {
+      const selected = refsAt(refs, name);
+      if ('add' in selected) {
+        selected.add(reference);
+        return refs;
+      }
+      return { ...refs, [name]: [...selected, reference] };
+    };
     const toolReception = (name: string) => {
       const value = toolReceptions.get(name);
       if (!value) throw new Error('Tool reception is not registered');
@@ -193,11 +205,12 @@ export class ToolLoop extends Group<ToolLoopInput, string, ResourceValues, strin
       if (models.length >= maxModelCalls) throw new Error('ToolLoop model call budget exhausted');
       work.resources.exchanges.closed(state.exchanges);
       const child = work.children.create(completion, { exchanges: state.exchanges }, { key: `model:${models.length}` });
-      const nextRefs = { ...refs, models: [...models, child.ref] };
+      const nextRefs = append(refs, 'models', child.ref);
       save(work, 'waiting', state, nextRefs);
       return receiveModel(work, state, nextRefs, child);
     }
-    function resumeModel(work: RestoredWork, state: State, refs: Refs): Promise<string> {
+    function resumeModel(work: RestoredWork, state: State, saved: RestoredRefs): Promise<string> {
+      const refs = selections(work, saved);
       confirmExchanges(work, state, refs);
       const child = modelFact(work.children.facts, referenceAt(refs, 'models', refsAt(refs, 'models').length - 1));
       if (child.reception.status === 'accepted') {
@@ -234,7 +247,8 @@ export class ToolLoop extends Group<ToolLoopInput, string, ResourceValues, strin
       save(work, 'processing', next, refs);
       return processTools(work, next, refs);
     }
-    function resumeTools(work: RestoredWork, state: State, refs: Refs): Promise<string> {
+    function resumeTools(work: RestoredWork, state: State, saved: RestoredRefs): Promise<string> {
+      const refs = selections(work, saved);
       confirmExchanges(work, state, refs);
       if (!state.active) return processTools(work, state, refs);
       const ref = referenceAt(refs, state.active.name, state.active.index);
@@ -247,7 +261,7 @@ export class ToolLoop extends Group<ToolLoopInput, string, ResourceValues, strin
     }
     function confirmExchanges(work: RestoredWork, state: State, refs: Refs) {
       work.resources.exchanges.closed(state.exchanges);
-      refsAt(refs, 'models').forEach((ref, index, modelRefs) => {
+      Array.from(refsAt(refs, 'models')).forEach((ref, index, modelRefs) => {
         const fact = modelFact(work.children.facts, ref);
         if (fact.reception.status !== 'accepted') return;
         const receipt = work.children.facts.accepted(fact.ref, modelReception);
@@ -265,7 +279,7 @@ export class ToolLoop extends Group<ToolLoopInput, string, ResourceValues, strin
             if (!equal(feedback, { toolCallId: call.id, ...selected.result })) throw new Error('Precheck feedback differs from fixed policy');
             continue;
           }
-          const child = refsAt(refs, selected.entry.name)
+          const child = Array.from(refsAt(refs, selected.entry.name))
             .map((ref) => work.children.facts.get(ref))
             .find((child) => child.order > fact.order && child.order < end && child.key === call.id && equal(child.input, selected.input));
           if (!child) throw new Error('Feedback has no exact tool child');
@@ -309,7 +323,7 @@ export class ToolLoop extends Group<ToolLoopInput, string, ResourceValues, strin
         const child = work.children.create(selected.entry.registration.node, selected.input, { key: call.id });
         const currentRefs = refsAt(refs, name);
         const active = { name, index: currentRefs.length, callId: call.id };
-        const nextRefs = { ...refs, [name]: [...currentRefs, child.ref] };
+        const nextRefs = append(refs, name, child.ref);
         const next = { ...state, active };
         save(work, 'processing', next, nextRefs);
         return receiveTool(work, next, nextRefs, child);
@@ -320,7 +334,7 @@ export class ToolLoop extends Group<ToolLoopInput, string, ResourceValues, strin
     }
     this.run = (work) => {
       this.checkInput(work.input);
-      return startModel(work, { exchanges: [], current: null, cursor: 0, active: null }, Object.fromEntries([['models', []], ...entries.map((entry) => [entry.name, []])]));
+      return startModel(work, { exchanges: [], current: null, cursor: 0, active: null }, selections(work));
     };
   }
 

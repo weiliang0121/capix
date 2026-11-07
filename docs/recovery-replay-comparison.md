@@ -1,5 +1,7 @@
 # 调用续接：显式恢复与受约束重放对照
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 日期：2026-11-07。状态：隔离实验与概念判断，未迁移生产，未决定以重放替换现有 CP。
 
 ## 1. 本轮回答什么

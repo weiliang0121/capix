@@ -1,5 +1,7 @@
 # 接纳固定契约与重复检查：第十一轮验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07。承接[Action、局部草稿与资源承诺边界](action-resource-boundaries-validation.md)。本轮只新增隔离模型、真实调用边界探针、跨进程测试、源码盘点和报告。**没有修改生产 Context／Relation、Frame v5、原引用契约、取消收尾或恢复资格；没有提交代码。**
 
 ## 1. 结论与采用的实验契约

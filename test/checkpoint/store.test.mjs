@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { MemoryCheckpointStore, cloneCheckpointImage, cloneCheckpointDelivery } from '@capix/checkpoint';
 
 function image(id = 'cp-1', contextId = 'scope-1') {
-  return { id, formatVersion: 5, contract: { key: 'fixture', version: 1 }, point: 'accepted', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { content: 'input' }, currentInput: { content: 'input' }, nextChildOrder: 0, children: [] }, state: { content: 'saved' }, references: {} };
+  return { id, formatVersion: 6, contract: { key: 'fixture', version: 1 }, point: 'accepted', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { content: 'input' }, currentInput: { content: 'input' }, nextChildOrder: 0, children: [] }, state: { content: 'saved' }, references: {} };
 }
 
 test('memory checkpoint storage fixes caller values and rejects stale or duplicate progress', () => {
@@ -25,7 +25,7 @@ test('memory checkpoint storage fixes caller values and rejects stale or duplica
   assert.throws(() => store.save(image(), 1), { code: 'CHECKPOINT_CONFLICT' });
   assert.throws(() => store.save(image('cp-1', 'scope-2'), 0), { code: 'CHECKPOINT_CONFLICT' });
   assert.equal(store.read('scope-2'), undefined);
-  assert.equal(store.read('scope-1'), saved);
+  assert.deepEqual(store.read('scope-1'), saved);
   assert.equal(store.save(image('cp-2'), 1).revision, 2);
   assert.equal(saved.image.id, 'cp-1', 'existing captured heads stay unchanged');
 });
@@ -38,7 +38,7 @@ test('memory checkpoint advancement keeps owner, original input and contract fix
     const next = image('cp-2');
     mutate(next);
     assert.throws(() => store.save(next, 1), { code: 'CHECKPOINT_CONFLICT' });
-    assert.equal(store.read('scope-1'), saved);
+    assert.deepEqual(store.read('scope-1'), saved);
   }
 });
 
@@ -52,10 +52,10 @@ test('memory checkpoint identities stay reserved after their bodies leave the he
     assert.throws(() => store.save(image(id), 3), { code: 'CHECKPOINT_CONFLICT' });
     assert.throws(() => store.save(image(id, 'scope-2'), 0), { code: 'CHECKPOINT_CONFLICT' });
   }
-  assert.equal(store.read('scope-1'), current);
+  assert.deepEqual(store.read('scope-1'), current);
   assert.equal(store.read('scope-2'), undefined);
   store.finish('scope-1', 3, { status: 'failed' });
-  assert.equal(store.read('scope-1').image, current.image, 'finishing retains the complete last image');
+  assert.deepEqual(store.read('scope-1').image, current.image, 'finishing retains the complete last image');
   assert.throws(() => store.save(image('cp-0', 'scope-2'), 0), { code: 'CHECKPOINT_CONFLICT' });
   assert.equal(store.save(image('cp-3', 'scope-2'), 0).revision, 1);
   assert.equal(store.read('scope-1').delivery.status, 'failed');
@@ -83,21 +83,21 @@ for (const status of ['succeeded', 'failed', 'cancelled']) {
     if (status === 'succeeded') assert.equal(finished.delivery.output.content, 'final');
     assert.throws(() => store.save(image('cp-2'), 2), { code: 'CHECKPOINT_CONFLICT' });
     assert.throws(() => store.finish('scope-1', 2, { status: 'cancelled' }), { code: 'CHECKPOINT_CONFLICT' });
-    assert.equal(store.read('scope-1'), finished);
+    assert.deepEqual(store.read('scope-1'), finished);
     assert.throws(() => store.finish('missing', 0, { status: 'failed' }), { code: 'CHECKPOINT_CONFLICT' });
   });
 }
 
-// Store accepts certified whole values without creating a second recovery payload.
-test('memory checkpoint storage reuses certified image and delivery while returning only acknowledgements', () => {
+// A full current image imports into the same facts representation as incremental commits.
+test('memory checkpoint storage imports certified images and reuses fixed delivery while returning only acknowledgements', () => {
   const store = new MemoryCheckpointStore();
   const fixedImage = cloneCheckpointImage(image());
   const saved = store.save(fixedImage, 0);
-  assert.equal(store.read('scope-1').image, fixedImage);
+  assert.deepEqual(store.read('scope-1').image, fixedImage);
   const fixedDelivery = cloneCheckpointDelivery({ status: 'succeeded', output: { content: 'final' }, progress: { round: 1, phase: 'receive', currentInput: {} } });
   const finished = store.finish('scope-1', saved.revision, fixedDelivery);
   const head = store.read('scope-1');
-  assert.equal(head.image, fixedImage);
+  assert.deepEqual(head.image, fixedImage);
   assert.equal(head.delivery, fixedDelivery);
   assert.equal(finished.revision, head.revision);
   assert.equal('image' in finished, false);

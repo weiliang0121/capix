@@ -1,5 +1,7 @@
 # 稳定事实迁移：计算范围复验
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 日期：2026-11-07。使用生产固定值边界、Frame v6 增量提交及 SQLite v7；同一组公开 `Scene → Group → Node → Runner` 工作量对照[迁移前报告](checkpoint-computation-results.md)。
 
 结果分成两部分：**有界 current 选择下，保存不再随已接纳历史增长；完整 all 选择仍有显著成本，而且 SQLite 在 N=512 的该路径比原实现更慢。** 因而本轮不能宣称所有作者写法已经获得有界保存成本。

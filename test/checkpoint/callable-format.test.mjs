@@ -5,7 +5,7 @@ import { cloneCheckpointImage } from '@capix/checkpoint';
 function image(kind = 'group') {
   return {
     id: 'checkpoint',
-    formatVersion: 5,
+    formatVersion: 6,
     contract: { key: 'composition', version: 1 },
     point: 'waiting',
     state: {},
@@ -27,7 +27,7 @@ test('callable checkpoint accepts direct scene-to-node and group-to-node relatio
 });
 
 test('callable checkpoint rejects legacy formats without upgrading or replaying', () => {
-  for (const formatVersion of [1, 2, 3, 4]) assert.throws(() => cloneCheckpointImage({ ...image(), formatVersion }), /formatVersion 5/);
+  for (const formatVersion of [1, 2, 3, 4, 5]) assert.throws(() => cloneCheckpointImage({ ...image(), formatVersion }), /formatVersion 6/);
 });
 
 test('callable checkpoint keeps direct ownership and leaf constraints', () => {

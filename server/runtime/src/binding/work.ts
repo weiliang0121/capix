@@ -1,6 +1,6 @@
-import type { CallableKind, ChildReference, OperationOutcome } from '@capix/contracts';
+import type { CallableKind, ChildContract, ChildReference, CheckpointOccurrence, CheckpointSelection, OperationOutcome } from '@capix/contracts';
 import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/structure';
-import type { CallableContext, InvocationCheckpointWork, InvocationWork, Invocation } from '@capix/invocation';
+import type { CallableContext, InvocationCheckpointWork, InvocationCheckpointSelection, InvocationCheckpointOccurrence, InvocationWork, Invocation } from '@capix/invocation';
 import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';
@@ -8,6 +8,7 @@ import { InvocationAccess } from './access.js';
 import { type CallableSnapshot, originalCheckpointPoint } from './snapshot.js';
 import { savedCheckpointFacts } from './checkpoint.js';
 import { BoundReceptions } from './receptions.js';
+import { checkpointList } from './checkpoint-list.js';
 
 /** Fixed declaration adaptation at one Bound position; each invocation gets its own access state. */
 export class InvocationWorkBinding<Input, Output, Context extends CallableContext<Input, Output>, Resources extends object, Kind extends CallableKind> implements InvocationWork<Input, Output, Context> {
@@ -16,6 +17,8 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
   readonly #childBindingsBuilder: ChildBindingsBuilder;
   readonly #accesses = new WeakMap<Invocation<Input, Output, Context>, InvocationAccess<Input, Output, Context>>();
   readonly #entries = new WeakMap<Invocation<Input, Output, Context>, ReturnType<InvocationAccess<Input, Output, Context>['enter']>>();
+  readonly #selections = new WeakMap<object, { readonly invocation: Invocation<Input, Output, Context>; readonly raw: InvocationCheckpointSelection }>();
+  readonly #savedSelections = new WeakMap<readonly ChildReference[], { readonly invocation: Invocation<Input, Output, Context>; readonly references: readonly CheckpointReference[] }>();
 
   constructor(
     private readonly declaration: CallableSnapshot<Input, Output, Kind, Resources, any>,
@@ -49,7 +52,22 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
     const access = this.accessFor(invocation).enter(`checkpoint:${point.name}`, point.resume.deps, point.resume.uses ?? []);
     this.#entries.set(invocation, access);
     const registry = this.accessFor(invocation).references;
-    const saved = Object.freeze(Object.fromEntries(Object.entries(references).map(([name, value]) => [name, Array.isArray(value) ? Object.freeze(value.map((ref) => registry.fromSaved(ref))) : registry.fromSaved(value as CheckpointReference)])));
+    const saved = Object.freeze(
+      Object.fromEntries(
+        Object.entries(references).map(([name, value]) => {
+          if (!Array.isArray(value)) return [name, registry.fromSaved(value as CheckpointReference)];
+          const list = checkpointList(
+            () => value.length,
+            (index) => registry.fromSaved(value[index]!),
+            access.validate,
+          );
+          // The actual restored array is the Invocation's source proof. Do not map,
+          // copy or infer this proof from the public list's contents.
+          this.#savedSelections.set(list, { invocation, references: value });
+          return [name, list];
+        }),
+      ),
+    );
     return point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('@capix/structure').SavedReferences<any>);
   }
 
@@ -60,20 +78,70 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
 
   private executionWork(invocation: Invocation<Input, Output, Context>, access: ReturnType<InvocationAccess<Input, Output, Context>['enter']>) {
     const writer = invocation.checkpointWriter;
+    const guarded = <Value>(operation: () => Value): Value => {
+      try {
+        access.validate();
+        return operation();
+      } catch (error) {
+        invocation.reject(error);
+        throw error;
+      }
+    };
+    const registry = this.accessFor(invocation).references;
     const checkpoint = writer
-      ? Object.freeze((options: { readonly point: object; readonly state: unknown; readonly refs?: Readonly<Record<string, ChildReference | readonly ChildReference[]>> }) => {
-          try {
-            access.validate();
-            const registered = this.declaration.checkpoint?.points.find((candidate) => originalCheckpointPoint(candidate) === originalCheckpointPoint(options.point));
-            if (!registered) throw new Error('Checkpoint point is not registered on this declaration');
-            const registry = this.accessFor(invocation).references;
-            const references = Object.fromEntries(Object.entries(options.refs ?? {}).map(([name, value]) => [name, Array.isArray(value) ? value.map((ref) => registry.encode(ref)) : registry.encode(value as ChildReference)]));
-            writer.save(registered.name, options.state, references);
-          } catch (error) {
-            invocation.reject(error);
-            throw error;
-          }
-        })
+      ? Object.freeze(
+          Object.assign(
+            (options: { readonly point: object; readonly state: unknown; readonly refs?: Readonly<Record<string, ChildReference | readonly ChildReference[] | CheckpointSelection>> }) =>
+              guarded(() => {
+                const registered = this.declaration.checkpoint?.points.find((candidate) => originalCheckpointPoint(candidate) === originalCheckpointPoint(options.point));
+                if (!registered) throw new Error('Checkpoint point is not registered on this declaration');
+                const references = Object.fromEntries(
+                  Object.entries(options.refs ?? {}).map(([name, value]) => {
+                    const selection = value && typeof value === 'object' ? this.#selections.get(value) : undefined;
+                    if (selection) {
+                      if (selection.invocation !== invocation) throw new Error('Checkpoint selection belongs to another invocation');
+                      return [name, selection.raw];
+                    }
+                    return [name, Array.isArray(value) ? value.map((ref) => registry.encode(ref)) : registry.encode(value as ChildReference)];
+                  }),
+                );
+                writer.save(registered.name, options.state, references);
+              }),
+            {
+              select: <Definition extends ChildContract>(definition: Definition, initial?: readonly ChildReference<Definition>[]): CheckpointSelection<Definition> =>
+                guarded(() => {
+                  const position = this.children.position(definition);
+                  const restored = initial ? this.#savedSelections.get(initial) : undefined;
+                  if (restored && restored.invocation !== invocation) throw new Error('Saved checkpoint selection belongs to another invocation');
+                  const raw = writer.select(position, restored ? restored.references : initial?.map((ref) => registry.encode(ref)));
+                  const selected = Object.freeze({
+                    get length() {
+                      return guarded(() => raw.length);
+                    },
+                    at: (index: number) =>
+                      guarded(() => {
+                        const ref = raw.at(index);
+                        return ref ? (registry.fromSaved(ref) as ChildReference<Definition>) : undefined;
+                      }),
+                    occurrenceAt: (index: number) => guarded(() => raw.occurrenceAt(index) as unknown as CheckpointOccurrence<Definition> | undefined),
+                    add: (ref: ChildReference<Definition>) =>
+                      guarded(() => {
+                        const encoded = registry.encode(ref);
+                        if (encoded.target.position !== position) throw new Error('Checkpoint selection child declaration differs');
+                        return raw.add(encoded) as unknown as CheckpointOccurrence<Definition>;
+                      }),
+                    remove: (occurrence: CheckpointOccurrence<Definition>) => guarded(() => raw.remove(occurrence as unknown as InvocationCheckpointOccurrence)),
+                    *[Symbol.iterator]() {
+                      const iterator = guarded(() => raw[Symbol.iterator]());
+                      for (let next = guarded(() => iterator.next()); !next.done; next = guarded(() => iterator.next())) yield guarded(() => registry.fromSaved(next.value) as ChildReference<Definition>);
+                    },
+                  }) as unknown as CheckpointSelection<Definition>;
+                  this.#selections.set(selected, { invocation, raw });
+                  return selected;
+                }),
+            },
+          ),
+        )
       : undefined;
     const output = this.declaration.output?.delta ? invocation.outputWriter : undefined;
     return Object.freeze({ ...access.base, ...this.childPort(access), ...(checkpoint ? { checkpoint } : {}), ...(output ? { output } : {}) });

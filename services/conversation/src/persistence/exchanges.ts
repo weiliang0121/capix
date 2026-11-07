@@ -17,12 +17,11 @@ export interface ExchangeArchiveSummary {
   readonly sequence: number;
   readonly entries: number;
   readonly bytes: number;
-  /** Null identifies an unanchored, read-only collection migrated from v4. */
-  readonly metadata: ExchangeArchiveMetadata | null;
+  readonly metadata: ExchangeArchiveMetadata;
 }
 export interface LoadedExchangeArchive {
   readonly state: ModelExchangesState;
-  readonly metadata: ExchangeArchiveMetadata | null;
+  readonly metadata: ExchangeArchiveMetadata;
 }
 export interface ExchangeArchivePage {
   readonly items: readonly ExchangeArchiveSummary[];
@@ -36,7 +35,7 @@ export interface ConversationExchanges extends ModelExchangesPersistence {
 }
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const headerSchema = z.strictObject({ id: z.string().min(1), sequence: count, bytes: count.max(maximumModelExchangeLimits.bytes), entry_count: count.max(maximumModelExchangeLimits.entries), metadata: z.string().nullable() });
+const headerSchema = z.strictObject({ id: z.string().min(1), sequence: count, bytes: count.max(maximumModelExchangeLimits.bytes), entry_count: count.max(maximumModelExchangeLimits.entries), metadata: z.string() });
 const rowSchema = z.strictObject({ collection: z.string().min(1), id: z.string().min(1), ordinal: count, revision: count, body: z.string() });
 const operationRow = z.strictObject({ operation: z.string(), exchange_id: z.string(), call_id: z.string().nullable() });
 const metadataSchema = z.strictObject({ source: z.strictObject({ transcriptId: z.string().min(1), index: count }), scope: z.string().trim().min(1), policy: z.record(z.string(), z.json()), limits: z.strictObject({ entries: count.positive().max(maximumModelExchangeLimits.entries), bytes: count.positive().max(maximumModelExchangeLimits.bytes) }) });
@@ -63,9 +62,9 @@ export class SqliteExchanges implements ConversationExchanges {
         .prepare('SELECT * FROM model_exchange_entries WHERE collection = ? ORDER BY ordinal')
         .all(collection)
         .map((row) => this.entry(row, collection));
-      if (saved.metadata && entries.some((entry) => entry.scope !== saved.metadata!.scope)) throw new Error('Saved model exchange scope differs from its archive metadata');
+      if (entries.some((entry) => entry.scope !== saved.metadata.scope)) throw new Error('Saved model exchange scope differs from its archive metadata');
       if (entries.reduce((sum, entry) => sum + bytes(entry), 0) !== saved.bytes) throw new Error('Model exchange byte accounting differs from saved entries');
-      const state = ModelExchanges.restore({ formatVersion: 1, id: saved.id, sequence: saved.sequence, entries }, { limits: saved.metadata?.limits ?? maximumModelExchangeLimits }).snapshot();
+      const state = ModelExchanges.restore({ formatVersion: 1, id: saved.id, sequence: saved.sequence, entries }, { limits: saved.metadata.limits }).snapshot();
       const expected = entries.flatMap(effectRows).sort((a, b) => a.operation.localeCompare(b.operation));
       const actual = this.database
         .prepare('SELECT operation, exchange_id, call_id FROM model_exchange_operations WHERE collection = ?')
@@ -121,7 +120,6 @@ export class SqliteExchanges implements ConversationExchanges {
       const row = this.database.prepare('SELECT * FROM model_exchanges WHERE id = ?').get(collection);
       const saved = row ? this.summary(row) : undefined;
       if (!saved || saved.sequence !== expectedSequence) throw conflict('Model exchange collection sequence or identity differs');
-      if (!saved.metadata) throw conflict('Unanchored model exchange archive is read-only');
       if (entry.scope !== saved.metadata.scope) throw conflict('Model exchange scope differs from its fixed archive metadata');
       const currentRow = this.database.prepare('SELECT * FROM model_exchange_entries WHERE collection = ? AND id = ?').get(collection, entry.id);
       const current = currentRow ? this.entry(currentRow, collection) : null;
@@ -146,9 +144,9 @@ export class SqliteExchanges implements ConversationExchanges {
 
   private summary(value: unknown): ExchangeArchiveSummary {
     const row = headerSchema.parse(value);
-    if (row.metadata !== null && Buffer.byteLength(row.metadata) > 64 * 1024) throw new Error('Saved model exchange archive metadata exceeds its size limit');
-    const metadata = row.metadata === null ? null : captureMetadata(JSON.parse(row.metadata));
-    if (metadata && (row.bytes > metadata.limits.bytes || row.entry_count > metadata.limits.entries)) throw new Error('Saved model exchange collection exceeds its fixed limits');
+    if (Buffer.byteLength(row.metadata) > 64 * 1024) throw new Error('Saved model exchange archive metadata exceeds its size limit');
+    const metadata = captureMetadata(JSON.parse(row.metadata));
+    if (row.bytes > metadata.limits.bytes || row.entry_count > metadata.limits.entries) throw new Error('Saved model exchange collection exceeds its fixed limits');
     return Object.freeze({ id: row.id, sequence: row.sequence, entries: row.entry_count, bytes: row.bytes, metadata });
   }
 

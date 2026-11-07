@@ -19,7 +19,7 @@ export function readArchiveUsage(database: DatabaseSync): ConversationArchiveUsa
   return Object.freeze({ exchangesBytes: saved.exchanges_bytes, interactionsBytes: saved.interactions_bytes, checkpointBytes: saved.checkpoint_bytes, totalBytes });
 }
 
-/** Install once during migration. Row updates and their counters share the writer's transaction. */
+/** New databases start empty. Row updates and their counters share the writer's transaction. */
 export function installArchiveUsage(database: DatabaseSync): void {
   database.exec(`
     CREATE TABLE archive_usage (
@@ -28,52 +28,29 @@ export function installArchiveUsage(database: DatabaseSync): void {
       interactions_bytes INTEGER NOT NULL CHECK (interactions_bytes >= 0),
       checkpoint_bytes INTEGER NOT NULL CHECK (checkpoint_bytes >= 0)
     ) STRICT;
-    INSERT INTO archive_usage VALUES (1,
-      (SELECT COALESCE(SUM(length(CAST(body AS BLOB))), 0) FROM model_exchange_entries) +
-      (SELECT COALESCE(SUM(length(CAST(metadata AS BLOB))), 0) FROM model_exchanges),
-      (SELECT COALESCE(SUM(length(CAST(body AS BLOB))), 0) FROM completion_interactions),
-      (SELECT COALESCE(SUM(${checkpointBytes('body')}), 0) FROM checkpoint_images) +
-      (SELECT COALESCE(SUM(${checkpointBytes('delivery')}), 0) FROM checkpoint_heads)${factsUsage(database)}
-    );
+    INSERT INTO archive_usage VALUES (1, 0, 0, 0);
   `);
-  for (const sql of usageTriggers(hasFacts(database)).values()) database.exec(sql);
+  for (const sql of usageTriggers().values()) database.exec(sql);
   readArchiveUsage(database);
 }
 
 /** A missing accounting trigger cannot silently turn admission into a stale-counter check. */
 export function inspectArchiveUsage(database: DatabaseSync): void {
   const query = database.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?");
-  for (const [name, sql] of usageTriggers(hasFacts(database))) {
+  for (const [name, sql] of usageTriggers()) {
     const stored = query.get(name)?.sql;
     if (typeof stored !== 'string' || normalize(stored) !== normalize(sql)) throw new Error('Unsupported archive usage accounting');
   }
   readArchiveUsage(database);
 }
 
-/** Schema migration must not repair a damaged counter by silently recounting it. */
-export function removeArchiveUsageForMigration(database: DatabaseSync): void {
-  inspectArchiveUsage(database);
-  const saved = readArchiveUsage(database);
-  const actual = database
-    .prepare(
-      `SELECT
-    (SELECT COALESCE(SUM(length(CAST(body AS BLOB))), 0) FROM model_exchange_entries) + (SELECT COALESCE(SUM(length(CAST(metadata AS BLOB))), 0) FROM model_exchanges) AS exchanges_bytes,
-    (SELECT COALESCE(SUM(length(CAST(body AS BLOB))), 0) FROM completion_interactions) AS interactions_bytes,
-    (SELECT COALESCE(SUM(${checkpointBytes('body')}), 0) FROM checkpoint_images) + (SELECT COALESCE(SUM(${checkpointBytes('delivery')}), 0) FROM checkpoint_heads)${factsUsage(database)} AS checkpoint_bytes`,
-    )
-    .get();
-  if (!actual || actual.exchanges_bytes !== saved.exchangesBytes || actual.interactions_bytes !== saved.interactionsBytes || actual.checkpoint_bytes !== saved.checkpointBytes) throw new Error('Archive usage differs from retained facts');
-  for (const name of usageTriggers(hasFacts(database)).keys()) database.exec(`DROP TRIGGER ${name}`);
-  database.exec('DROP TABLE archive_usage');
-}
-
 function checkpointBytes(value: string): string {
-  // Current storage records its original JSON length. Opaque historical rows are
-  // measured without reinterpreting their format; normal reads still certify them.
+  // Compressed value bodies carry their original JSON length; fact metadata is
+  // stored directly. Reads authenticate either representation independently.
   return `CASE WHEN ${value} IS NULL THEN 0 WHEN json_type(${value}, '$.jsonBytes') = 'integer' THEN json_extract(${value}, '$.jsonBytes') ELSE length(CAST(${value} AS BLOB)) END`;
 }
 
-function usageTriggers(facts: boolean): ReadonlyMap<string, string> {
+function usageTriggers(): ReadonlyMap<string, string> {
   const statements = new Map<string, string>();
   const track = (table: string, column: string, counter: string, size: (value: string) => string): void => {
     const suffix = table === 'checkpoint_values' ? `_${column}` : '';
@@ -89,19 +66,12 @@ function usageTriggers(facts: boolean): ReadonlyMap<string, string> {
   track('completion_interactions', 'body', 'interactions_bytes', (value) => `length(CAST(${value} AS BLOB))`);
   track('checkpoint_images', 'body', 'checkpoint_bytes', checkpointBytes);
   track('checkpoint_heads', 'delivery', 'checkpoint_bytes', checkpointBytes);
-  if (facts) {
-    track('checkpoint_values', 'body', 'checkpoint_bytes', checkpointBytes);
-    track('checkpoint_values', 'metadata', 'checkpoint_bytes', (value) => `length(CAST(${value} AS BLOB))`);
-    track('checkpoint_relations', 'body', 'checkpoint_bytes', (value) => `length(CAST(${value} AS BLOB))`);
-  }
+  track('checkpoint_values', 'body', 'checkpoint_bytes', checkpointBytes);
+  track('checkpoint_values', 'metadata', 'checkpoint_bytes', (value) => `length(CAST(${value} AS BLOB))`);
+  track('checkpoint_relations', 'body', 'checkpoint_bytes', (value) => `length(CAST(${value} AS BLOB))`);
+  track('checkpoint_selections', 'body', 'checkpoint_bytes', (value) => `length(CAST(${value} AS BLOB))`);
+  track('checkpoint_occurrences', 'body', 'checkpoint_bytes', (value) => `COALESCE(length(CAST(${value} AS BLOB)),0)`);
   return statements;
-}
-
-function hasFacts(database: DatabaseSync): boolean {
-  return !!database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='checkpoint_values'").get();
-}
-function factsUsage(database: DatabaseSync): string {
-  return hasFacts(database) ? ` + (SELECT COALESCE(SUM(${checkpointBytes('body')} + length(CAST(metadata AS BLOB))),0) FROM checkpoint_values) + (SELECT COALESCE(SUM(length(CAST(body AS BLOB))),0) FROM checkpoint_relations)` : '';
 }
 
 function normalize(sql: string): string {

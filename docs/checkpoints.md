@@ -1,6 +1,6 @@
 # Callable Checkpoint 与有限恢复
 
-状态：2026-11-07，CP 载体与存储由 `@capix/checkpoint` 提供，调用事实发布与续接由 `@capix/invocation` 提供，Runtime 负责结构与恢复 Work 的装配。新保存使用稳定事实与 Frame v6 增量表示；旧 v5 保留低层只读核验，拒绝进入新的执行恢复。普通调用仍只执行一次 run，旧 round 2/continuation 不复活。历史推演见 [Checkpoint 设计历史](checkpoint-design-history.md)；新对话服务已有显式 CLI/Web 恢复入口，不自动恢复旧提交。
+状态：2026-11-07，CP 载体与存储由 `@capix/checkpoint` 提供，调用事实发布与续接由 `@capix/invocation` 提供，Runtime 负责结构与恢复 Work 的装配。当前只接收 Frame v6；生产保存使用稳定事实的增量表示，完整 v6 Image 仍可显式冷导入。旧 CP 格式不读取、不迁移，也不进入执行恢复。普通调用仍只执行一次 run，旧 round 2/continuation 不复活。历史推演见 [Checkpoint 设计历史](checkpoint-design-history.md)；新对话服务已有显式 CLI/Web 恢复入口，不自动恢复旧提交。
 
 本轮已增加独立被动 `CheckpointInstallation.feedback`，覆盖正常 CP、恢复活动及恢复建立前失败；原 observation 的严格策略和 Store 提交规则保持。Runner 已提供 `observation` 元数据订阅，output 与 observation 都带本次入口 `entryId`，不改变恢复沿用的 Context 身份。该改动只补交付接缝，不扩大可恢复范围，也不把原始 CP 事实直接作为客户端协议。完整出口区分见 [运行出口](runtime-ports.md)。
 
@@ -62,9 +62,9 @@ Store 保持同步宿主端口，未强制放入普通业务 deps。最终交付
 
 作者恢复点使用 `checkpointPoint<Kind, Input, Output>()`，具名点通过对象注册和保存；跨进程再以所属契约和点名核验。resume 接收本阶段 Work、已解码业务 state 和准确引用槽位，正常和恢复均经相同的 child.invoke 或精确 run/accept 接缝。普通 Work 不再暴露轮次或处理器状态，ResumeWork 的历史字段仅用于恢复核对。完整作者入口见 [可调用结构](callable-structures.md)。
 
-当前新保存格式为 **Frame v6**：逻辑 Image 仍保留完整输入、currentInput、直接关系与 state/refs；物理表示由固定值块、当前关系记录与 head 组成。直接关系与业务 state/refs 分开，保留调用进度和子失败已经完成的 `handled` 接收事实。格式中仍有旧 continuation/前轮异常诊断的读取类型，但新恢复明确拒绝 round !== 1 或携带 continuation 的镜像；格式可读取不等于旧执行模型可复活。子声明由父 checkpoint key/version 与去重后的固定声明位置关联，不依赖 JS 身份、key 或同名契约。父接纳契约位置及编码值继续保存，owner 与子身份使用 kind: scene/group/node；成员位置属于固定父声明。新进程必须提供兼容声明；同版本任意改动业务实现不在可检测承诺内。
+当前新保存格式为 **Frame v6**：逻辑 Image 仍保留完整输入、currentInput、直接关系与 state/refs；物理表示由固定值块、当前关系记录与 head 组成。直接关系与业务 state/refs 分开，保留调用进度和子失败已经完成的 `handled` 接收事实。Frame v6 保留 continuation/前轮异常诊断字段，但执行恢复明确拒绝 round !== 1 或携带 continuation 的镜像；保留字段不等于支持旧 CP 格式或复活旧执行模型。子声明由父 checkpoint key/version 与去重后的固定声明位置关联，不依赖 JS 身份、key 或同名契约。父接纳契约位置及编码值继续保存，owner 与子身份使用 kind: scene/group/node；成员位置属于固定父声明。新进程必须提供兼容声明；同版本任意改动业务实现不在可检测承诺内。
 
-v1/v2/v3/v4/v5 CP 均不进入新的执行恢复；v5 低层只读核验保留，不把旧原引用语义自动升级为稳定事实，不自动迁移或重发。格式升级不改写旧 image；历史消息、记忆和可选记录继续读取。历史记录和格式诊断不驱动普通执行。
+v1/v2/v3/v4/v5 CP 在格式边界明确拒绝，不保留旧 v5 只读解析路径，也不把旧原引用语义升级为稳定事实。宿主数据库同样只接受当前格式：旧库拒绝打开，不升级、不清空、不覆盖。当前格式库内的正式内容和记录按各自契约读取；它们不授予调用恢复资格。
 
 父可在 `checkpoint.receptions` 登记 `reception(child, { check, encode, decode })`。进入 receiving 即固定本次契约；accepted 保存值经该 codec 编码，恢复先核对本父注册位置和准确子声明位置，再 decode/check。`facts.children.accepted(ref, contract)` 在恢复点 check 与 resume 中均取得已核验的稳定 V（冷恢复重新解码），包含合法 undefined。它要求契约匹配，不能将旧 raw 接纳补成 typed 接纳。raw accept 使用默认稳定数据编码，仍不能事后补贴具名接纳契约。
 
@@ -78,7 +78,7 @@ CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理
 
 ## 内核事实与保存
 
-持久契约见 [checkpoint/contract.ts](../server/checkpoint/src/contract.ts)，运行安装与观测见 [invocation checkpoint/contract.ts](../server/invocation/src/checkpoint/contract.ts)，作者配置见 [structure definition/checkpoint.ts](../server/structure/src/definition/checkpoint.ts)。CPF 与业务 state 分开，捕获全部直接子关系，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败。业务循环进度属于 point state；它不重建活异常、不让失败子调用复活。尚未处理或正在处理的失败、结构故障及取消不能当作开放恢复点。
+持久契约见 [checkpoint/contract.ts](../server/checkpoint/src/contract.ts)，运行安装与观测见 [invocation checkpoint/contract.ts](../server/invocation/src/checkpoint/contract.ts)，作者配置见 [structure definition/checkpoint.ts](../server/structure/src/definition/checkpoint.ts)。调用事实与业务 state 分开，逻辑镜像包含全部直接子关系，热保存只发布变化，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败。业务循环进度属于 point state；它不重建活异常、不让失败子调用复活。尚未处理或正在处理的失败、结构故障及取消不能当作开放恢复点。
 
 返回关系与最终交付保存真实子 round、phase、currentInput，不能从较早 CP 或父 round 推测。固定交付视图不伪造原 execute 中间结果或未保存的后代。GenerateAnswer 的显式再次生成核对原拒绝码、诊断与真实 handled 关系，恢复不重置次数或产生第三次生成。
 
@@ -94,21 +94,21 @@ Context/Relation 是事实所有者。CP 只记录已成立内容，不在保存
 
 ### 单次保存的认证与确认
 
-生产 Invocation 使用同一 `Store.save(commit, expectedRevision)`：v6 Commit 带新增值块、发生变化的当前关系、固定头字段及当前 state/refs 的块引用。Store 在同一事务中核对旧 head、固定 owner/contract/input、关系身份/不可逆进度、引用归属与完整逻辑额度，然后写块、更新关系和 head。增量 scope 不得改变 round/continuation；保留字段不等于重新开放旧多轮执行。
+生产 Invocation 使用同一 `Store.save(commit, expectedRevision)`：v6 Commit 带新增值块、发生变化的当前关系、固定头字段及当前 state 的块引用；refs 可以是完整块，也可以是具名槽位指向的选择版本及本次出现项增删。Store 在同一事务中核对旧 head、固定 owner/contract/input、关系身份/不可逆进度、引用归属与完整逻辑额度，然后写块、更新关系、选择和 head。增量 scope 不得改变 round/continuation；保留字段不等于重新开放旧多轮执行。
 
 旧 input、returned、accepted/handled 正文及已固定诊断不因其他孩子推进而重新编码、解码或压缩。关系状态变化只更新该关系的元数据，仍引用已发布字段。完整逻辑 8 MiB/100000值/深度64/4096关系限制通过经正文认证的统计组合核验，不把物理去重后的大小当成额度。新块按真实正文计算 digest/统计；同 ID 异内容、缺失/退休正文或不准确引用拒绝。
 
-本轮作者入口保持 `work.checkpoint({point,state,refs})`，返回 void；低层 writer/Store 返回确认回执。**state 和 refs 每次仍完整提交、编码和核验，point.check 每次仍执行。** many 是保序数组，允许同一孩子多次出现；切换点时使用本次明确选择，不隐式继承旧点。查询按需取旧事实，`children.values/list` 仍承担全量读取成本。可选增量 many、按 point 的作者认证 basis，以及实体前缀分块均未作为本轮生产能力迁移，不能据此宣称所有作者代码已具有常量成本。
+作者入口保持 `work.checkpoint({point,state,refs})`，返回 void；低层 writer/Store 返回确认回执。**state 每次完整提交，point.check 每次执行。** many 的数组写法表示完整替换，也可以通过 `work.checkpoint.select(definition, saved?)` 建立本次调用的有序选择，再以 `add` / `remove` 增量调整准确出现项。重复引用保留；切换点时使用本次明确选择，不隐式继承旧点；同一选择可显式供兼容槽位使用。只有准确提交回执才推进已保存依据。查询按需取旧事实，many 的 `length`／索引／`at` 不强制物化全部内容；遍历及 `children.values/list` 仍承担实际读取成本。按 point 的作者认证 basis、实体前缀分块没有加入，不能据此宣称所有作者代码已具有常量成本。API 与恢复规则见 [增量引用选择](checkpoint-selection.md)。
 
 `point.check(state,facts)` 必须同步完成；Promise/thenable 在提交前拒绝。其查询端口只在这次 check 有效，结束后不能再查询或借用后续保存；已经取得的稳定数据可以保留。保存窗口拒绝同 writer 重入及关系变更，并在作者 codec/check、captured 通知之后重新核对活动、阶段和修订。state/point/refs 改变即使没有新关系也要检查当前组合；不能用“没有 delta”免掉 check。
 
 `read(contextId)` 仍返回完整 `CheckpointHead`；v6 Head 另带可序列化的 `publication` 引用元数据（完整当前关系引用、无正文块），供恢复后继续复用原块。冷读取完整验证存储正文、digest、统计、引用、逻辑 Image 以及 publication 与 Image 的一致性；复制或传输后须重新认证，不能靠 WeakMap 身份决定能否恢复。支持 v6 的自定义 Store 及 read 包装也须保留这份纯值元数据，无需透传原 JS 对象；本地 WeakMap 只省去同一已认证对象的再次冷核验。该元数据不授予新的恢复权限，也不是第二份调用状态。缺失的存储块仍由 Store 拒绝；只有当前结构和宿主资格核验通过才可继续。
 
-`save` 返回 `CheckpointSaveReceipt`，`finish` 返回 `CheckpointFinishReceipt`；包含准确 contextId、checkpointId、revision、digest，终态另含 status，不附带正文。v6 使用 `checkpointCommitReceipt` / `checkCheckpointCommitReceipt` 绑定准确增量与新块摘要；完整 Image 冷导入继续使用 image receipt，`finish` 沿用独立交付回执。摘要关联编码内容而非证明介质已落盘。显式完整 Image 保存是兼容/冷导入路径，逐项核验且承担全量成本；历史归档工具仍可导入完整 v5 Image，但这不授予旧调用执行资格，也不自动转成 v6。生产 Invocation 只提交 v6 Commit。
+`save` 返回 `CheckpointSaveReceipt`，`finish` 返回 `CheckpointFinishReceipt`；包含准确 contextId、checkpointId、revision、digest，终态另含 status，不附带正文。v6 使用 `checkpointCommitReceipt` / `checkCheckpointCommitReceipt` 绑定准确增量与新块摘要；完整 Image 冷导入继续使用 image receipt，`finish` 沿用独立交付回执。摘要关联编码内容而非证明介质已落盘。显式完整 v6 Image 保存是冷导入路径，逐项核验且承担全量成本；旧版本 Image 明确拒绝。生产 Invocation 只提交 v6 Commit。
 
 一旦进入 Store 写口就按“可能已提交”处理。抛错或回执拒绝时，调用不自动重试、不写伪造失败终态，不把未知当作回滚；必要机制故障不能被 `result.failed` 降级。确认成功后的严格 saved 通知失败仍沿用既有失败收尾。内容固定、正式交付、实体落实与持久提交保持分离。
 
-### 正文保留与 SQLite 迁移
+### 正文保留与宿主格式
 
 2026-11-06 的保留修订将历史完整镜像收敛为每调用当前 head，它只减少存量，不减少当时的全量计算。2026-11-07 的 v6 增量表示在此基础上减少热路径的重复正文处理；两项收益应分开测量，不改作者 save/finish 次数或恢复点密度。
 
@@ -120,11 +120,11 @@ Context/Relation 是事实所有者。CP 只记录已成立内容，不在保存
 | 终态 delivery             | 保留，当前 head 及其引用正文继续存在；终态不可推进                     |
 | 已完成根与子 head         | 不做整树自动退休，不把完成标记当成可删除所有依据的证明                 |
 
-Memory 和两个 SQLite 实现遵循相同逻辑。Conversation SQLite v7 在 v6 的 head 保留规则之上增加值块与当前关系表，旧 v5 正文不改写为新事实；从更早版本迁移仍先核对旧归档。增量元数据含校验摘要，正文块和最终交付使用保留 -0 的内部无损编码；Conversation 正文再以有界 Brotli 存储。归档计数在同一事务涵盖当前头、值块正文、块元数据、关系与交付。Observer 在原 CP 表旁建立同义的独立表，不改变其内容库版本。
+Memory 和两个 SQLite 实现遵循相同逻辑。Conversation SQLite 当前为 schema 8，包含值块、当前关系、选择及出现项表；Observer 的独立格式见[持久化](persistence.md)。两种宿主只创建空的新库或打开形状完整的当前格式库，旧版本和不匹配表结构均拒绝，不执行升级或清空。增量元数据含校验摘要，正文块和最终交付使用保留 -0 的内部无损编码；Conversation 正文再以有界 Brotli 存储。归档计数在同一事务涵盖当前头、值块正文、块元数据、关系、选择、出现项和交付。
 
-旧 v5 Conversation 行仍使用原有有界推进缓存：64项/16 MiB计费材料，每次比较准确 SQL 行，公开读取完整核验。它只服务兼容路径，不用于证明新稳定事实，也不把旧 JSON 的有损数值语义宣称为 v6 保真。新 v6 热写仅取所需元数据，冷读取完整认证。
+v6 热写按本次变化读取所需元数据，冷读取完整认证；不存在旧 v5 镜像推进缓存或旧格式读写分支。
 
-两个 SQLite Store 的 v6 热写可复用关系行的已认证解析结果。缓存按具体 Store/连接及 owner/child 隔离，默认最多4,096项、16 MiB计费材料；每次仍从当前事务读取准确 `child_id/ordinal/body`，逐字一致才复用。它不以“身份不变”为由跳过 SQL，也不将 waiting/accepted 等状态视为不变；变化行重新解析，缺失行不命中，每个 refs 出现项仍单独核验。缓存只接纳实际读出的行，不预装待提交关系；事务失败（包括 COMMIT）清空，finish 释放该 owner。Conversation 关闭主动清空；Observer 连接由宿主持有，关闭后的端口访问失败会清空，若宿主继续持有未再访问的 Store，残留缓存仍受上述总额限制。冷 read 完整核验且不借用缓存。计费材料不是精确 JS 堆内存上界；完整 refs 依旧承担 O(R) 读取与核验成本。
+两个 SQLite Store 的 v6 热写可复用关系行的已认证解析结果。缓存按具体 Store/连接及 owner/child 隔离，默认最多4,096项、16 MiB计费材料；每次仍从当前事务读取准确 `child_id/ordinal/body`，逐字一致才复用。它不以“身份不变”为由跳过 SQL，也不将 waiting/accepted 等状态视为不变；变化行重新解析，缺失行不命中；完整 refs 数组逐项核验，增量选择按其提交依据核验本次出现项变更，二者不因解析复用跳过归属检查。缓存只接纳实际读出的行，不预装待提交关系；事务失败（包括 COMMIT）清空，finish 释放该 owner。Conversation 关闭主动清空；Observer 连接由宿主持有，关闭后的端口访问失败会清空，若宿主继续持有未再访问的 Store，残留缓存仍受上述总额限制。冷 read 完整核验且不借用缓存。计费材料不是精确 JS 堆内存上界；完整 refs 依旧承担 O(R) 读取与核验成本。
 
 任何事务失败整体回滚；回执失败仍不意味着回滚。当前 head 缺正文、引用缺块或数据不一致均拒绝，不回退旧镜像。旧 image 身份行、块墓碑、关系、head 与终态仍可能增长，内存和冷恢复也未承诺恒定规模。不自动 VACUUM，不保证文件立即缩小；分叉、整树退休与外部事务继续是独立议题。
 

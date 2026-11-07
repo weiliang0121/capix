@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
-import type { CheckpointCommit, CheckpointValueBlock, CheckpointValueReference, CheckpointChildRecord, CheckpointChild, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointDelivery, CheckpointReferences } from './contract.js';
+import type { CheckpointCommit, CheckpointValueBlock, CheckpointValueReference, CheckpointChildRecord, CheckpointChild, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointDelivery, CheckpointReferences, CheckpointPublication, CheckpointSelectionChange, CheckpointSelectionSnapshot } from './contract.js';
 import { cloneCheckpointValue, cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from './value.js';
 import { checkpointMetrics, checkpointEncodingOverhead, encodeCheckpointData, decodeCheckpointData, type CheckpointValueMetrics } from './encoding.js';
 import { rememberCheckpointHead } from './evidence.js';
+import { isCheckpointSelectionSlots, checkpointSelectionReferences, prepareCheckpointSelections, materializeCheckpointSelections, checkpointSnapshotReferences, type CheckpointStoredSelection, type CheckpointStoredOccurrence, type CheckpointSelectionReader, type CheckpointSelectionPlan } from './selections.js';
 
 export interface CheckpointStoredValue {
   readonly id: string;
@@ -21,7 +22,7 @@ export interface CheckpointStoredChild {
 }
 
 export interface CheckpointStoredHead {
-  readonly commit: Omit<CheckpointCommit, 'values' | 'children'>;
+  readonly commit: Omit<CheckpointCommit, 'values' | 'children' | 'selectionChanges'>;
   readonly revision: number;
   readonly digest: string;
   readonly childCount: number;
@@ -32,7 +33,7 @@ export interface CheckpointStoredHead {
 }
 
 /** Called wholly within the host's write transaction. Metadata reads never fetch old bodies. */
-export interface CheckpointCommitReader {
+export interface CheckpointCommitReader extends CheckpointSelectionReader {
   readonly head: CheckpointStoredHead | undefined;
   value(id: string): CheckpointStoredValue | undefined;
   body(id: string): string | undefined;
@@ -46,6 +47,7 @@ export interface CheckpointCommitPlan {
   readonly values: readonly { readonly stored: CheckpointStoredValue; readonly body?: string }[];
   readonly children: readonly CheckpointStoredChild[];
   readonly receipt: CheckpointSaveReceipt;
+  readonly selections: readonly CheckpointSelectionPlan[];
 }
 
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
@@ -79,21 +81,35 @@ export function cloneCheckpointCommit(value: CheckpointCommit): CheckpointCommit
   const children = Object.freeze(rawChildren.map((child) => cloneCheckpointValue(child) as unknown as CheckpointChildRecord));
   const metadata = Object.fromEntries(
     Object.entries(properties)
-      .filter(([key]) => key !== 'values' && key !== 'children')
+      .filter(([key]) => key !== 'values' && key !== 'children' && key !== 'selectionChanges')
       .map(([key, property]) => [key, property.value]),
   );
-  const fixed = cloneCheckpointValue(metadata) as unknown as Omit<CheckpointCommit, 'values' | 'children'>;
+  const fixed = cloneCheckpointValue(metadata) as unknown as Omit<CheckpointCommit, 'values' | 'children' | 'selectionChanges'>;
   if (Object.keys(fixed).sort().join() !== 'contract,formatVersion,frame,id,kind,point,references,state') throw new Error('Invalid checkpoint commit fields');
   for (const reference of headReferences(fixed)) checkReference(reference);
+  if (isCheckpointSelectionSlots(fixed.references)) checkpointSelectionReferences(fixed.references);
+  const selectionChanges = properties.selectionChanges ? Object.freeze(dataArray(properties.selectionChanges.value).map(cloneSelectionChange)) : undefined;
+  if (selectionChanges && (selectionChanges.reduce((total, change) => total + (change.append?.length ?? 0) + (change.remove?.length ?? 0) + 1, 0) > 100000 || Buffer.byteLength(encodeCheckpointData(selectionChanges)) > CHECKPOINT_MAX_BYTES)) throw new Error('Checkpoint selection delta exceeds its limits');
   const skeleton = logicalImage(fixed, [], () => null);
   cloneCheckpointImage({ ...skeleton, references: {} });
-  return Object.freeze({ ...fixed, values: Object.freeze(values), children });
+  return Object.freeze({ ...fixed, values: Object.freeze(values), children, ...(selectionChanges ? { selectionChanges } : {}) });
 }
 
 /** Digest includes the exact delta and block digests, without reserializing published value bodies. */
 export function checkpointCommitDigest(commit: CheckpointCommit): string {
-  const { values, ...metadata } = commit;
-  return hash(encodeCheckpointData({ ...metadata, values: values.map(({ id, digest }) => ({ id, digest })) }));
+  const { values, ...metadata } = cloneCheckpointCommit(commit);
+  return hash(encodeCheckpointData(canonicalMetadata({ ...metadata, values: values.map(({ id, digest }) => ({ id, digest })) })));
+}
+
+function canonicalMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalMetadata);
+  if (value !== null && typeof value === 'object')
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalMetadata((value as Record<string, unknown>)[key])]),
+    );
+  return value;
 }
 
 export function checkpointCommitReceipt(commit: CheckpointCommit, revision: number): CheckpointSaveReceipt {
@@ -136,24 +152,41 @@ export function checkpointImageCommit(image: CheckpointImage, previous?: Checkpo
     return { ...child, input: publish(child.input, prior?.input), state: state.kind === 'returned' ? { ...state, output: publish(state.output, priorState?.kind === 'returned' ? priorState.output : undefined), progress, reception: reception! } : { ...state, error: publish(state.error, priorState?.kind === 'failed' ? priorState.error : undefined), progress, ...(reception ? { reception } : {}) } } as CheckpointChildRecord;
   });
   const { children: _children, ...frame } = fixed.frame;
-  const commit = { kind: 'commit' as const, formatVersion: 6 as const, id: fixed.id, contract: fixed.contract, point: fixed.point, frame: { ...frame, input: publish(frame.input, previous?.frame.input), currentInput: publish(frame.currentInput, previous?.frame.currentInput) }, state: publish(fixed.state, previous?.state), references: publish(fixed.references, previous?.references), values: [...values.values()], children };
+  const commit = { kind: 'commit' as const, formatVersion: 6 as const, id: fixed.id, contract: fixed.contract, point: fixed.point, frame: { ...frame, input: publish(frame.input, previous?.frame.input), currentInput: publish(frame.currentInput, previous?.frame.currentInput) }, state: publish(fixed.state, previous?.state), references: publish(fixed.references, previous && !isCheckpointSelectionSlots(previous.references) ? previous.references : undefined), values: [...values.values()], children };
   return cloneCheckpointCommit(commit);
 }
 
 /** Cold authentication after serialization. References do not confer Store membership or recovery permission. */
-export function checkCheckpointPublication(image: CheckpointImage, value: unknown): CheckpointCommit {
+export function checkCheckpointPublication(image: CheckpointImage, value: unknown): CheckpointPublication {
   if (image.formatVersion !== 6) throw new Error('Legacy checkpoint heads cannot contain v6 publication references');
-  const publication = cloneCheckpointCommit(value as CheckpointCommit);
-  if (publication.values.length !== 0) throw new Error('Checkpoint publication cannot contain duplicate value bodies');
-  const reconstructed = checkpointImageCommit(image, publication);
-  if (reconstructed.values.length !== 0 || !isEqual(reconstructed, publication)) throw new Error('Checkpoint publication differs from the complete logical image');
+  const fields = dataProperties(value);
+  const selectedSelections = fields.selectedSelections ? Object.freeze(dataArray(fields.selectedSelections.value).map(cloneSelectionSnapshot)) : undefined;
+  const publication = cloneCheckpointCommit(
+    Object.fromEntries(
+      Object.entries(fields)
+        .filter(([key]) => key !== 'selectedSelections')
+        .map(([key, field]) => [key, field.value]),
+    ) as unknown as CheckpointCommit,
+  );
+  if (publication.values.length !== 0 || publication.selectionChanges !== undefined) throw new Error('Checkpoint publication cannot contain pending changes or duplicate value bodies');
+  let comparison = publication;
+  if (isCheckpointSelectionSlots(publication.references)) {
+    const references = checkpointSnapshotReferences(publication.references, image.frame.owner.contextId, selectedSelections ?? []);
+    if (!isEqual(references, image.references)) throw new Error('Checkpoint selection publication differs from logical references');
+    const ids = new Set([...headReferences(publication), ...publication.children.flatMap(childReferences)].map((item) => item.id));
+    let id = 'publication:references';
+    while (ids.has(id)) id += ':';
+    comparison = { ...publication, references: { id, digest: hash(encodeCheckpointData(image.references)) } };
+  } else if (selectedSelections !== undefined) throw new Error('Unexpected checkpoint selection publication');
+  const reconstructed = checkpointImageCommit(image, comparison);
+  if (reconstructed.values.length !== 0 || !isEqual(reconstructed, comparison)) throw new Error('Checkpoint publication differs from the complete logical image');
   const identities = new Map<string, string>();
   for (const reference of [...headReferences(publication), ...publication.children.flatMap(childReferences)]) {
     const prior = identities.get(reference.id);
     if (prior && prior !== reference.digest) throw new Error('Checkpoint publication reuses an identity with different content');
     identities.set(reference.id, reference.digest);
   }
-  return publication;
+  return Object.freeze({ ...publication, ...(selectedSelections ? { selectedSelections } : {}) });
 }
 
 export function checkCheckpointCommitReceipt(receipt: unknown, commit: CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt {
@@ -249,20 +282,25 @@ export function prepareCheckpointCommit(request: CheckpointCommit, expectedRevis
   }
   if (childCount > 4096 || childCount < 0 || childDepths.length !== 65 || childDepths.some((n) => !Number.isSafeInteger(n) || n < 0)) throw new Error('Checkpoint child aggregate exceeds its limits');
   if (previous && commit.frame.nextChildOrder < previous.commit.frame.nextChildOrder) throw new Error('Checkpoint next child order cannot regress');
-  const refsInfo = valueInfo(commit.references);
-  if (!refsInfo.referenceChecked) {
-    const body = bodies.get(refsInfo.id) ?? reader.body(refsInfo.id);
-    if (body === undefined) throw new Error('Checkpoint reference value body is missing');
-    const references = decodeCheckpointData(body) as CheckpointReferences;
-    authenticateReferences(references, (id) => changed.get(id) ?? reader.child(id)?.child);
-    values.set(refsInfo.id, { ...refsInfo, referenceChecked: true });
+  const selections = prepareCheckpointSelections(commit, reader, (id) => changed.get(id) ?? reader.child(id)?.child);
+  if (!isCheckpointSelectionSlots(commit.references)) {
+    const refsInfo = valueInfo(commit.references);
+    if (!refsInfo.referenceChecked) {
+      const body = bodies.get(refsInfo.id) ?? reader.body(refsInfo.id);
+      if (body === undefined) throw new Error('Checkpoint reference value body is missing');
+      const references = decodeCheckpointData(body) as CheckpointReferences;
+      authenticateReferences(references, (id) => changed.get(id) ?? reader.child(id)?.child);
+      values.set(refsInfo.id, { ...refsInfo, referenceChecked: true });
+    }
   }
   const depth = childDepths.findLastIndex((count) => count > 0);
   const aggregate: CheckpointValueMetrics = { bytes: 2 + childBytes + Math.max(0, childCount - 1), nodes: 1 + childNodes, depth: depth < 0 ? 0 : depth + 1 };
   const linkedChildren: readonly CheckpointChild[] = [];
-  const skeleton = logicalImage(commit, linkedChildren, (reference) => reference);
+  const linkedReferences = {};
+  const skeleton = logicalImage(commit, linkedChildren, (reference) => reference, selections ? linkedReferences : undefined);
   const markers = new Map<object, CheckpointValueMetrics>(headReferences(commit).map((ref) => [ref, valueInfo(ref).metrics]));
   markers.set(linkedChildren, aggregate);
+  if (selections) markers.set(linkedReferences, selections.metrics);
   requireMetrics(checkpointMetrics(skeleton, (item) => markers.get(item)));
   const updates: { stored: CheckpointStoredValue; body?: string }[] = [];
   for (const [id, info] of values) {
@@ -273,13 +311,13 @@ export function prepareCheckpointCommit(request: CheckpointCommit, expectedRevis
     const prior = reader.value(id);
     if ((deltas.get(id) ?? 0) !== 0 || body !== undefined || info.referenceChecked !== prior?.referenceChecked || info.diagnosticChecked !== prior?.diagnosticChecked) updates.push({ stored: { ...info, uses }, ...(body !== undefined ? { body } : {}) });
   }
-  const { values: _values, children: _children, ...header } = commit;
+  const { values: _values, children: _children, selectionChanges: _selectionChanges, ...header } = commit;
   const receipt = checkpointCommitReceipt(commit, revision);
   const head = Object.freeze({ commit: header, revision, digest: receipt.digest, childCount, childBytes, childNodes, childDepths: Object.freeze(childDepths) });
-  return { head, values: updates, children, receipt };
+  return { head, values: updates, children, receipt, selections: selections?.plans ?? [] };
 }
 
-export function materializeCheckpointHead(head: CheckpointStoredHead, children: readonly CheckpointStoredChild[], values: readonly { readonly stored: CheckpointStoredValue; readonly body: string }[]): CheckpointHead {
+export function materializeCheckpointHead(head: CheckpointStoredHead, children: readonly CheckpointStoredChild[], values: readonly { readonly stored: CheckpointStoredValue; readonly body: string }[], selections: readonly { readonly head: CheckpointStoredSelection; readonly occurrences: readonly CheckpointStoredOccurrence[] }[] = []): CheckpointHead {
   cloneCheckpointCommit({ ...head.commit, values: [], children: [] });
   if (typeof head.digest !== 'string' || !/^[a-f0-9]{64}$/.test(head.digest)) throw new Error('Invalid persisted checkpoint receipt digest');
   const loaded = new Map<string, { stored: CheckpointStoredValue; value: unknown }>();
@@ -314,24 +352,27 @@ export function materializeCheckpointHead(head: CheckpointStoredHead, children: 
     childDepths[metrics.depth] = childDepths[metrics.depth]! + 1;
   }
   if (head.childCount !== ordered.length || childBytes !== head.childBytes || childNodes !== head.childNodes || !isEqual(childDepths, head.childDepths)) throw new Error('Persisted checkpoint aggregates differ');
+  const selected = isCheckpointSelectionSlots(head.commit.references) ? materializeCheckpointSelections(head.commit.references, head.commit.frame.owner.contextId, selections) : undefined;
+  if (!selected && selections.length) throw new Error('Unexpected checkpoint selections');
   const image = cloneCheckpointImage(
     logicalImage(
       head.commit,
       ordered.map(({ child }) => mapChild(child, resolve)),
       resolve,
+      selected?.references,
     ),
   );
   for (const [id, item] of loaded) if (counts.get(id) !== item.stored.uses) throw new Error('Persisted value references differ');
   if (image.formatVersion !== 6 || !Number.isSafeInteger(head.revision) || head.revision < 1) throw new Error('Invalid incremental checkpoint head');
   requireMetrics(checkpointMetrics(image));
-  const publication = Object.freeze({ ...head.commit, values: Object.freeze([]), children: Object.freeze(ordered.map(({ child }) => child)) });
+  const publication = Object.freeze({ ...head.commit, values: Object.freeze([]), children: Object.freeze(ordered.map(({ child }) => child)), ...(selected ? { selectedSelections: selected.snapshots } : {}) });
   const output = Object.freeze({ revision: head.revision, image, ...(head.delivery ? { delivery: cloneCheckpointDelivery(head.delivery) } : {}), publication });
   rememberCheckpointHead(output, publication);
   return output;
 }
 
-function logicalImage(commit: Omit<CheckpointCommit, 'values' | 'children'>, children: readonly CheckpointChild[], resolve: (reference: CheckpointValueReference) => any): CheckpointImage {
-  return { id: commit.id, formatVersion: 6, contract: commit.contract, point: commit.point, frame: { ...commit.frame, input: resolve(commit.frame.input), currentInput: resolve(commit.frame.currentInput), children }, state: resolve(commit.state), references: resolve(commit.references) };
+function logicalImage(commit: Omit<CheckpointCommit, 'values' | 'children'>, children: readonly CheckpointChild[], resolve: (reference: CheckpointValueReference) => any, references?: CheckpointReferences): CheckpointImage {
+  return { id: commit.id, formatVersion: 6, contract: commit.contract, point: commit.point, frame: { ...commit.frame, input: resolve(commit.frame.input), currentInput: resolve(commit.frame.currentInput), children }, state: resolve(commit.state), references: references ?? (isCheckpointSelectionSlots(commit.references) ? {} : resolve(commit.references)) };
 }
 
 function validateChildMetadata(commit: CheckpointCommit, child: CheckpointChildRecord): void {
@@ -364,7 +405,7 @@ function mapChild(child: CheckpointChildRecord, resolve: (reference: CheckpointV
 }
 
 function headReferences(commit: Pick<CheckpointCommit, 'frame' | 'state' | 'references'>): CheckpointValueReference[] {
-  return [commit.frame.input, commit.frame.currentInput, commit.state, commit.references];
+  return [commit.frame.input, commit.frame.currentInput, commit.state, ...(isCheckpointSelectionSlots(commit.references) ? [] : [commit.references])];
 }
 
 function childReferences(child: CheckpointChildRecord): CheckpointValueReference[] {
@@ -400,6 +441,31 @@ function authenticateReferences(references: CheckpointReferences, child: (id: st
 
 function sameReference(a: CheckpointValueReference, b: CheckpointValueReference): boolean {
   return a.id === b.id && a.digest === b.digest;
+}
+function cloneSelectionChange(value: unknown): CheckpointSelectionChange {
+  const fields = dataProperties(value);
+  const header = cloneCheckpointValue(
+    Object.fromEntries(
+      Object.entries(fields)
+        .filter(([key]) => key !== 'append' && key !== 'remove')
+        .map(([key, field]) => [key, field.value]),
+    ),
+  ) as unknown as CheckpointSelectionChange;
+  const append = fields.append ? Object.freeze(dataArray(fields.append.value).map((item) => cloneCheckpointValue(item) as unknown as NonNullable<CheckpointSelectionChange['append']>[number])) : undefined;
+  const remove = fields.remove ? Object.freeze(dataArray(fields.remove.value).map((item) => cloneCheckpointValue(item) as unknown as NonNullable<CheckpointSelectionChange['remove']>[number])) : undefined;
+  return Object.freeze({ ...header, ...(append ? { append } : {}), ...(remove ? { remove } : {}) });
+}
+function cloneSelectionSnapshot(value: unknown): CheckpointSelectionSnapshot {
+  const fields = dataProperties(value);
+  const header = cloneCheckpointValue(
+    Object.fromEntries(
+      Object.entries(fields)
+        .filter(([key]) => key !== 'occurrences')
+        .map(([key, field]) => [key, field.value]),
+    ),
+  ) as unknown as Omit<CheckpointSelectionSnapshot, 'occurrences'>;
+  const occurrences = Object.freeze(dataArray(fields.occurrences?.value).map((item) => cloneCheckpointValue(item) as unknown as CheckpointSelectionSnapshot['occurrences'][number]));
+  return Object.freeze({ ...header, occurrences });
 }
 function dataProperties(value: unknown): Record<string, PropertyDescriptor> {
   if (!value || typeof value !== 'object' || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) throw new Error('Checkpoint metadata requires an ordinary data record');

@@ -593,7 +593,7 @@ D04 的成功 `Promise<Output>` 和返回值身份保留，改变的是失败捕
 
 ### 12.2 D08 的持久关联与 v2 格式实验
 
-[正式格式与跨进程回归](../test/checkpoint/format-v3.test.mjs) 使用独立 Node 进程重新创建工厂声明，经真实 Store、Binder、Invocation 保存并恢复。它验证完整 Frame/业务 state/refs、声明位置、点注册、非恒等 codec、无 CP 成功子、严格预算及拒绝路径；隔离持久原型已移除。
+正式格式与跨进程回归（历史路径：`../test/checkpoint/format-v3.test.mjs`） 使用独立 Node 进程重新创建工厂声明，经真实 Store、Binder、Invocation 保存并恢复。它验证完整 Frame/业务 state/refs、声明位置、点注册、非恒等 codec、无 CP 成功子、严格预算及拒绝路径；隔离持久原型已移除。
 
 验证的持久关联为：**父 checkpoint key/version + 按声明对象首次出现去重的直接子位置**。同对象重复注册不新增位置，不同对象即使同名、同 CP 契约也占不同位置。有子 CP 时另验其 key/version；没有 CP 的成功子仍可关联，等待子仍要求有效恢复契约。
 
@@ -641,10 +641,10 @@ Context 原子安装 continuation、阶段行动撤销、恢复引用重新签�
 
 - [声明固定与 receiver](../server/runtime/src/binding/snapshot.ts)、[按装配位置解算](../server/runtime/src/binding/declarations.ts)。
 - [阶段资源与共享子映射](../server/runtime/src/binding/access.ts)、[当前子创建、入口与接纳](../server/runtime/src/binding/children/binding.ts)。
-- [调用视图与 run 返回值](../server/runtime/src/invocation/view.ts)、[父子关系状态与接纳窗口](../server/runtime/src/invocation/relation.ts)。
-- [局部继续、异常处理与输出段](../server/runtime/src/invocation/cycle.ts)、[正式输出身份检查](../server/runtime/src/output/section.ts)。
-- [E 入口](../server/runtime/src/definition/execution.ts)、[替代输入入口](../server/runtime/src/definition/entry.ts)。
-- [CP 存储契约](../server/runtime/src/checkpoint/contract.ts)、[子依据解析与接纳状态安装](../server/runtime/src/checkpoint/children.ts)。
+- 调用视图与 run 返回值（历史路径：`../server/runtime/src/invocation/view.ts`）、父子关系状态与接纳窗口（历史路径：`../server/runtime/src/invocation/relation.ts`）。
+- 局部继续、异常处理与输出段（历史路径：`../server/runtime/src/invocation/cycle.ts`）、正式输出身份检查（历史路径：`../server/runtime/src/output/section.ts`）。
+- E 入口（历史路径：`../server/runtime/src/definition/execution.ts`）、替代输入入口（历史路径：`../server/runtime/src/definition/entry.ts`）。
+- CP 存储契约（历史路径：`../server/runtime/src/checkpoint/contract.ts`）、子依据解析与接纳状态安装（历史路径：`../server/runtime/src/checkpoint/children.ts`）。
 - [回答生成和异常来源](../services/observer/src/conversation/group/answer/generate.ts)、[业务恢复检查](../services/observer/src/conversation/group/answer/checkpoint.ts)、[模型再次生成入口](../services/observer/src/conversation/group/model/request.ts)。
 - [并行与输出身份现有测试](../test/checkpoint/audit.test.mjs)、[并行实体落实现有测试](../test/checkpoint/resources.test.mjs)。
 

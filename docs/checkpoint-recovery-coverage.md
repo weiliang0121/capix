@@ -1,5 +1,7 @@
 # Checkpoint 恢复承诺与保存组合验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 日期：2026-11-06。对象是当前 ToolLoop 的有限恢复，而不是任意程序或所有框架的最小检查点定理。本轮保留生产保存点，只在测试装配中删去特定作者保存调用，再用真实持久数据和新进程验证。此前已完成的纯值/Store 复用与性能结果见 [CP 复用验证](checkpoint-reuse-validation.md)。
 
 ## 从承诺反推边界

@@ -1,5 +1,7 @@
 # Checkpoint 单步计算范围基准设计
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 日期：2026-11-06。状态：已实现并执行公共Runner基准，主实验扩展至2048子调用，结果见[实测报告](checkpoint-computation-results.md)、执行入口见[示例说明](../examples/checkpoint-computation/README.md)。下文保留实验设计及旧数据核对依据；本轮未修改生产保存点、Frame、Store或作者契约。
 
 本基准用于区分固定输入、累计关系、引用选择和作者检查的成本，给后续增量表示提供依据。不预先选择哈希链，不以减少恢复屏障换取性能，不将会话分叉纳入范围。

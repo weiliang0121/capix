@@ -3,6 +3,7 @@ import { decodeCheckpointDiagnostic, type DecodedCheckpointFrame, type DecodedCh
 import type { Stable, CheckpointFacts, ChildContract, ChildFact, ChildFacts, ChildReference, ContinuationFact, ReceptionDefinition } from '@capix/contracts';
 import type { BoundChildren } from './children/bound.js';
 import { BoundReceptions } from './receptions.js';
+import { checkpointList } from './checkpoint-list.js';
 
 /** Saved checks get decoded facts and inert references, never a live action registry. */
 export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: CheckpointReferences, children: BoundChildren, receptions = new BoundReceptions([], children)): { readonly facts: CheckpointFacts<unknown>; close(): void } {
@@ -89,14 +90,22 @@ export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: 
     },
   });
   const slots: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(references))
+  for (const [key, value] of Object.entries(references)) {
+    const list = Array.isArray(value)
+      ? checkpointList(
+          () => value.length,
+          (index) => selected(value[index]!).fact,
+          requireOpen,
+        )
+      : undefined;
     Object.defineProperty(slots, key, {
       enumerable: true,
       get() {
         requireOpen();
-        return Array.isArray(value) ? Object.freeze(value.map((item) => selected(item).fact)) : selected(value as CheckpointReference).fact;
+        return list ?? selected(value as CheckpointReference).fact;
       },
     });
+  }
   Object.freeze(slots);
   let continuation: ContinuationFact | undefined;
   if (frame.continuation) {

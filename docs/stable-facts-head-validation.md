@@ -1,5 +1,7 @@
 # 稳定事实与增量检查点：端到端实验
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-06。接续 [稳定交付值验证](stable-delivery-validation.md) 与交叉评审。**本轮只修改 examples 中的独立实验和报告；没有迁移生产 Invocation、Frame v5、SQLite 业务库或作者 API。** 工作树原有的 CP 缓存等修改保持原状，不计入本轮成果。
 
 后续：[第六轮作者契约实验](checkpoint-author-contract-validation.md) 已扩展本目录模型的 many 选择、检查视图和局部材料。本报告的 151 项与规模数据保留为第五轮源码快照；当前代码不是同一份基准实现，新增索引不自动迁移旧实验库。

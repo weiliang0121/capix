@@ -4,7 +4,7 @@
 
 # Callable Checkpoint 与执行恢复设计
 
-状态：2026-10-25，有限内核与 Observer 默认内置能力声明已接入 CP；共同 Callable 调用与 Frame v5 已落地，支持声明边界上的宿主显式续接及同轮已处理失败的保存。第 0 节说明当前 API 与限制；其后保留设计推演，伪代码解释职责，不代替源码契约。自动恢复、旧提交交付与恢复 UI 尚未接入。
+历史状态：2026-10-25，有限内核与 Observer 默认内置能力声明已接入 CP；共同 Callable 调用与 Frame v5 已落地，支持声明边界上的宿主显式续接及同轮已处理失败的保存。第 0 节说明当时 API 与限制；其后保留设计推演，伪代码不代替现行契约。当时恢复 UI 尚未接入；后续显式 CLI/Web 恢复与当前格式见 [Checkpoint](checkpoints.md)。
 
 恢复的目标是：某次 Callable 工作中断后，依据已经保存的事实和声明的续接入口，继续推进该工作。重新建立 Invocation、Context 和资源访问是实现手段；不恢复原 Promise、闭包、调用栈，也不反序列化 Bound 结构。
 
@@ -46,7 +46,7 @@ CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理
 
 ### 0.1 内核事实与保存
 
-实际契约见 [checkpoint/contract.ts](../server/runtime/src/checkpoint/contract.ts)、[definition/callable.ts](../server/runtime/src/definition/callable.ts)。CPF 与业务 state 分开，捕获全部直接子关系，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败；第二轮还可保存**已由本层处理的前轮子声明异常**，作为只读历史诊断。它不重建活异常、不重新进入异常处理、不让失败子调用复活。同轮尚未处理或正在处理的失败、结构故障、取消和异常处理阶段仍不能当作开放恢复点。
+实际契约见 checkpoint/contract.ts（历史路径：`../server/runtime/src/checkpoint/contract.ts`）、definition/callable.ts（历史路径：`../server/runtime/src/definition/callable.ts`）。CPF 与业务 state 分开，捕获全部直接子关系，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败；第二轮还可保存**已由本层处理的前轮子声明异常**，作为只读历史诊断。它不重建活异常、不重新进入异常处理、不让失败子调用复活。同轮尚未处理或正在处理的失败、结构故障、取消和异常处理阶段仍不能当作开放恢复点。
 
 返回关系与最终交付保存真实子 round、phase、currentInput，不能从较早 CP 或父 round 推测。固定交付视图不伪造原 execute 中间结果或未保存的后代。GenerateAnswer 的二次生成核对原拒绝码、诊断与真实失败关系，恢复不重置次数或产生第三次生成。
 
@@ -467,7 +467,7 @@ interface AppendReceipt {
 
 同一目标和内容不能代替操作身份；两次独立工作可以合理地追加相同文本。对比固定请求需要明确编码与比较规则，不能依赖不稳定序列化或仅比较长度。
 
-现有 [Transcript.appendFrom](../server/runtime/src/transcript/transcript.ts) 已有先持久提交、后更新内存和通知的顺序，但没有操作身份和原凭据查询。现有 [资源端点](../server/runtime/src/transcript/resource.ts) 从当前长度计算追加索引；复用操作时必须返回原凭据定位，不能再使用当前长度。
+现有 Transcript.appendFrom（历史路径：`../server/runtime/src/transcript/transcript.ts`） 已有先持久提交、后更新内存和通知的顺序，但没有操作身份和原凭据查询。现有 资源端点（历史路径：`../server/runtime/src/transcript/resource.ts`） 从当前长度计算追加索引；复用操作时必须返回原凭据定位，不能再使用当前长度。
 
 ### 8.2 实体提交与父 CP 是两个提交
 

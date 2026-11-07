@@ -45,7 +45,7 @@ Runtime 根入口仍重导相同的 Scene、Group、Node 和作者契约。之�
 
 ## 单子委托与输入转换
 
-`new Scene(child)` 明确指定一个 Group/Node，自动登记该原对象并配置普通 `children.invoke(child, work.input)`。Scene 的 I/O 从子结构推导，成功保留原结果引用；后续 add 只登记成员，不改变委托目标。它不会根据成员数量猜执行顺序，也不继承子层 deps、Delta 或 checkpoint。需要编排时可在 build 前配置同签名 run，流式转发和恢复点仍由作者明确声明。
+`new Scene(child)` 明确指定一个 Group/Node，自动登记该原对象并配置普通 `children.invoke(child, work.input)`。Scene 的 I/O 从子结构推导，交付孩子的稳定结果，不承诺作者原对象身份；后续 add 只登记成员，不改变委托目标。它不会根据成员数量猜执行顺序，也不继承子层 deps、Delta 或 checkpoint。需要编排时可在 build 前配置同签名 run，流式转发和恢复点仍由作者明确声明。
 
 ```ts
 const processing = new Sequence([read, translate, save]);
@@ -162,7 +162,7 @@ const processing = new Sequence([readStep, translate, saveStep]);
 
 数组中的跨步回调存在推导依赖，当前不承诺任意内联回调都能免标注推导。实现先取得准确元组，再检查整条链；复杂步骤使用上述标注或已类型化函数，避免以 any 隐藏关联。宽数组丢失位置，构造时拒绝；从变量传入时使用保留元组的声明（如 `as const`）。该声明只保留静态顺序，真正的运行配置快照由构造器建立。
 
-`input` 总是本次 Sequence 的原始输入；`previous` 是前一步接收后的值，第一步则是原始输入。未写适配器时直接使用 previous；即使包装成 `{node}` 也必须满足相邻输入。`result.succeeded/failed` 的实际异步返回类型参与后续检查，可选接收必须保留未处理时的默认成功值。整体返回最后的接收结果。`new Sequence([])` 运行时保留输入原引用，静态 I/O 为 unknown；需要明确的恒等签名时配置一个有类型的恒等节点。
+`input` 总是本次 Sequence 的固定输入；`previous` 是前一步接收后的稳定值，第一步则是本次输入。未写适配器时直接使用 previous；即使包装成 `{node}` 也必须满足相邻输入。`result.succeeded/failed` 的实际异步返回类型参与后续检查，可选接收必须保留未处理时的默认成功值。整体返回最后的接收结果。`new Sequence([])` 交付本次已固定输入，静态 I/O 为 unknown；不承诺作者原对象身份，需要明确的恒等签名时配置一个有类型的恒等节点。
 
 完整数组在构造时复制并固定步骤顺序、成员和回调入口；后续改原数组、替换 input/result/delta 函数不会改变管道。保留回调 receiver 与闭包，不深度冻结业务数据。构造先核验全部配置，再一次登记成员；失败不留下前半批成员归属。重复成员只注册一次，每次执行仍创建新的调用。所有变量引用同一条固定管道，删除了可变 `.step()` 所造成的旧输出类型失效问题。
 

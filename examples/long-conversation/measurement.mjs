@@ -43,7 +43,7 @@ export function measureFiles(path) {
 }
 
 /**
- * Measure a closed conversation v2/v3/v4/v5/v6/v7 database. The caller must stop the host and keep it closed.
+ * Measure a closed conversation v2/v3/v4/v5/v6/v7/v8 database. The caller must stop the host and keep it closed.
  * Ordinary SQLite read-only connections can create WAL/SHM files; immutable mode avoids that,
  * but ignores WAL, so reject any nonempty WAL instead of reporting incomplete SQL contents.
  * CP `bytes`/`maxBytes` retain the original JSON size; v3 obtains it from validated storage
@@ -61,7 +61,7 @@ export function measureDatabase(path) {
   try {
     const applicationId = database.prepare('PRAGMA application_id').get().application_id;
     const schemaVersion = database.prepare('PRAGMA user_version').get().user_version;
-    if (applicationId !== 0x43415043 || ![2, 3, 4, 5, 6, 7].includes(schemaVersion)) throw new Error('Measurement requires a conversation schema v2/v3/v4/v5/v6/v7 database');
+    if (applicationId !== 0x43415043 || ![2, 3, 4, 5, 6, 7, 8].includes(schemaVersion)) throw new Error('Measurement requires a conversation schema v2/v3/v4/v5/v6/v7/v8 database');
     if (schemaVersion >= 6 && database.prepare('SELECT 1 FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id = h.image_id WHERE i.id IS NULL OR i.body IS NULL LIMIT 1').get()) throw new Error('Current checkpoint head body is missing');
     const images = measureCheckpoints(database, schemaVersion, 'checkpoint_images', 'body');
     const deliveries = measureCheckpoints(database, schemaVersion, 'checkpoint_heads', 'delivery');
@@ -72,13 +72,14 @@ export function measureDatabase(path) {
             values: measureCheckpoints(database, schemaVersion, 'checkpoint_values', 'body'),
             metadataBytes: database.prepare('SELECT coalesce(sum(length(CAST(metadata AS BLOB))),0) AS bytes FROM checkpoint_values').get().bytes,
             relations: measureBodies(database, 'checkpoint_relations'),
+            ...(schemaVersion >= 8 ? { selections: measureBodies(database, 'checkpoint_selections'), occurrences: measureBodies(database, 'checkpoint_occurrences') } : {}),
           }
         : undefined;
     const completionInteractions = measureBodies(database, 'completion_interactions');
     const modelExchanges = schemaVersion >= 4 ? { collections: database.prepare('SELECT COUNT(*) AS count FROM model_exchanges').get().count, entries: measureBodies(database, 'model_exchange_entries'), metadataBytes: schemaVersion >= 5 ? database.prepare('SELECT COALESCE(SUM(length(CAST(metadata AS BLOB))), 0) AS bytes FROM model_exchanges').get().bytes : 0 } : undefined;
     // Recompute the host's retained JSON categories; do not trust its accounting
     // table as independent experimental evidence or confuse this with file size.
-    const archiveJsonBytes = (facts ? facts.values.bytes + facts.metadataBytes + facts.relations.bytes : 0) + images.bytes + heads.deliveryBytes + completionInteractions.bytes + (modelExchanges?.entries.bytes ?? 0) + (modelExchanges?.metadataBytes ?? 0);
+    const archiveJsonBytes = (facts ? facts.values.bytes + facts.metadataBytes + facts.relations.bytes + (facts.selections?.bytes ?? 0) + (facts.occurrences?.bytes ?? 0) : 0) + images.bytes + heads.deliveryBytes + completionInteractions.bytes + (modelExchanges?.entries.bytes ?? 0) + (modelExchanges?.metadataBytes ?? 0);
     const messages = measureBodies(database, 'messages');
     const memories = measureBodies(database, 'memories');
     const appendReceipts = measureBodies(database, 'append_receipts');

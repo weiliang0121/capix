@@ -152,7 +152,7 @@ node examples/checkpoint-computation/summarize.mjs .capix/cp-computation-first-t
 
 ## 稳定事实迁移复验
 
-`--suite migration` 保留原工作量：N=128/512/2048 × current/all × Memory/SQLite；另含 H=500 KiB/2 MiB、V=16 KiB 对照。all 仍每次完整提交 refs，并通过 `facts.references.children.at(-1)` 取得最后项：这会显式消费完整选择，不能用它声称作者成本已经有界。
+`--suite migration` 保留原工作量：N=128/512/2048 × current/all × Memory/SQLite；另含 H=500 KiB/2 MiB、V=16 KiB 对照。all 仍每次完整提交 refs，并通过 `facts.references.children.at(-1)` 取得最后项。早期实现会在查询时构造完整事实数组；当前查询已改为惰性映射，但 all 的完整提交仍付全量成本。比较旧报告时以各自 manifest 的代码版本为准。
 
 ```sh
 node examples/checkpoint-computation/run.mjs --suite migration --mode timing --repeat 1 --out NEW_DIRECTORY
@@ -177,4 +177,15 @@ node examples/checkpoint-computation/relation-query.mjs NEW_DB NEW_JSON 128 all
 node --test test/checkpoint-relation-query-benchmark.test.mjs
 ```
 
-模式支持 `current|all`。SQL返回字节不是物理磁盘I/O；解析复用不意味着减少SQL读取或refs认证。计时继续使用上面的 `--suite migration --case ... --mode timing`。本轮构建摘要、直接基线与扩展结果见[关系查询验证](../../docs/checkpoint-relation-query-validation.md)。
+模式支持 `current|all|incremental`。SQL返回字节不是物理磁盘I/O；解析复用不意味着减少SQL读取或refs认证。增量模式另观察选择头和新增/删除出现项的点查次数。计时继续使用上面的 `--suite migration --case ... --mode timing`。之前的构建摘要、直接基线与扩展结果见[关系查询验证](../../docs/checkpoint-relation-query-validation.md)。
+
+## 增量选择对照
+
+`--suite selection` 在相同版本中对比 all 完整数组与 incremental 有序选择。每个孩子仍保存派发前、接纳后两个点，最后再保存 completed，父层次数为 `2N+1`。两个模式读取同样的最后一项，不合并保存点，也不省略事实；另设 full-check 负对照，明确作者全量遍历仍付费。
+
+```sh
+node examples/checkpoint-computation/run.mjs --suite selection --mode timing --repeat 2 --out NEW_DIRECTORY
+node examples/checkpoint-computation/summarize.mjs NEW_DIRECTORY
+```
+
+计时包含完整 `work.checkpoint`；同时报告整次 run，以包括保存外的 `select/add` 与数组构造成本。diagnostic 模式报告提交字节、新增/删除出现项、关系变更数和全量 check 访问数；不以诊断进程耗时作性能结论。每个样本使用新进程和新库，运行顺序在第二轮反转。结果见[增量引用选择](../../docs/checkpoint-selection.md)。

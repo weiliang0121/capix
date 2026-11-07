@@ -94,7 +94,7 @@ HTTP → ObserverBinding.converse/submit
 
 ### 1. R 的创建仍暗含内容实体创建
 
-[runtime/create.ts](../server/runtime/src/structure/create.ts) 创建 Transcript、Memories 和 SelectionUsage，再将三者放入 [RuntimeContext](../server/runtime/src/context/runtime.ts)。[Observer 环境](../services/observer/src/assembly/environment.ts) 反过来从 `runtime.context` 取回消息集合。
+runtime/create.ts（历史路径：`../server/runtime/src/structure/create.ts`） 创建 Transcript、Memories 和 SelectionUsage，再将三者放入 RuntimeContext（历史路径：`../server/runtime/src/context/runtime.ts`）。[Observer 环境](../services/observer/src/assembly/environment.ts) 反过来从 `runtime.context` 取回消息集合。
 
 ```ts
 // 当前关系的摘要，省略记录和变化接线。
@@ -110,7 +110,7 @@ return new Runtime(context, options);
 
 ### 2. 声明、绑定和运行结构尚未对齐
 
-[Runtime.run](../server/runtime/src/structure/runtime.ts) 当前只接受回调并取得占用；[BoundRuntimeBinding.execution](../server/runtime/src/binding/runtime.ts) 实际完成查声明、检查资源与子图、创建 E 结构和绑定。
+Runtime.run（历史路径：`../server/runtime/src/structure/runtime.ts`） 当前只接受回调并取得占用；BoundRuntimeBinding.execution（历史路径：`../server/runtime/src/binding/runtime.ts`） 实际完成查声明、检查资源与子图、创建 E 结构和绑定。
 
 ```ts
 // 当前 API 的职责摘要。
@@ -121,7 +121,7 @@ executionBinding.submit(accept, options); // 真正使用声明和绑定发起�
 
 `execution(key)` 看似获取节点，实际重新建立节点；`Runtime.run` 看似执行业务结构，实际只负责排他。这是命名和对象持有关系一起错位。
 
-[Execution](../server/runtime/src/structure/execution.ts)、[Operation](../server/runtime/src/structure/operation.ts)、[Attempt](../server/runtime/src/structure/attempt.ts) 主要转发给 Builder；定义、资源和子项主要放在对应 Binding。O 另有被观测使用的稳定实例 ID。
+Execution（历史路径：`../server/runtime/src/structure/execution.ts`）、Operation（历史路径：`../server/runtime/src/structure/operation.ts`）、Attempt（历史路径：`../server/runtime/src/structure/attempt.ts`） 主要转发给 Builder；定义、资源和子项主要放在对应 Binding。O 另有被观测使用的稳定实例 ID。
 
 建议让运行实例成为明确的节点：持有落实后的绑定、直接子节点及自身构造器。绑定负责产生这个节点需要的装配结果，不再与 Structure 并列暴露两套可运行入口。应重分现有对象职责，而不是额外增加 Runner 或另一套节点包装。
 
@@ -139,12 +139,12 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
 
 已有效收敛的部分：
 
-- [历史范围资源](../server/runtime/src/transcript/resource.ts) 不返回 Transcript 或 MessageRef，slice 只能收窄；追加端点只返回普通消息及索引。
-- [记忆资源](../server/runtime/src/memory/resource.ts) 返回快照，apply 不返回 Memory 实例。
+- 历史范围资源（历史路径：`../server/runtime/src/transcript/resource.ts`） 不返回 Transcript 或 MessageRef，slice 只能收窄；追加端点只返回普通消息及索引。
+- 记忆资源（历史路径：`../server/runtime/src/memory/resource.ts`） 返回快照，apply 不返回 Memory 实例。
 - [模型资源](../services/observer/src/conversation/model/resources.ts) 通过包装对象提供 invoke，保留供应者方法的接收对象；没有把 Provider 原实例直接交给 A。
 - [ResourceBinding / ResourceAccess](../server/resources/src/binding.ts) 按资源公开项目身份匹配，子层只能选择父层已提供的项目；配置、范围和记忆快照固定时机，模型及部分访问对象按需兑现。
 
-不过 [InvocationDefinition](../server/runtime/src/definition/invocation.ts) 的 execute/receive 仍接收完整的 Context 与 Invocation。当前业务实际只需要其中一部分：
+不过 InvocationDefinition（历史路径：`../server/runtime/src/definition/invocation.ts`） 的 execute/receive 仍接收完整的 Context 与 Invocation。当前业务实际只需要其中一部分：
 
 | 业务实际需要                                               | 当前额外可达                                                           | 建议边界                 |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------ |
@@ -161,7 +161,7 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
   → 原 Transcript
 ```
 
-[记录复制](../server/runtime/src/records/value/copy.ts) 有意保留内部 Ref，[TranscriptRangeRef](../server/runtime/src/transcript/ref.ts) 也公开其来源。内部记录这样保存有用途；问题是原 Record 通过业务端点流出。**目前没有发现实际业务沿这条路径绕过资源，不能把接口缺口报告成已发生的数据破坏。**
+记录复制（历史路径：`../server/runtime/src/records/value/copy.ts`） 有意保留内部 Ref，TranscriptRangeRef（历史路径：`../server/runtime/src/transcript/ref.ts`） 也公开其来源。内部记录这样保存有用途；问题是原 Record 通过业务端点流出。**目前没有发现实际业务沿这条路径绕过资源，不能把接口缺口报告成已发生的数据破坏。**
 
 `ChildBindings = Pick<BoundChildren, ...>` 只收窄 TypeScript 类型，实际仍返回完整 BoundChildren；`create` 又返回原 Invocation。需要构造实际窄对象，不能只增加几个类型别名。此改造是正式接口约束，不承诺隔离任意不可信 JavaScript，也不引入权限系统。
 
@@ -169,7 +169,7 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
 
 通用 Context 保存输入、进度、结果，没有分析消息或模型的业务逻辑；这一点应保留。业务输入构造、输出契约及再次生成决策继续在具体声明中。
 
-尚有明确的记录特化：[ExecutionRecordMetadata](../server/runtime/src/records/execution/helper.ts) 和 [ExecutionValue](../protocol/src/recording/types.ts) 固定包含 `settings`、`transcriptRange`。service 已掌握何时捕获它们，但核心记录格式仍认识 Observer 信息。
+尚有明确的记录特化：ExecutionRecordMetadata（历史路径：`../server/runtime/src/records/execution/helper.ts`） 和 [ExecutionValue](../protocol/src/recording/types.ts) 固定包含 `settings`、`transcriptRange`。service 已掌握何时捕获它们，但核心记录格式仍认识 Observer 信息。
 
 建议本轮先隔离原 Record，保留现有观测字段。后续单独收敛 Observer 观测描述的归属；不能改成 `unknown` 或任意 `metadata` 字典就宣称已解耦。若迁移这些字段，需要同步 service 的 overview/selection/inspect 与 app 的详情和快照投影。
 
@@ -177,7 +177,7 @@ RuntimeContext 的初步改造已确认：内容实体引用迁出后，仅接�
 
 ### 6. 来源与子关系需要保留准确语义
 
-`Invocation.source` 是纯 ID 的 [ChangeSource](../server/runtime/src/records/source.ts)，不是原实体。业务目前两处使用：E [追加回答](../services/observer/src/conversation/task.ts)，A [落实记忆](../services/observer/src/conversation/node/memory/apply.ts)。其中 callId/executionId/operationId 是记录身份；无 Recorder 时整个 source 为 undefined。现有内容变化事件也不带调用来源，因此无记录时虽然仍有调用进度与内容变化，却不能可靠关联“哪个调用产生了这次变化”。
+`Invocation.source` 是纯 ID 的 ChangeSource（历史路径：`../server/runtime/src/records/source.ts`），不是原实体。业务目前两处使用：E 追加回答（历史路径：`../services/observer/src/conversation/task.ts`），A [落实记忆](../services/observer/src/conversation/node/memory/apply.ts)。其中 callId/executionId/operationId 是记录身份；无 Recorder 时整个 source 为 undefined。现有内容变化事件也不带调用来源，因此无记录时虽然仍有调用进度与内容变化，却不能可靠关联“哪个调用产生了这次变化”。
 
 需要区分运行来源与记录引用：前者表达已经成立的调用关系，可以从现有 Context 身份和直接父子关系着手；后者表达启用记录后对应的 Record 关系。来源事实由运行机制确定，记录绑定负责记录映射，观测不能靠事件相邻或时间相近猜测归因。不建立新的全局身份平台。先确定最小来源契约；其后如需传入内容变化事件，应同步调整 protocol 和客户端类型，并保持缺省情况下已有行为，不能声称只是内部接线。
 

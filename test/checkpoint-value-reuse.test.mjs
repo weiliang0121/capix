@@ -9,7 +9,7 @@ function nested(value, levels) {
 }
 
 function image(children = []) {
-  return { id: 'value-reuse-image', formatVersion: 5, contract: { key: 'value-reuse', version: 1 }, point: 'saved', frame: { owner: { contextId: 'parent', kind: 'group' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: children.length, children }, state: null, references: {} };
+  return { id: 'value-reuse-image', formatVersion: 6, contract: { key: 'value-reuse', version: 1 }, point: 'saved', frame: { owner: { contextId: 'parent', kind: 'group' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: children.length, children }, state: null, references: {} };
 }
 
 function child() {

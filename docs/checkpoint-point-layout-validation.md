@@ -1,5 +1,7 @@
 # 恢复点切换与选择依据：第十三轮验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07。承接[按需事实查询验证](saved-facts-view-validation.md)。仍是隔离模型、真实声明检查对照和跨进程实验；没有迁移生产 Context／Relation、Frame v5、原引用契约或恢复资格，没有提交代码。
 
 ## 1. 先纠正上轮模型的一个范围错误

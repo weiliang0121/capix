@@ -1,6 +1,6 @@
 # 包内类型、共同契约与跨端协议
 
-状态：2026-10-27。`@capix/contracts` 提供结构、调用与 Runtime 装配共同使用的端口；InvocationIdentity 由这里向 invocation 和 checkpoint 包提供同一定义。`@capix/invocation` 已独立承载单次调用，Runtime 负责连接结构与调用。调用、接纳、资源窗口和 Frame v5 的行为保持原样；Sequence / Dynamic 是普通 Group 预设。
+状态：2026-11-07。`@capix/contracts` 提供结构、调用与 Runtime 装配共同使用的端口和稳定数据契约；InvocationIdentity 由这里向 invocation 和 checkpoint 包提供同一定义。`@capix/invocation` 承载单次调用，Runtime 负责连接结构与调用；CP 使用 Frame v6 和显式增量引用选择。Sequence / Dynamic 是普通 Group 预设。
 
 ## 三种归属
 
@@ -49,6 +49,7 @@ flowchart TD
 | ------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------- |
 | `callable/`                    | kind、I/O/Delta 签名与类型见证                    | Scene/Group/Node、成员位置约束在 structure                                  |
 | `invocation.ts`                | 单次调用身份 contextId/kind/parentContextId       | 活调用在 invocation，持久 owner/子身份在 checkpoint                         |
+| `value.ts`                     | `Stable<T>`、`stableValue`、固定值域与限额        | 调用边界由 invocation 使用，持久编码和逻辑额度由 checkpoint 核验            |
 | `operation.ts`                 | Outcome、Reception、result/delta 及结果类型计算   | 资源接收在 resources，子调用关系接收在 invocation                           |
 | `children/`                    | 子调用动作、引用、交付事实及类型关联              | 成员注册在 structure，实际关系在 invocation，作者动作适配在 Runtime         |
 | `work.ts`                      | 输入、资源、signal、业务注释及可组合端口          | 结构组合 CallableWork/ResumeWork；Runtime 签发                              |
@@ -59,7 +60,7 @@ flowchart TD
 
 契约可以描述方法，它们是进程内的协作端口，不等于可序列化 DTO。协议入口不会整包重导这些方法。只有真实共享的纯值词汇（如 CallableKind、RuntimeErrorValue、InvocationFailureFact）由 protocol 显式重导其单一来源；原协议字段和接纳器不变。
 
-契约包当前的运行时出口是 `callableKinds` 和 `RuntimeError`。后者为资源、内容、变化捕获和调用提供同一诊断类身份，Runtime 只重导它；这不把异常处理、执行状态或错误传输放进契约包。`RuntimeError` 实例也不因此成为协议值。
+契约包的运行时出口包括 `callableKinds`、`RuntimeError` 与 `stableValue` / `StableValueError`。`RuntimeError` 为资源、内容、变化捕获和调用提供同一诊断类身份；这不把异常处理或执行状态放进契约包。`stableValue` 隔离并深固定普通数据，以私有证据复用已经固定的值，没有公开的任意信任注册入口；它不持有 Context 或持久化状态。`RuntimeError` 实例仍不是可交付的稳定数据或协议值。
 
 ChildReference、I/O 签名、CP point owner 等见证只有一个定义。结构和 Runtime 的便捷出口重导同一契约，避免包之间产生两个品牌。见证仅保证静态关联，运行期仍检查准确结构、父关系、注册位置和活动窗口。
 

@@ -10,13 +10,13 @@ import { CompletionInteraction } from '@capix/conversation-service';
 import { Interaction } from '@capix/interaction';
 import { ModelExchanges } from '@capix/model-exchanges';
 import { PersistenceError } from '@capix/diagnostics';
-import { restoreLegacyCheckpointTables } from './fixtures/checkpoint-storage.mjs';
+import { retainedCheckpointBytes } from './fixtures/checkpoint-accounting.mjs';
 
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
 const operation = (child = 'model') => ({ parentContextId: 'loop', childContextId: child, position: 'receive' });
 const reply = (text = '你好🙂') => ({ formatVersion: 1, id: 'reply', model: 'offline', output: [{ kind: 'text', text }], termination: { kind: 'completed', reason: 'stop' }, native: { format: 'chat-completions', version: 1 }, usage: null });
 const metadata = (content, scope = 'scope') => ({ source: { transcriptId: content.transcript.id, index: 0 }, scope, policy: { version: 'fixture-v1', catalog: 'fixed' }, limits: { entries: 128, bytes: 8 * 1024 * 1024 } });
-const image = (id = 'cp1') => ({ id, formatVersion: 5, contract: { key: 'archive-fixture', version: 1 }, point: 'waiting', frame: { owner: { contextId: 'root', kind: 'scene' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: { repeated: '材料'.repeat(1024) }, references: {} });
+const image = (id = 'cp1') => ({ id, formatVersion: 6, contract: { key: 'archive-fixture', version: 1 }, point: 'waiting', frame: { owner: { contextId: 'root', kind: 'scene' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: { repeated: '材料'.repeat(1024) }, references: {} });
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'capix-archive-'));
@@ -164,9 +164,9 @@ test('joint usage counts retained JSON, current CP bodies and late feedback; it 
   store.checkpoints.save(first, 0);
   store.checkpoints.save(next, 1);
   store.checkpoints.finish('root', 2, delivery);
-  const checkpointBytes = bytes(next) + bytes(delivery);
   const beforeFeedback = store.archiveUsage();
-  assert.equal(beforeFeedback.checkpointBytes, checkpointBytes);
+  const checkpointBytes = beforeFeedback.checkpointBytes;
+  assert.ok(checkpointBytes > 0);
   assert.equal(beforeFeedback.totalBytes, exchangeBytes + startedBytes + checkpointBytes);
   // An entry gate may now refuse another run. The original sender can still save.
   finish(reply('晚到反馈'));
@@ -178,6 +178,7 @@ test('joint usage counts retained JSON, current CP bodies and late feedback; it 
   assert.ok(finalUsage.totalBytes > beforeFeedback.totalBytes);
   assert.ok(Object.isFrozen(finalUsage));
   store.close();
+  assert.equal(files.sql(retainedCheckpointBytes), checkpointBytes);
   const reopened = files.open();
   assert.deepEqual(reopened.archiveUsage(), finalUsage);
 });
@@ -198,56 +199,6 @@ test('archive counters roll back with a failed CP commit and retain the prior us
   assert.equal(reopened.checkpoints.read('root'), undefined);
 });
 
-test('v4 collection migrates intact as unanchored read-only data beside new independently writable collections', async (t) => {
-  const files = fixture(t);
-  const initial = files.open();
-  const content = loadConversationContent(initial);
-  content.transcript.append({ role: 'user', content: 'original' });
-  initial.checkpoints.save(image(), 0);
-  const interaction = new Interaction({ messages: [{ role: 'user', content: 'original' }] }, { contract: CompletionInteraction, persistence: initial.interactions });
-  interaction.start(() => reply());
-  await interaction.settled();
-  initial.close();
-  const old = new ModelExchanges();
-  old.intake('old-scope', operation(), reply('old exchange'));
-  const state = old.snapshot();
-  const preserved = files.sql((database) => {
-    restoreLegacyCheckpointTables(database);
-    for (const row of database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) database.exec(`DROP TRIGGER ${row.name}`);
-    database.exec(`DROP TABLE archive_usage; DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges;
-      CREATE TABLE model_exchanges (singleton INTEGER PRIMARY KEY CHECK(singleton=1), id TEXT NOT NULL, sequence INTEGER NOT NULL, bytes INTEGER NOT NULL) STRICT;
-      CREATE TABLE model_exchange_entries (id TEXT PRIMARY KEY, ordinal INTEGER NOT NULL UNIQUE, revision INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
-      CREATE TABLE model_exchange_operations (operation TEXT PRIMARY KEY, exchange_id TEXT NOT NULL REFERENCES model_exchange_entries(id), call_id TEXT) STRICT;
-      PRAGMA user_version = 4;`);
-    database.prepare('INSERT INTO model_exchanges VALUES (1, ?, ?, ?)').run(state.id, state.sequence, bytes(state.entries[0]));
-    const entry = state.entries[0];
-    database.prepare('INSERT INTO model_exchange_entries VALUES (?, ?, ?, ?)').run(entry.id, entry.sequence, entry.revision, JSON.stringify(entry));
-    database.prepare('INSERT INTO model_exchange_operations VALUES (?, ?, NULL)').run(JSON.stringify([entry.operation.parentContextId, entry.operation.childContextId, entry.operation.position]), entry.id);
-    return { images: database.prepare('SELECT * FROM checkpoint_images').all(), heads: database.prepare('SELECT * FROM checkpoint_heads').all(), interactions: database.prepare('SELECT * FROM completion_interactions').all(), entries: database.prepare('SELECT * FROM model_exchange_entries').all() };
-  });
-  const migrated = files.open();
-  assert.deepEqual(migrated.exchanges.load(state.id), { state, metadata: null });
-  assert.equal(migrated.exchanges.list().items[0].metadata, null);
-  const continued = ModelExchanges.restore(state, { persistence: migrated.exchanges });
-  assert.throws(() => continued.intake('old-scope', operation('new-model'), reply('new')), PersistenceError);
-  assert.equal(continued.sequence, state.sequence);
-  migrated.assertAvailable();
-  const fresh = new ModelExchanges({ persistence: migrated.exchanges });
-  migrated.exchanges.initialize(fresh.snapshot(), metadata(content));
-  fresh.intake('scope', operation(), reply('fresh'));
-  assert.equal(migrated.exchanges.list().items.length, 2);
-  assert.ok(migrated.archiveUsage().interactionsBytes > 0);
-  assert.ok(migrated.archiveUsage().checkpointBytes > 0);
-  migrated.close();
-  files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 7);
-    assert.deepEqual(database.prepare('SELECT * FROM checkpoint_images').all(), preserved.images);
-    assert.deepEqual(database.prepare('SELECT * FROM checkpoint_heads').all(), preserved.heads);
-    assert.deepEqual(database.prepare('SELECT * FROM completion_interactions').all(), preserved.interactions);
-    assert.deepEqual(database.prepare('SELECT id, ordinal, revision, body FROM model_exchange_entries WHERE collection = ?').all(state.id), preserved.entries);
-  });
-});
-
 test('missing archive accounting cannot silently reopen with stale usage', (t) => {
   const files = fixture(t);
   const initial = files.open();
@@ -259,30 +210,20 @@ test('missing archive accounting cannot silently reopen with stale usage', (t) =
   assert.deepEqual(readFileSync(files.path), before);
 });
 
-test('failure while installing v5 accounting rolls the collection migration back completely', (t) => {
-  const files = fixture(t);
-  const initial = files.open();
-  loadConversationContent(initial);
-  initial.close();
-  files.sql((database) => {
-    restoreLegacyCheckpointTables(database);
-    for (const row of database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) database.exec(`DROP TRIGGER ${row.name}`);
-    database.exec(`DROP TABLE archive_usage; DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges;
-      CREATE TABLE model_exchanges (singleton INTEGER PRIMARY KEY CHECK(singleton=1), id TEXT NOT NULL, sequence INTEGER NOT NULL, bytes INTEGER NOT NULL) STRICT;
-      CREATE TABLE model_exchange_entries (id TEXT PRIMARY KEY, ordinal INTEGER NOT NULL UNIQUE, revision INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
-      CREATE TABLE model_exchange_operations (operation TEXT PRIMARY KEY, exchange_id TEXT NOT NULL REFERENCES model_exchange_entries(id), call_id TEXT) STRICT;
-      INSERT INTO model_exchanges VALUES (1, 'retained-v4-id', 0, 0);
-      CREATE TRIGGER archive_completion_interactions_insert AFTER INSERT ON completion_interactions BEGIN SELECT 1; END;
-      PRAGMA user_version = 4;`);
+for (const operation of ['load', 'list']) {
+  test(`exchange ${operation} rejects absent fixed metadata instead of accepting a legacy read-only collection`, (t) => {
+    const files = fixture(t);
+    const initial = files.open();
+    const content = loadConversationContent(initial);
+    const entity = new ModelExchanges({ persistence: initial.exchanges });
+    initial.exchanges.initialize(entity.snapshot(), metadata(content));
+    initial.close();
+    files.sql((database) => database.prepare('UPDATE model_exchanges SET metadata = NULL WHERE id = ?').run(entity.id));
+    const reopened = files.open();
+    assert.throws(() => (operation === 'load' ? reopened.exchanges.load(entity.id) : reopened.exchanges.list()), PersistenceError);
+    assert.throws(() => reopened.assertAvailable(), PersistenceError);
   });
-  assert.throws(() => ConversationStore.open(files.path), PersistenceError);
-  files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 4);
-    assert.deepEqual(database.prepare('SELECT * FROM model_exchanges').get(), { __proto__: null, singleton: 1, id: 'retained-v4-id', sequence: 0, bytes: 0 });
-    assert.equal(database.prepare("SELECT 1 FROM sqlite_master WHERE name = 'archive_usage'").get(), undefined);
-    assert.equal(database.prepare("SELECT 1 FROM sqlite_master WHERE name = 'old_model_exchanges'").get(), undefined);
-  });
-});
+}
 
 test('a missing collection with orphaned entry rows is not initialized as a new empty collection', (t) => {
   const files = fixture(t);

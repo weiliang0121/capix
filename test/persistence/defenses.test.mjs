@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, chmodSync, existsSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, chmodSync, existsSync, statSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,7 +75,7 @@ test('new database and SQLite sidecars stay private inside a previously public d
   }
 });
 
-test('opening existing storage narrows legacy database and sidecar modes before use', { skip: process.platform === 'win32' }, (t) => {
+test('opening existing storage narrows current database and sidecar modes before use', { skip: process.platform === 'win32' }, (t) => {
   const disk = fixture(t);
   chmodSync(disk.directory, 0o755);
   const first = disk.open();
@@ -110,4 +110,51 @@ test('service startup rejects a ..name data directory inside its model workspace
   assert.match(result.stderr, /内容数据库必须位于模型文件工作区之外/);
   assert.equal(existsSync(join(dataDirectory, 'observer.sqlite')), false);
   assert.equal(existsSync(join(dataDirectory, 'observer.sqlite-wal')), false);
+});
+
+for (const version of [1, 2, 3, 4, 5, 99]) {
+  test(`opening unsupported Observer v${version} leaves bytes, permissions and journal mode unchanged`, (t) => {
+    const disk = fixture(t);
+    const database = new DatabaseSync(disk.path);
+    database.exec(`CREATE TABLE retained(value TEXT); INSERT INTO retained VALUES ('kept'); PRAGMA user_version = ${version}; PRAGMA journal_mode = DELETE;`);
+    database.close();
+    chmodSync(disk.path, 0o644);
+    const before = readFileSync(disk.path);
+    const mode = statSync(disk.path).mode;
+    assert.throws(() => disk.open(), /Unsupported Observer persistence schema/);
+    assert.deepEqual(readFileSync(disk.path), before);
+    assert.equal(statSync(disk.path).mode, mode);
+    for (const suffix of ['-wal', '-shm', '-journal']) assert.equal(existsSync(disk.path + suffix), false);
+    const verify = new DatabaseSync(disk.path, { readOnly: true });
+    try {
+      assert.equal(verify.prepare('PRAGMA journal_mode').get().journal_mode, 'delete');
+      assert.equal(verify.prepare('SELECT value FROM retained').get().value, 'kept');
+    } finally {
+      verify.close();
+    }
+  });
+}
+
+test('opening current Observer version with retired checkpoint tables refuses before file changes', (t) => {
+  const disk = fixture(t);
+  const database = new DatabaseSync(disk.path);
+  database.exec(`CREATE TABLE checkpoint_images (id TEXT PRIMARY KEY, context_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0), body TEXT NOT NULL, UNIQUE(context_id, revision));
+    CREATE TABLE checkpoint_heads (context_id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK(revision > 0), image_id TEXT NOT NULL REFERENCES checkpoint_images(id), delivery TEXT);
+    INSERT INTO checkpoint_images VALUES ('saved', 'owner', 1, '{"formatVersion":5}');
+    INSERT INTO checkpoint_heads VALUES ('owner', 1, 'saved', NULL);
+    PRAGMA user_version = 6; PRAGMA journal_mode = DELETE;`);
+  database.close();
+  chmodSync(disk.path, 0o644);
+  const before = readFileSync(disk.path);
+  const mode = statSync(disk.path).mode;
+  assert.throws(() => disk.open(), /Unknown checkpoint storage columns/);
+  assert.deepEqual(readFileSync(disk.path), before);
+  assert.equal(statSync(disk.path).mode, mode);
+  for (const suffix of ['-wal', '-shm', '-journal']) assert.equal(existsSync(disk.path + suffix), false);
+  const verify = new DatabaseSync(disk.path, { readOnly: true });
+  try {
+    assert.equal(verify.prepare('PRAGMA journal_mode').get().journal_mode, 'delete');
+  } finally {
+    verify.close();
+  }
 });

@@ -249,7 +249,7 @@ test('default inclusion is part of the same transaction as a memory batch', (t) 
   assert.equal(store.loadContent().memories.items.length, 0);
 });
 
-test('v5 migration derives only initial membership from the old active segment and current memories', (t) => {
+test('retired v5 content is refused without deriving or installing new active membership', (t) => {
   const disk = diskFixture(t);
   const store = disk.open();
   const transcript = new Transcript([message('old'), message('current')]);
@@ -260,12 +260,25 @@ test('v5 migration derives only initial membership from the old active segment a
   content.close();
   store.close();
   disk.edit('DROP TABLE active_content; PRAGMA user_version = 5;');
-  const reopened = disk.open();
-  const restored = disk.content(reopened);
-  assert.deepEqual(indexes(restored.active.capture()), [1]);
-  assert.deepEqual(
-    restored.active.capture().memories.map((item) => item.id),
-    [memory.id],
-  );
-  assert.equal(restored.active.capture().basis.indexRevision, 0);
+  const inspect = new DatabaseSync(disk.path, { readOnly: true });
+  const before = {
+    messages: inspect.prepare('SELECT * FROM messages ORDER BY position').all(),
+    memories: inspect.prepare('SELECT * FROM memories ORDER BY ordinal').all(),
+    transcript: inspect.prepare('SELECT * FROM transcripts').all(),
+    schema: inspect.prepare('SELECT * FROM sqlite_master ORDER BY name').all(),
+  };
+  inspect.close();
+  assert.equal(before.memories[0].id, memory.id);
+  assert.throws(() => disk.open(), /Unsupported Observer persistence schema/);
+  const verify = new DatabaseSync(disk.path, { readOnly: true });
+  try {
+    assert.equal(verify.prepare('PRAGMA user_version').get().user_version, 5);
+    assert.equal(verify.prepare("SELECT name FROM sqlite_master WHERE name = 'active_content'").get(), undefined);
+    assert.deepEqual(verify.prepare('SELECT * FROM messages ORDER BY position').all(), before.messages);
+    assert.deepEqual(verify.prepare('SELECT * FROM memories ORDER BY ordinal').all(), before.memories);
+    assert.deepEqual(verify.prepare('SELECT * FROM transcripts').all(), before.transcript);
+    assert.deepEqual(verify.prepare('SELECT * FROM sqlite_master ORDER BY name').all(), before.schema);
+  } finally {
+    verify.close();
+  }
 });

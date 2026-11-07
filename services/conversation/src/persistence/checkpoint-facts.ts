@@ -1,7 +1,7 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { CheckpointCommit, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from '@capix/checkpoint';
 import { cloneCheckpointDelivery, checkpointFinishReceipt } from '@capix/checkpoint';
-import { prepareCheckpointCommit, materializeCheckpointHead, encodeCheckpointRecord, decodeCheckpointRecord, isCheckpointRecord, encodeCheckpointData, type CheckpointStoredHead, type CheckpointStoredChild, type CheckpointStoredValue, type CheckpointRelationCache, type CheckpointRelationRow } from '@capix/checkpoint/storage';
+import { prepareCheckpointCommit, materializeCheckpointHead, encodeCheckpointRecord, decodeCheckpointRecord, isCheckpointRecord, encodeCheckpointData, type CheckpointStoredHead, type CheckpointStoredChild, type CheckpointStoredValue, type CheckpointRelationCache, type CheckpointRelationRow, type CheckpointStoredSelection, type CheckpointStoredOccurrence, isCheckpointSelectionSlots, checkpointSelectionReferences } from '@capix/checkpoint/storage';
 import { RecoveryConflict } from './recovery.js';
 import { RuntimeError } from '@capix/contracts';
 import { encodeCheckpointStorage, decodeCheckpointStorage, decodeCheckpointDelivery } from './checkpoint-storage.js';
@@ -15,7 +15,7 @@ export function saveCheckpointFacts(database: DatabaseSync, request: CheckpointC
   const row = database.prepare(`${select} WHERE h.context_id = ?`).get(contextId);
   if (row && (typeof row.body !== 'string' || !isCheckpointRecord(row.body))) throw conflict('Legacy checkpoint scope cannot advance under stable facts');
   const current = row ? storedHead(row) : undefined;
-  if (!row && database.prepare('SELECT 1 FROM checkpoint_images WHERE context_id = ? UNION ALL SELECT 1 FROM checkpoint_values WHERE context_id=? UNION ALL SELECT 1 FROM checkpoint_relations WHERE context_id=? LIMIT 1').get(contextId, contextId, contextId)) throw new Error('Checkpoint facts have no owning head');
+  if (!row && database.prepare('SELECT 1 FROM checkpoint_images WHERE context_id = ? UNION ALL SELECT 1 FROM checkpoint_values WHERE context_id=? UNION ALL SELECT 1 FROM checkpoint_relations WHERE context_id=? UNION ALL SELECT 1 FROM checkpoint_selections WHERE context_id=? UNION ALL SELECT 1 FROM checkpoint_occurrences WHERE context_id=? LIMIT 1').get(contextId, contextId, contextId, contextId, contextId)) throw new Error('Checkpoint facts have no owning head');
   // These readers live only through this preparation, before any writes below.
   // Every reference is still checked; repeated IDs reuse the same transaction row.
   const valueStatement = database.prepare('SELECT metadata,body IS NOT NULL AS material FROM checkpoint_values WHERE context_id=? AND id=?');
@@ -26,6 +26,16 @@ export function saveCheckpointFacts(database: DatabaseSync, request: CheckpointC
   const readValue = readOnce((id) => valueInfo(valueStatement, contextId, id));
   const readChild = readOnce((id) => relations.decode(contextId, id, childStatement.get(contextId, id) as CheckpointRelationRow | undefined));
   const readBody = readOnce((id) => valueBody((bodyStatement ??= database.prepare('SELECT body FROM checkpoint_values WHERE context_id=? AND id=?')), contextId, id));
+  let selectionStatement: StatementSync | undefined;
+  let occurrenceStatement: StatementSync | undefined;
+  const readSelection = readOnce((id) => selectionInfo((selectionStatement ??= database.prepare('SELECT body FROM checkpoint_selections WHERE context_id=? AND id=?')), contextId, id));
+  const occurrences = new Map<string, Map<string, CheckpointStoredOccurrence | undefined>>();
+  const readOccurrence = (selection: string, id: string) => {
+    let entries = occurrences.get(selection);
+    if (!entries) occurrences.set(selection, (entries = new Map()));
+    if (!entries.has(id)) entries.set(id, occurrenceInfo((occurrenceStatement ??= database.prepare('SELECT occurrence_id,ordinal,body FROM checkpoint_occurrences WHERE context_id=? AND selection_id=? AND occurrence_id=?')).get(contextId, selection, id)));
+    return entries.get(id);
+  };
   const plan = prepare(() =>
     prepareCheckpointCommit(request, expectedRevision, {
       head: current,
@@ -34,6 +44,8 @@ export function saveCheckpointFacts(database: DatabaseSync, request: CheckpointC
       child: readChild,
       order: (order) => orderStatement.get(contextId, order)?.child_id as string | undefined,
       imageUsed: (id) => !!imageStatement.get(id),
+      selection: readSelection,
+      occurrence: readOccurrence,
     }),
   );
   for (const value of plan.values) {
@@ -43,6 +55,12 @@ export function saveCheckpointFacts(database: DatabaseSync, request: CheckpointC
     else write(database.prepare('INSERT INTO checkpoint_values(context_id,id,metadata,body) VALUES (?,?,?,?) ON CONFLICT(context_id,id) DO UPDATE SET metadata=excluded.metadata,body=excluded.body').run(contextId, value.stored.id, metadata, body).changes);
   }
   for (const value of plan.children) write(database.prepare('INSERT INTO checkpoint_relations(context_id,child_id,ordinal,body) VALUES (?,?,?,?) ON CONFLICT(context_id,child_id) DO UPDATE SET ordinal=excluded.ordinal,body=excluded.body').run(contextId, value.child.identity.contextId, value.child.order, encodeCheckpointRecord('child', value)).changes);
+  for (const selection of plan.selections) {
+    if (selection.reset) database.prepare('UPDATE checkpoint_occurrences SET body=NULL WHERE context_id=? AND selection_id=? AND body IS NOT NULL').run(contextId, selection.head.id);
+    for (const id of selection.remove) write(database.prepare('UPDATE checkpoint_occurrences SET body=NULL WHERE context_id=? AND selection_id=? AND occurrence_id=? AND body IS NOT NULL').run(contextId, selection.head.id, id).changes);
+    for (const occurrence of selection.append) write(database.prepare('INSERT INTO checkpoint_occurrences(context_id,selection_id,occurrence_id,ordinal,body) VALUES (?,?,?,?,?)').run(contextId, selection.head.id, occurrence.id, occurrence.order, encodeCheckpointRecord('occurrence', occurrence)).changes);
+    write(database.prepare('INSERT INTO checkpoint_selections(context_id,id,body) VALUES (?,?,?) ON CONFLICT(context_id,id) DO UPDATE SET body=excluded.body').run(contextId, selection.head.id, encodeCheckpointRecord('selection', selection.head)).changes);
+  }
   write(database.prepare('INSERT INTO checkpoint_images(id,context_id,revision,body) VALUES (?,?,?,?)').run(request.id, contextId, plan.head.revision, encodeCheckpointRecord('head', plan.head)).changes);
   if (current) {
     write(database.prepare('UPDATE checkpoint_heads SET revision=?,image_id=? WHERE context_id=? AND revision=? AND delivery IS NULL').run(plan.head.revision, request.id, contextId, expectedRevision).changes);
@@ -64,7 +82,18 @@ export function readCheckpointFacts(database: DatabaseSync, row: Row): Checkpoin
       if (stored.id !== value.id) throw new Error('Checkpoint value row identity differs');
       return { stored, body: JSON.stringify(decodeCheckpointStorage(value.body)) };
     });
-  return materializeCheckpointHead(head, children, values);
+  const selections = isCheckpointSelectionSlots(head.commit.references)
+    ? checkpointSelectionReferences(head.commit.references).map(({ id }) => {
+        const selection = selectionInfo(database.prepare('SELECT body FROM checkpoint_selections WHERE context_id=? AND id=?'), contextId, id);
+        if (!selection) throw new Error('Missing checkpoint selection');
+        const occurrences = database
+          .prepare('SELECT occurrence_id,ordinal,body FROM checkpoint_occurrences WHERE context_id=? AND selection_id=? ORDER BY ordinal')
+          .all(contextId, id)
+          .map((row) => occurrenceInfo(row)!);
+        return { head: selection, occurrences };
+      })
+    : [];
+  return materializeCheckpointHead(head, children, values, selections);
 }
 
 export function finishCheckpointFacts(database: DatabaseSync, row: Row, expectedRevision: number, delivery: CheckpointDelivery): CheckpointFinishReceipt {
@@ -97,6 +126,24 @@ function valueBody(statement: StatementSync, contextId: string, id: string): str
   if (body === null || body === undefined) return undefined;
   if (typeof body !== 'string') throw new Error('Invalid checkpoint value body');
   return JSON.stringify(decodeCheckpointStorage(body));
+}
+
+function selectionInfo(statement: StatementSync, owner: string, id: string): CheckpointStoredSelection | undefined {
+  const row = statement.get(owner, id);
+  if (!row) return undefined;
+  if (typeof row.body !== 'string') throw new Error('Invalid checkpoint selection row');
+  const value = decodeCheckpointRecord<CheckpointStoredSelection>('selection', row.body);
+  if (value.owner !== owner || value.id !== id) throw new Error('Checkpoint selection row identity differs');
+  return value;
+}
+function occurrenceInfo(row: Row | undefined): CheckpointStoredOccurrence | undefined {
+  if (!row) return undefined;
+  if (typeof row.occurrence_id !== 'string' || typeof row.ordinal !== 'number' || !Number.isSafeInteger(row.ordinal) || row.ordinal < 0) throw new Error('Invalid checkpoint occurrence row');
+  if (row.body === null) return { id: row.occurrence_id, order: row.ordinal };
+  if (typeof row.body !== 'string') throw new Error('Invalid checkpoint occurrence body');
+  const value = decodeCheckpointRecord<CheckpointStoredOccurrence>('occurrence', row.body);
+  if (value.id !== row.occurrence_id || value.order !== row.ordinal || !value.reference) throw new Error('Checkpoint occurrence row identity differs');
+  return value;
 }
 
 function readOnce<Value>(read: (id: string) => Value): (id: string) => Value {

@@ -1,5 +1,7 @@
 # CP 作者契约：真实 ToolLoop 策略的对照验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07，第七轮隔离实验。承接[作者契约验证](checkpoint-author-contract-validation.md)。本轮新增实验代码和报告，未修改生产 Invocation、Frame v5、ModelExchanges、ToolLoop 或数据库格式；没有提交代码、调用真实模型或重启服务。
 
 ## 1. 交叉分析后的判断

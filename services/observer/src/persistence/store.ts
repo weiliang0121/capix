@@ -12,7 +12,8 @@ import type { FileCreationPersistence, FileCreationState } from '../files/creati
 import type { ConversationDescriptor, ConversationListResponse, ConversationFailure, RecordChangeEvent, RecordEntry, CompositeRecord, RecordingArchive } from '@capix/protocol';
 import type { ObserverInteractionPersistence, ObserverStoredContent, ObserverStoredRecording } from './types.js';
 import { conversationTitle } from '../conversation/title.js';
-import { initializeSchema } from './schema.js';
+import { initializeSchema, inspectSchema } from './schema.js';
+import { inspectCheckpointTables } from './checkpoint-schema.js';
 import { updateRecord } from './records.js';
 import { SqliteCheckpointStore } from './checkpoints.js';
 import { SqliteConversationCheckpointRuns } from './runs.js';
@@ -38,6 +39,8 @@ export class SqliteObserverStore {
   private constructor(path: string) {
     this.#database = new DatabaseSync(path, { timeout: 0, enableForeignKeyConstraints: true });
     try {
+      inspectSchema(this.#database);
+      inspectCheckpointTables(this.#database);
       // Hold the writer lock across transactions; a second service cannot load an independent writer.
       this.#database.exec('PRAGMA locking_mode = EXCLUSIVE; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE; COMMIT;');
       initializeSchema(this.#database);
@@ -51,6 +54,16 @@ export class SqliteObserverStore {
 
   static open(path: string): SqliteObserverStore {
     const absolute = resolve(path);
+    // Refuse unsupported existing storage before permissions, WAL or schema writes.
+    if (existsSync(absolute)) {
+      const inspection = new DatabaseSync(absolute, { readOnly: true, timeout: 0 });
+      try {
+        inspectSchema(inspection);
+        inspectCheckpointTables(inspection);
+      } finally {
+        inspection.close();
+      }
+    }
     mkdirSync(dirname(absolute), { recursive: true, mode: 0o700 });
     // SQLite sidecars inherit the database mode, so restrict it before the first WAL write.
     const descriptor = openSync(absolute, 'a', 0o600);

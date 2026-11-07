@@ -1,6 +1,10 @@
 # 原生工具调用与 MCP 接入方案
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 状态：生产契约与首版工具循环已实现，2026-11-05。下文保留设计和离线验证的来由，当前落地范围见末节；协议样本不代表真实模型质量或多厂商兼容认证。
+
+Provider 的现行接口见 [ModelProvider](../server/model-provider/README.md)，工具作者接口见[工具预设](../services/conversation/src/tools/README.md)，宿主使用见[服务 README](../services/conversation/README.md)。本文旧文本交互只读和旧库迁移安排已撤销，详见文首兼容约定。
 
 ## 1. 目标与范围
 

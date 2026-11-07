@@ -14,7 +14,7 @@ import type { InvocationCheckpointFrame as RuntimeFrame } from '@capix/server-ru
 
 const owner: InvocationIdentity = { contextId: 'single-call', kind: 'node' };
 const frame: InvocationCheckpointFrame = { owner, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] };
-const image: CheckpointImage = { id: 'saved-image', formatVersion: 5, contract: { key: 'typed-host', version: 1 }, point: 'prepared', frame, state: null, references: {} };
+const image: CheckpointImage = { id: 'saved-image', formatVersion: 6, contract: { key: 'typed-host', version: 1 }, point: 'prepared', frame, state: null, references: {} };
 const store: CheckpointStore = new MemoryCheckpointStore();
 const installation: CheckpointInstallation = { store };
 const saved: CheckpointSaveReceipt = store.save(image, 0);

@@ -118,6 +118,31 @@ defineGroup<Input, Output>()({ members: [nested], checkpoint: { key: 'e', versio
 defineScene<Input, Output>()({ members: [execution], checkpoint: { key: 'r', version: 1, input: inputCodec, output: outputCodec, points: [runtimePoint] }, run: work => ({ answer: work.input.query }) });
 
 writer({ point: waiting, state: { cursor: 1 }, refs: { one: readRef, batch: [readRef, readRef] } });
+const selection = writer.select(read);
+const firstOccurrence = selection.add(readRef);
+selection.add(readRef);
+selection.remove(firstOccurrence);
+const recoveredOccurrence = selection.occurrenceAt(-1);
+if (recoveredOccurrence) selection.remove(recoveredOccurrence);
+const selectedRef: ChildReference<typeof read> | undefined = selection.at(-1);
+const selectedRefs: readonly ChildReference<typeof read>[] = [...selection];
+writer({ point: waiting, state: { cursor: 1 }, refs: { one: readRef, batch: selection } });
+writer.select(read, [readRef, readRef]);
+// @ts-expect-error a selection cannot add another declaration's I/O
+selection.add(wrongReadRef);
+// @ts-expect-error initial references do not widen the target declaration
+writer.select(read, [wrongReadRef]);
+// @ts-expect-error a selection is only valid in a many slot
+writer({ point: waiting, state: { cursor: 1 }, refs: { one: selection, batch: [] } });
+// @ts-expect-error many selection target remains exact
+writer({ point: waiting, state: { cursor: 1 }, refs: { one: readRef, batch: writer.select(wrongRead) } });
+// @ts-expect-error occurrence identities cannot be invented
+selection.remove({});
+// @ts-expect-error selection length is read-only
+selection.length = 0;
+declare const leafWriter: AuthorCheckpointWriter<'node', Input, Output>;
+// @ts-expect-error nodes have no member selection
+leafWriter.select(read);
 writer({ point: settled, state: { path: 'done' }, refs: { prior: nestedRef } });
 // @ts-expect-error checkpoint cannot widen State from its value
 writer({ point: waiting, state: { cursor: 'bad' }, refs: { one: readRef, batch: [readRef] } });

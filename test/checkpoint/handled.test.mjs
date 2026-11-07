@@ -122,7 +122,7 @@ test('v6 rejects unfinished, misattributed or relabelled same-round failure hand
   source.frame.children[0].state.failure = { kind: 'exception', phase: 'execute', contextId: 'child', contract: 'bad-answer' };
   assert.equal(cloneCheckpointImage(source).frame.children[0].state.failure.kind, 'exception');
   source.formatVersion = 4;
-  assert.throws(() => cloneCheckpointImage(source), /formatVersion 5/);
+  assert.throws(() => cloneCheckpointImage(source), /formatVersion 6/);
 });
 
 test('handled codecs remain attached to the exact parent reception and child positions', () => {

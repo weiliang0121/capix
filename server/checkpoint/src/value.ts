@@ -106,8 +106,8 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
   if (value && typeof value === 'object' && images.has(value)) return value as CheckpointImage;
   const copied = copyCheckpointValue(value);
   const image: any = copied.value;
-  if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 5 && image.formatVersion !== 6) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 5 and 6 are supported; historical content and records remain readable.', { formatVersion: image.formatVersion });
-  if (!object(image) || !text(image.id) || ![5, 6].includes(image.formatVersion) || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 5 and 6 are supported');
+  if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 6) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 6 is supported; older checkpoint data is not migrated.', { formatVersion: image.formatVersion });
+  if (!object(image) || !text(image.id) || image.formatVersion !== 6 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 6 is supported');
   const frame = image.frame;
   if (!object(frame) || !identity(frame.owner) || !integer(frame.round, 1) || frame.round > 2 || frame.phase !== 'execute' || !Object.hasOwn(frame, 'input') || !Object.hasOwn(frame, 'currentInput') || !integer(frame.nextChildOrder) || !Array.isArray(frame.children) || frame.children.length > 4096) fail('invalid frame');
   const ids = new Set<string>();
@@ -167,7 +167,7 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
     if (Array.isArray(value)) value.forEach((reference) => checkpointReferenceChild(reference, frame.children));
     else checkpointReferenceChild(value, frame.children);
   }
-  const encoded = image.formatVersion === 6 ? encodeCheckpointData(image) : copied.json;
+  const encoded = encodeCheckpointData(image);
   if (Buffer.byteLength(encoded) > CHECKPOINT_MAX_BYTES) fail('encoded image exceeds byte limit');
   images.set(image, createHash('sha256').update(encoded).digest('hex'));
   return image as CheckpointImage;

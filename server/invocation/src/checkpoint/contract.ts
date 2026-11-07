@@ -1,6 +1,6 @@
 import type { InvocationIdentity } from '@capix/contracts';
 import type { ProgressReceiver } from '@capix/changes';
-import type { CheckpointChild, CheckpointDelivery, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointReferences, CheckpointStore, InvocationCheckpointFrame } from '@capix/checkpoint';
+import type { CheckpointChild, CheckpointDelivery, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointReference, CheckpointStore, InvocationCheckpointFrame } from '@capix/checkpoint';
 
 export type CheckpointFact = Readonly<
   {
@@ -21,8 +21,26 @@ export interface CheckpointInstallation {
 }
 
 export interface CheckpointWriter {
-  save(point: string, state: unknown, references?: CheckpointReferences): CheckpointSaveReceipt;
+  select(position: number, initial?: readonly CheckpointReference[]): InvocationCheckpointSelection;
+  save(point: string, state: unknown, references?: CheckpointSaveReferences): CheckpointSaveReceipt;
 }
+
+declare const occurrence: unique symbol;
+/** One occurrence, including repeated selections of the same child. Never a child identity. */
+export interface InvocationCheckpointOccurrence {
+  readonly [occurrence]: true;
+}
+
+/** An invocation-owned ordered selection; removing an occurrence never removes its relation. */
+export interface InvocationCheckpointSelection extends Iterable<CheckpointReference> {
+  readonly length: number;
+  at(index: number): CheckpointReference | undefined;
+  occurrenceAt(index: number): InvocationCheckpointOccurrence | undefined;
+  add(reference: CheckpointReference): InvocationCheckpointOccurrence;
+  remove(occurrence: InvocationCheckpointOccurrence): void;
+}
+
+export type CheckpointSaveReferences = Readonly<Record<string, CheckpointReference | readonly CheckpointReference[] | InvocationCheckpointSelection>>;
 
 /** Internal construction data; never accepted from a business invocation view. */
 export interface CheckpointRestoration {

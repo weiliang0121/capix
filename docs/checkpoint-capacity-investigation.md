@@ -1,5 +1,7 @@
 # CP 容量问题调查
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-05。基于此前 200 会话测试，保持现有 CP 生产实现，使用离线模型、CPU 采样、同步边界计时和双端 TCP/HTTP 诊断。没有调整堆限制、连接超时、重试规则或持久提交顺序。
 
 ## 结论与范围

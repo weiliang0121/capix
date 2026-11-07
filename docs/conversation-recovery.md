@@ -75,11 +75,11 @@ Web 的 `GET /api/recoveries` 返回有限摘要；`POST /api/resume` 接收 `{c
 
 ## 持久与观测边界
 
-SQLite v6 保存当前 CP image、CAS head、固定模型交互请求与完整反馈。CP image 和 delivery 使用带编码及原始字节数的 Brotli JSON 存储封装；读取先执行有界解压、严格 Base64／UTF-8／长度检查，再经过原 Frame 和 head 校验。8 MiB 限制仍作用于未压缩值，Frame v5 和 CheckpointStore 契约不变。交互正文、正式内容和凭据的存储形态不变。
+Conversation SQLite schema 8 保存 CP 固定值块、当前关系、选择出现项、CAS head，以及固定模型交互请求与完整反馈。生产保存使用 Frame v6 增量 Commit；冷读取完整重建逻辑 Image 并核验正文、引用及交付。正文和 delivery 使用有界无损编码及 Brotli 存储；读取核验编码、长度和摘要。8 MiB 限制作用于完整逻辑值，不能因物理块共享或压缩而绕过。
 
-v1–v5 原库在同一排他事务中迁移，全部镜像 ID、修订、终态、原实体和固定凭据保留；每个调用只保留当前 head 正文，旧行 body 置 NULL。迁移先核验有界存储、行身份、固定依据、连续修订及 head/delivery 关系，避免淘汰掩盖损坏；未知旧 Frame 不转为 v5，当前 CP 读取／恢复仍执行完整版本与契约检查。迁移失败整体回滚，未知较新的数据库版本明确拒绝。不自动 VACUUM，文件可能留下可复用空闲页，不能用文件总长代替存储正文大小。CP／交互调用者冲突不毒化整个 Store，真实数据库失败或损坏会阻止继续接纳。
+仅空的新库可以创建表；已有数据库必须是完整的当前 schema 8。旧版本和不匹配表结构拒绝打开，不迁移、不清空，也不自动回退为内存运行。旧 CP 格式与旧文本模型交互没有只读兼容入口。需要新数据集时显式传入新的 `--db` 路径，保留原库。当前库不自动 VACUUM，文件可能留下可复用空闲页，不能用文件总长代替存储正文大小。CP／交互调用者冲突不毒化整个 Store，真实数据库失败或损坏会阻止继续接纳。
 
-恢复根列表逐条解码当前 head 后按 Frame 的真实父关系筛选，不增设一份可能与 Frame 分歧的 parent 索引。该显式查询的成本随历史调用数量增加；只留当前正文减少存量，不减少原始 Frame 的生成与校验量。本轮不删除任何根或子 head；整树退休、分叉及次间计算优化各自独立设计。
+恢复根列表逐条解码当前 head 后按 Frame 的真实父关系筛选，不增设一份可能与 Frame 分歧的 parent 索引。该显式查询及冷恢复仍随历史调用数量增长。热保存只发布新增固定正文、变化关系和本次引用选择变化；完整数组 refs、完整作者检查和 state 仍按实际范围计算，见[增量引用选择](checkpoint-selection.md)。旧 head 身份保留拒重，无引用的值块正文退休；不自动删除整棵调用树或将 CP 当作分叉快照。
 
 恢复仍使用原 contextId，但有新的入口与恢复 activityId。恢复中的实际新消息从 CP feedback 接入消息源，既有固定消息确认不重复发布 append。`GET /api/recovery-activity` 返回本进程最多 1024 条恢复元数据，淘汰后标注不完整，不带完整 Frame 或正文。
 
@@ -95,7 +95,7 @@ v1–v5 原库在同一排他事务中迁移，全部镜像 ID、修订、终态
 
 另覆盖已有对话／记忆后续接、原记忆 ID 更新、handled skipped、无变化批次、首个子 CP 缺失、没有反馈、配置／内容变化、终态拒绝、凭据与已完成成员缺失，以及 CLI/HTTP 消息同步和恢复观测。每个完成请求的发送次数、正式消息数、记忆序列及固定凭据都与中断前后对照。
 
-原生模型协议迁移后，CompletionInteraction 使用 `conversation.completion.v2`，模型完成节点及 Group 的 CP 声明为 v2，默认 Scene、材料回答及记忆提案为 v3。旧文本交互通过 `store.interactions.readHistory(id)` 原形状读取，不伪造 native 续接材料。SQLite v4 新增独立交换表，CP Brotli 编码与 Frame v5 不变。ToolLoop 可选恢复与默认 Web Scene 恢复资格分别装配；普通自定义工具回答不自动成为默认材料链的恢复对象。
+CompletionInteraction 使用 `conversation.completion.v2`，模型完成节点及 Group 的 CP 声明为 v2，默认 Scene、材料回答及记忆提案为 v3；这些业务版本与 Frame v6、SQLite schema 8 分别核验。旧文本交互不读取或补造 native 续接材料。ToolLoop 可选恢复与默认 Web Scene 恢复资格分别装配；普通自定义工具回答不自动成为默认材料链的恢复对象。
 
 ## 工具宿主的独立恢复
 
@@ -103,4 +103,4 @@ CLI/Web 可选 `--answer-mode tools` 使用 `conversation.tools.scene@1`。根�
 
 工具候选列表只做轻量检查并标记 unchecked，选定 resume 时才载入准确集合和交互，检查失败释放本次 use。prepared 可以核对并建立原空计划；waiting 集合或首个必要子 CP 缺失时拒绝，不能用重发补齐。已终结的取消/超时不复活；其独立晚反馈仍正常保存。
 
-当前 SQLite v6 延续 v5 的多集合元数据、准确集合读取及联合存量计数；旧 v4 单集合迁入同一存储并保持未锚定只读，不据此获得工具根恢复资格。归档门槛在两种模式的写入入口生效，不阻止读取恢复候选，也不在持久提交中拒绝已接纳工作。详细边界与测试见 [宿主设计](native-tool-host-integration.md) 和 [验证报告](native-tool-host-validation.md)。
+当前 SQLite schema 8 提供多集合元数据、准确集合读取及联合存量计数，不载入旧单集合数据库。归档门槛在两种模式的写入入口生效，不阻止读取恢复候选，也不在持久提交中拒绝已接纳工作。当前保存边界见[宿主与持久化](conversation-host.md)，设计与当轮验证见 [宿主设计](native-tool-host-integration.md) 和 [验证报告](native-tool-host-validation.md)。

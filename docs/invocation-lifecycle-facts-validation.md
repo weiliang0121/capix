@@ -1,5 +1,7 @@
 # 真实调用生命周期与事实表示：第九轮验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07。承接[调用事实与局部推进版本](invocation-facts-progress-validation.md)。继续验证现有 Invocation、显式恢复点和准确父子接纳；不改为协调重放，不增加推进实体，不要求长调用分段。本轮只新增隔离实验及报告，没有修改生产调用、Frame v5、服务或宿主恢复资格。
 
 ## 1. 本轮回答什么

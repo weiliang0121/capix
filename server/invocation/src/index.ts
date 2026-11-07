@@ -33,7 +33,7 @@ export { ObserverSession, publishSessions } from './observation/session.js';
 export { ObservationError } from './observation/error.js';
 
 // Live checkpoint adaptation; immutable images and stores come from @capix/checkpoint.
-export type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter, CheckpointFact } from './checkpoint/contract.js';
+export type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter, CheckpointFact, CheckpointSaveReferences, InvocationCheckpointSelection, InvocationCheckpointOccurrence } from './checkpoint/contract.js';
 export type { InvocationCheckpointWork, CheckpointBinding, CheckpointChildBinding, CheckpointReferenceSlot } from './checkpoint/work.js';
 export { prepareCheckpointRestoration } from './checkpoint/restoration.js';
 export { captureCheckpointContinuation, restoreCheckpointContinuation, type CheckpointContinuationFact } from './checkpoint/continuation.js';

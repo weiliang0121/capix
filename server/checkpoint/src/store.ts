@@ -1,17 +1,16 @@
-import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
 import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt, CheckpointCommit } from './contract.js';
 import { cloneCheckpointImage, cloneCheckpointDelivery } from './value.js';
 import { checkpointSaveReceipt, checkpointFinishReceipt } from './receipt.js';
 import { prepareCheckpointCommit, materializeCheckpointHead, checkpointImageCommit, type CheckpointStoredHead, type CheckpointStoredChild, type CheckpointStoredValue } from './incremental.js';
 import { checkpointHeadCommit } from './evidence.js';
+import { isCheckpointSelectionSlots, checkpointSelectionReferences, type CheckpointStoredSelection, type CheckpointStoredOccurrence } from './selections.js';
 
 /** Deterministic local installation; it provides no guarantee across process loss. */
 export class MemoryCheckpointStore implements CheckpointStore {
-  readonly #heads = new Map<string, CheckpointHead>();
   // Historical identities remain reserved; only each head retains its image body.
   readonly #usedImageIds = new Set<string>();
-  readonly #incremental = new Map<string, { head: CheckpointStoredHead; children: Map<string, CheckpointStoredChild>; orders: Map<number, string>; values: Map<string, { stored: CheckpointStoredValue; body?: string }> }>();
+  readonly #incremental = new Map<string, { head: CheckpointStoredHead; children: Map<string, CheckpointStoredChild>; orders: Map<number, string>; values: Map<string, { stored: CheckpointStoredValue; body?: string }>; selections: Map<string, { head: CheckpointStoredSelection; active: Map<string, CheckpointStoredOccurrence>; reserved: Map<string, number> }> }>();
 
   read(contextId: string): CheckpointHead | undefined {
     requireContext(contextId);
@@ -21,29 +20,23 @@ export class MemoryCheckpointStore implements CheckpointStore {
         current.head,
         [...current.children.values()],
         [...current.values.values()].filter((entry) => entry.stored.uses > 0).map((entry) => ({ stored: entry.stored, body: entry.body! })),
+        isCheckpointSelectionSlots(current.head.commit.references)
+          ? checkpointSelectionReferences(current.head.commit.references).map(({ id }) => {
+              const source = current.selections.get(id);
+              if (!source) throw new Error('Missing checkpoint selection');
+              return { head: source.head, occurrences: [...source.reserved].map(([id, order]) => source.active.get(id) ?? { id, order }) };
+            })
+          : [],
       );
-    return this.#heads.get(contextId);
+    return undefined;
   }
 
   save(image: CheckpointImage | CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt {
     if ('kind' in image && image.kind === 'commit') return this.saveChanges(image, expectedRevision);
     const fixed = cloneCheckpointImage(image);
-    if (fixed.formatVersion === 6) {
-      const current = this.read(fixed.frame.owner.contextId);
-      this.saveChanges(checkpointImageCommit(fixed, current && checkpointHeadCommit(current)), expectedRevision);
-      return checkpointSaveReceipt(fixed, expectedRevision + 1);
-    }
-    requireRevision(expectedRevision);
-    const contextId = fixed.frame.owner.contextId;
-    if (this.#incremental.has(contextId)) throw conflict('Cannot replace v6 facts with a legacy full image');
-    const current = this.#heads.get(contextId);
-    requireCurrent(current, expectedRevision);
-    if (current && (!isEqual(current.image.frame.owner, fixed.frame.owner) || !isEqual(current.image.contract, fixed.contract) || !isEqual(current.image.frame.input, fixed.frame.input))) throw conflict('Checkpoint owner, contract and original input cannot change');
-    if (this.#usedImageIds.has(fixed.id)) throw conflict('Checkpoint identity has already been saved');
-    const head = Object.freeze({ revision: expectedRevision + 1, image: fixed });
-    this.#usedImageIds.add(fixed.id);
-    this.#heads.set(contextId, head);
-    return checkpointSaveReceipt(fixed, head.revision);
+    const current = this.read(fixed.frame.owner.contextId);
+    this.saveChanges(checkpointImageCommit(fixed, current && checkpointHeadCommit(current)), expectedRevision);
+    return checkpointSaveReceipt(fixed, expectedRevision + 1);
   }
 
   finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointFinishReceipt {
@@ -56,17 +49,11 @@ export class MemoryCheckpointStore implements CheckpointStore {
       incremental.head = Object.freeze({ ...incremental.head, revision: expectedRevision + 1, delivery: fixed });
       return checkpointFinishReceipt(contextId, incremental.head.commit.id, fixed, expectedRevision + 1);
     }
-    const current = this.#heads.get(contextId);
-    if (!current) throw conflict('Cannot finish a checkpoint scope without a saved image');
-    requireCurrent(current, expectedRevision);
-    const head = Object.freeze({ revision: expectedRevision + 1, image: current.image, delivery: fixed });
-    this.#heads.set(contextId, head);
-    return checkpointFinishReceipt(contextId, current.image.id, fixed, head.revision);
+    throw conflict('Cannot finish a checkpoint scope without a saved image');
   }
 
   private saveChanges(commit: CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt {
     const contextId = commit.frame.owner.contextId;
-    if (this.#heads.has(contextId)) throw conflict('Legacy checkpoint scopes cannot advance under stable facts');
     const current = this.#incremental.get(contextId);
     const plan = prepareCheckpointCommit(commit, expectedRevision, {
       head: current?.head,
@@ -75,8 +62,14 @@ export class MemoryCheckpointStore implements CheckpointStore {
       child: (id) => current?.children.get(id),
       order: (order) => current?.orders.get(order),
       imageUsed: (id) => this.#usedImageIds.has(id),
+      selection: (id) => current?.selections.get(id)?.head,
+      occurrence: (selection, id) => {
+        const source = current?.selections.get(selection);
+        const order = source?.reserved.get(id);
+        return source?.active.get(id) ?? (order === undefined ? undefined : { id, order });
+      },
     });
-    const next = current ?? { head: plan.head, children: new Map(), orders: new Map(), values: new Map() };
+    const next = current ?? { head: plan.head, children: new Map(), orders: new Map(), values: new Map(), selections: new Map() };
     // All fallible authentication above precedes this synchronous installation.
     for (const entry of plan.values) {
       const body = entry.stored.uses === 0 ? undefined : (entry.body ?? next.values.get(entry.stored.id)?.body);
@@ -86,16 +79,22 @@ export class MemoryCheckpointStore implements CheckpointStore {
       next.children.set(entry.child.identity.contextId, entry);
       next.orders.set(entry.child.order, entry.child.identity.contextId);
     }
+    for (const change of plan.selections) {
+      const source = next.selections.get(change.head.id) ?? { head: change.head, active: new Map<string, CheckpointStoredOccurrence>(), reserved: new Map<string, number>() };
+      if (change.reset) source.active.clear();
+      for (const id of change.remove) source.active.delete(id);
+      for (const item of change.append) {
+        source.active.set(item.id, item);
+        source.reserved.set(item.id, item.order);
+      }
+      source.head = change.head;
+      next.selections.set(change.head.id, source);
+    }
     next.head = plan.head;
     this.#usedImageIds.add(commit.id);
     this.#incremental.set(contextId, next);
     return plan.receipt;
   }
-}
-
-function requireCurrent(current: CheckpointHead | undefined, expectedRevision: number): void {
-  if ((current?.revision ?? 0) !== expectedRevision) throw conflict('Checkpoint head revision does not match');
-  if (current?.delivery) throw conflict('Final checkpoint delivery cannot advance');
 }
 
 function requireRevision(revision: number): void {

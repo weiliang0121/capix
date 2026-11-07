@@ -186,7 +186,8 @@ export function measureStorage(directory) {
     uri.searchParams.set('immutable', '1');
     const database = new DatabaseSync(uri.href, { readOnly: true, timeout: 0 });
     try {
-      if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || ![5, 6, 7].includes(database.prepare('PRAGMA user_version').get().user_version)) throw new Error('Expected an experiment conversation database in storage format 5/6/7');
+      const storageFormat = database.prepare('PRAGMA user_version').get().user_version;
+      if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || storageFormat !== 8) throw new Error('Expected an experiment conversation database in storage format 8');
       for (const table of Object.keys(tables)) tables[table] += database.prepare(`SELECT count(*) AS count FROM ${table}`).get().count;
       const images = database.prepare("SELECT COUNT(body) AS retained, COUNT(*) - COUNT(body) AS discarded, coalesce(sum(length(CAST(body AS BLOB))), 0) AS stored, coalesce(sum(CASE WHEN body IS NULL THEN 0 ELSE coalesce(json_extract(body, '$.jsonBytes'), length(CAST(body AS BLOB))) END), 0) AS original FROM checkpoint_images").get();
       result.checkpointRetainedBodies += images.retained;
@@ -194,12 +195,11 @@ export function measureStorage(directory) {
       result.checkpointStoredBytes += images.stored;
       result.checkpointJsonBytes += images.original;
       const deliveries = database.prepare("SELECT coalesce(sum(length(CAST(delivery AS BLOB))), 0) AS stored, coalesce(sum(json_extract(delivery, '$.jsonBytes')), 0) AS original FROM checkpoint_heads WHERE delivery IS NOT NULL").get();
-      if (database.prepare('PRAGMA user_version').get().user_version >= 7) {
-        const values = database.prepare("SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS stored, coalesce(sum(json_extract(body, '$.jsonBytes')), 0) AS original, coalesce(sum(length(CAST(metadata AS BLOB))), 0) AS metadata FROM checkpoint_values").get();
-        result.checkpointValueStoredBytes += values.stored;
-        result.checkpointValueJsonBytes += values.original;
-        result.checkpointMetadataBytes += values.metadata + database.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS bytes FROM checkpoint_relations').get().bytes;
-      }
+      const values = database.prepare("SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS stored, coalesce(sum(json_extract(body, '$.jsonBytes')), 0) AS original, coalesce(sum(length(CAST(metadata AS BLOB))), 0) AS metadata FROM checkpoint_values").get();
+      result.checkpointValueStoredBytes += values.stored;
+      result.checkpointValueJsonBytes += values.original;
+      result.checkpointMetadataBytes += values.metadata + database.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS bytes FROM checkpoint_relations').get().bytes;
+      result.checkpointMetadataBytes += database.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS bytes FROM checkpoint_selections').get().bytes + database.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS bytes FROM checkpoint_occurrences').get().bytes;
       result.deliveryStoredBytes += deliveries.stored;
       result.deliveryJsonBytes += deliveries.original;
       result.interactionStoredBytes += database.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS bytes FROM completion_interactions').get().bytes;

@@ -91,7 +91,7 @@ run 可以写明确的有限循环。Observer 的回答生成只在完整模型�
 
 生产者的 output.result/output.delta 检查本层交付。消费端 result/delta 处理下层交付，两者不是两个节点级正常/异常阶段。一个候选失败后已有预览可能需要丢弃，输出协议明确表达候选替换，不能把多次候选增量拼成一个回答。
 
-CP 保存父接纳与业务循环进度。Frame v5 保留 handled 事实及必要诊断，恢复不重跑已经成功的 failed 回调；需要编码接收值时在 checkpoint.receptions 登记。新执行拒绝旧 round 2/continuation 镜像，不复活删除的异常解释器。详见 [Checkpoint](checkpoints.md)。
+CP 保存父接纳与业务循环进度。Frame v6 保留 handled 事实及必要诊断，恢复不重跑已经成功的 failed 回调；需要编码接收值时在 checkpoint.receptions 登记。新执行拒绝旧 round 2/continuation 镜像，不复活删除的异常解释器。详见 [Checkpoint](checkpoints.md)。
 
 ## 观测与历史
 

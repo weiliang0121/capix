@@ -215,45 +215,16 @@ test('failed feedback persistence never publishes the unsaved reply or repeats t
   assert.equal(saved.feedback, undefined);
 });
 
-test('v1 migration preserves conversation content, memory identities and recording archives', async (t) => {
-  const disk = fixture(t);
-  const provider = {
-    async invoke(_request, purpose) {
-      return { id: 'fixture', model: 'fixture', content: JSON.stringify(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'answer' ? { kind: 'answer', content: 'saved answer' } : { memories: [] }), finishReason: 'stop', usage: null };
-    },
-  };
-  const store = disk.open();
-  const environment = initializeObserver(provider, [], { persistence: store });
-  await environment.runner.run({ messages: [{ role: 'user', content: 'hello' }] }, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 } });
-  environment.memories.apply([{ action: 'create', memoryId: null, change: 'keep source', sourceIndexes: [0, 1], result: { topic: 'fixture', content: 'saved memory', sourceIndexes: [0, 1] } }]);
-  environment.close();
-  const before = disk.open();
-  const expected = before.loadContent();
-  delete expected.transcript.appends;
-  delete expected.memories.applies;
-  const expectedRecording = before.loadRecording();
-  before.close();
-  disk.edit((database) => database.exec(`CREATE TABLE metadata (singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversation_checkpoint_runs; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE conversations; DROP TABLE interactions; DROP TABLE transcript_appends; DROP TABLE memory_applies; DROP TABLE file_creations; PRAGMA user_version = 1;`));
-  const migrated = disk.open();
-  assert.deepEqual(migrated.loadContent(), expected);
-  assert.deepEqual(migrated.loadRecording(), expectedRecording);
-  assert.ok(expectedRecording.book.entries.length > 0);
-  const interaction = create(migrated);
-  assert.equal(migrated.interactions.read(interaction.id).delivery, 'prepared');
-  migrated.close();
-  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6));
-});
-
-test('migration failure keeps v1 and its committed content intact', (t) => {
+test('unsupported v1 remains intact without migration', (t) => {
   const disk = fixture(t);
   const store = disk.open();
   const transcript = new Transcript([{ role: 'user', content: 'keep this' }]);
   const memories = new Memories(transcript);
   store.initialize({ transcript: transcript.exportState(), memories: memories.exportState() });
   store.close();
-  // A conflicting table is invalid v1 metadata and must not be silently replaced.
+  // The host refuses the old version before loading or rewriting content.
   disk.edit((database) => database.exec('PRAGMA user_version = 1;'));
-  assert.throws(() => disk.open(), /already exists/);
+  assert.throws(() => disk.open(), /Unsupported Observer persistence schema/);
   disk.edit((database) => {
     assert.equal(database.prepare('PRAGMA user_version').get().user_version, 1);
     assert.equal(JSON.parse(database.prepare('SELECT body FROM messages').get().body).content, 'keep this');

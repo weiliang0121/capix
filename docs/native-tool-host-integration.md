@@ -1,6 +1,10 @@
 # 原生工具调用的宿主接入
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 状态：公共接缝、CLI/Web 工具模式、工具会话根恢复及一组真实接口验证已完成，见 §13–14 与 [验证报告](native-tool-host-validation.md)。承接 [原生工具接入](native-tool-integration.md) 的生产 Provider、ModelExchanges 与 ToolLoop。
+
+当前使用以[宿主与持久化](conversation-host.md)、[显式恢复](conversation-recovery.md)和[工具预设](../services/conversation/src/tools/README.md)为准。下文 v4→v5 迁移方案只保留设计记录，当前 schema 8 不迁移旧库；旧文本交互和旧 Frame 也不提供兼容读取。
 
 本次交叉审查后收敛：先保存空集合的创建意图，再落实集合；只有 prepared 可以补建，waiting 只能准确读取。ToolAnswer 与 ToolLoop 分别接入同一次宿主使用句柄。单次预算覆盖完整编码；原工具输出上限归工具登记与实现；交换／Interaction／CP 联合存量只作为入口门槛，不建立预留账本、不自动退休数据。下文保留设计推导；实际公开出口及保留范围见 §13–14。
 

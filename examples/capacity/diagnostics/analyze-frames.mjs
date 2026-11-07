@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
-import { CHECKPOINT_MAX_BYTES, cloneCheckpointImage, cloneCheckpointDelivery } from '@capix/checkpoint';
-import { decodeCheckpointRecord, isCheckpointRecord, materializeCheckpointHead, decodeCheckpointData } from '@capix/checkpoint/storage';
+import { CHECKPOINT_MAX_BYTES, cloneCheckpointDelivery } from '@capix/checkpoint';
+import { decodeCheckpointRecord, isCheckpointRecord, materializeCheckpointHead, decodeCheckpointData, isCheckpointSelectionSlots, checkpointSelectionReferences } from '@capix/checkpoint/storage';
 
 const maxStoredBytes = Math.ceil((CHECKPOINT_MAX_BYTES + 1024) / 3) * 4 + 1024;
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
@@ -24,7 +24,7 @@ export function analyzeFrames(databasePath) {
   const database = new DatabaseSync(uri.href, { readOnly: true, timeout: 0 });
   try {
     const storageFormat = database.prepare('PRAGMA user_version').get().user_version;
-    if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || ![3, 4, 5, 6, 7].includes(storageFormat)) throw new Error('Expected a conversation experiment database in storage format 3/4/5/6/7');
+    if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || storageFormat !== 8) throw new Error('Expected a conversation experiment database in storage format 8');
     const totals = counter();
     const groups = new Map();
     const latest = new Map();
@@ -37,14 +37,12 @@ export function analyzeFrames(databasePath) {
       latest.set(row.context_id, { id: row.id, revision: row.revision, retained: row.body !== null });
       imageIdentities++;
       if (row.body === null) {
-        if (storageFormat < 6) throw new Error('Historical checkpoint body is missing in a format that retains all images');
         discardedBodies++;
         continue;
       }
-      const incremental = isCheckpointRecord(row.body);
-      const decoded = incremental ? undefined : decode(row.body);
-      const image = incremental ? materialize(database, row) : cloneCheckpointImage(decoded.value);
-      const logicalBytes = incremental ? bytes(image) : decoded.jsonBytes;
+      if (!isCheckpointRecord(row.body)) throw new Error('Expected current incremental checkpoint storage');
+      const image = materialize(database, row);
+      const logicalBytes = bytes(image);
       if (image.id !== row.id || image.frame.owner.contextId !== row.context_id) throw new Error('Checkpoint image identity differs from its row');
       const key = JSON.stringify([image.contract.key, image.contract.version]);
       let group = groups.get(key);
@@ -66,13 +64,13 @@ export function analyzeFrames(databasePath) {
       if (!image.retained) throw new Error('Current checkpoint head body is missing');
       if (delivered) {
         const decoded = decode(row.delivery).value;
-        cloneCheckpointDelivery(decoded?.format === 'capix.checkpoint.value@1' ? decodeCheckpointData(JSON.stringify(decoded)) : decoded);
+        cloneCheckpointDelivery(decodeCheckpointData(JSON.stringify(decoded)));
         deliveries++;
       }
       heads++;
     }
     if (heads !== latest.size) throw new Error('Checkpoint images have no owning head');
-    if (storageFormat >= 6 && totals.retainedBodies !== heads) throw new Error('Superseded checkpoint bodies remain in head-only storage');
+    if (totals.retainedBodies !== heads) throw new Error('Superseded checkpoint bodies remain in head-only storage');
     return {
       formatVersion: 2,
       storageFormat,
@@ -105,7 +103,26 @@ function materialize(database, row) {
       if (stored.id !== item.id) throw new Error('Checkpoint value row differs');
       return { stored, body: JSON.stringify(decode(item.body).value) };
     });
-  return materializeCheckpointHead(head, children, values).image;
+  const selections = isCheckpointSelectionSlots(head.commit.references)
+    ? checkpointSelectionReferences(head.commit.references).map(({ id }) => {
+        const item = database.prepare('SELECT body FROM checkpoint_selections WHERE context_id=? AND id=?').get(row.context_id, id);
+        if (!item || typeof item.body !== 'string') throw new Error('Missing checkpoint selection');
+        const selection = decodeCheckpointRecord('selection', item.body);
+        if (selection.owner !== row.context_id || selection.id !== id) throw new Error('Checkpoint selection row differs');
+        const occurrences = database
+          .prepare('SELECT occurrence_id,ordinal,body FROM checkpoint_occurrences WHERE context_id=? AND selection_id=? ORDER BY ordinal')
+          .all(row.context_id, id)
+          .map((entry) => {
+            if (typeof entry.occurrence_id !== 'string' || !Number.isSafeInteger(entry.ordinal) || entry.ordinal < 0) throw new Error('Invalid checkpoint occurrence row');
+            if (entry.body === null) return { id: entry.occurrence_id, order: entry.ordinal };
+            const occurrence = decodeCheckpointRecord('occurrence', entry.body);
+            if (occurrence.id !== entry.occurrence_id || occurrence.order !== entry.ordinal || !occurrence.reference) throw new Error('Checkpoint occurrence row differs');
+            return occurrence;
+          });
+        return { head: selection, occurrences };
+      })
+    : [];
+  return materializeCheckpointHead(head, children, values, selections).image;
 }
 
 function counter() {

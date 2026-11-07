@@ -68,6 +68,8 @@ node examples/conversation-memory-live.mjs --live --out /tmp/capix-conversation-
 
 ## 3. 实验与失败边界
 
+当前 CP 性能验证见 [checkpoint-computation](checkpoint-computation/README.md)，覆盖完整数组与增量 refs 的真实保存路径。作者契约及最新测量见[增量引用选择](../docs/checkpoint-selection.md)；早期隔离事实实验和历史基准按当轮格式解释，入口见[文档导航](../docs/README.md)，不作为另一套生产 API。
+
 新服务的持续使用实验见 [多主题长对话](long-conversation/README.md)：54 次人工用户提交，提供 24 / 36 / 54 阶段；复用默认装配、真实 SQLite、记录与 CP，统计回答和提取输入、持久数据增长及重载一致性。默认离线，不评价模型理解质量；显式 `--live` 后按人工依据审查真实回答。
 
 [调用退出诊断](invocation-exit.mjs) 通过资源清理故障验证原失败保留与 CP 占用释放。执行 `node examples/invocation-exit.mjs`，修复后全部检查为 true、退出码为 0，任何保证未满足仍返回非零退出码。它不是推荐业务写法；时序、故障范围及实际实现见 [退出契约](../docs/invocation-exit-contract.md)。

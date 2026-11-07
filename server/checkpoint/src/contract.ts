@@ -55,7 +55,7 @@ export interface InvocationCheckpointFrame {
 
 export interface CheckpointImage {
   readonly id: string;
-  readonly formatVersion: 5 | 6;
+  readonly formatVersion: 6;
   readonly contract: CheckpointContract;
   readonly point: string;
   readonly frame: InvocationCheckpointFrame;
@@ -71,7 +71,7 @@ export interface CheckpointHead {
   readonly image: CheckpointImage;
   readonly delivery?: CheckpointDelivery;
   /** Serializable v6 publication references, authenticated against the complete image on cold read. */
-  readonly publication?: CheckpointCommit;
+  readonly publication?: CheckpointPublication;
 }
 
 /** A write acknowledgement, not a second read of the complete recovery image. */
@@ -127,7 +127,46 @@ export interface CheckpointCommit {
   readonly point: string;
   readonly frame: Omit<InvocationCheckpointFrame, 'input' | 'currentInput' | 'children'> & { readonly input: CheckpointValueReference; readonly currentInput: CheckpointValueReference };
   readonly state: CheckpointValueReference;
-  readonly references: CheckpointValueReference;
+  readonly references: CheckpointValueReference | CheckpointSelectionSlots;
+  readonly selectionChanges?: readonly CheckpointSelectionChange[];
   readonly values: readonly CheckpointValueBlock[];
   readonly children: readonly CheckpointChildRecord[];
+}
+
+/** One ordered selection belongs to an invocation and one fixed child position. */
+export interface CheckpointSelectionReference {
+  readonly id: string;
+  readonly revision: number;
+  readonly target: { readonly position: number };
+}
+
+export interface CheckpointSelectionSlots {
+  readonly kind: 'slots';
+  readonly slots: Readonly<Record<string, { readonly kind: 'one'; readonly reference: CheckpointReference } | { readonly kind: 'many'; readonly selection: CheckpointSelectionReference }>>;
+}
+
+export interface CheckpointSelectionChange {
+  readonly id: string;
+  readonly target: { readonly position: number };
+  readonly expectedRevision: number;
+  /** Explicit complete replacement. Old occurrence identities remain reserved. */
+  readonly reset?: true;
+  readonly append?: readonly { readonly id: string; readonly reference: CheckpointReference }[];
+  readonly remove?: readonly { readonly id: string; readonly order: number; readonly reference: CheckpointReference }[];
+}
+
+/** Cold-only evidence for the selections explicitly named by the saved point. */
+export interface CheckpointSelectionSnapshot extends CheckpointSelectionReference {
+  readonly owner: string;
+  readonly nextOrder: number;
+  readonly count: number;
+  readonly bytes: number;
+  readonly nodes: number;
+  readonly sum: string;
+  readonly digest: string;
+  readonly occurrences: readonly { readonly id: string; readonly order: number; readonly reference: CheckpointReference }[];
+}
+
+export interface CheckpointPublication extends CheckpointCommit {
+  readonly selectedSelections?: readonly CheckpointSelectionSnapshot[];
 }

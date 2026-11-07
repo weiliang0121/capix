@@ -1,5 +1,7 @@
 # 固定事实接入 Context／Relation：职责、时序与迁移边界
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07。承接[第十三轮验证](checkpoint-point-layout-validation.md)。用户已授权按本方案迁移。本文保留设计推导，实际实现与验证见[生产迁移报告](checkpoint-facts-migration.md)；第 8 节数字为迁移前实验记录。
 
 | 本轮决定     | 落地约束                                                                                               |

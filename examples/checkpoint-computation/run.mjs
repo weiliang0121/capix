@@ -10,7 +10,7 @@ import { benchmarkPlans } from './plans.mjs';
 
 const { values } = parseArgs({ options: { out: { type: 'string' }, suite: { type: 'string', default: 'first' }, mode: { type: 'string', default: 'timing' }, repeat: { type: 'string', default: '3' }, case: { type: 'string' }, timeout: { type: 'string' }, help: { type: 'boolean' } } });
 if (values.help) {
-  console.log('node examples/checkpoint-computation/run.mjs --out NEW_DIRECTORY [--suite first|extended|supplement|overhead|migration|all] [--mode timing|diagnostic|control] [--repeat 3] [--case ID] [--timeout SECONDS]');
+  console.log('node examples/checkpoint-computation/run.mjs --out NEW_DIRECTORY [--suite first|extended|supplement|overhead|migration|selection|all] [--mode timing|diagnostic|control] [--repeat 3] [--case ID] [--timeout SECONDS]');
   process.exit(0);
 }
 if (!values.out || !['timing', 'diagnostic', 'control'].includes(values.mode)) throw new Error('A new --out directory and a valid mode are required');

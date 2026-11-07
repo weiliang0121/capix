@@ -3,6 +3,10 @@ const stores = ['memory', 'sqlite'];
 export function benchmarkPlans(suite) {
   const plans = [];
   const add = (plan) => plans.push({ valueBytes: 64, check: 'local', pattern: 'seeded', diagnosticSaves: 16, ...plan });
+  if (suite === 'selection') {
+    for (const store of stores) for (const refs of ['all', 'incremental']) for (const n of [128, 512, 2048]) add({ id: ['selection-growth', store, refs, n].join('-'), family: 'growth', store, refs, n, inputBytes: 1024 });
+    for (const store of stores) add({ id: 'selection-full-check-' + store, family: 'growth', store, refs: 'incremental', n: 128, inputBytes: 1024, check: 'full' });
+  }
   if (suite === 'migration') {
     for (const store of stores) for (const refs of ['current', 'all']) for (const n of [128, 512, 2048]) add({ id: ['migration-growth', store, refs, n].join('-'), family: 'growth', store, refs, n, inputBytes: 1024 });
     for (const store of stores) for (const inputBytes of [500 * 1024, 2 * 1024 * 1024]) add({ id: ['migration-input', store, inputBytes].join('-'), family: 'input', store, refs: 'current', n: 128, inputBytes });

@@ -106,20 +106,20 @@ test('SQLite message mutation and fixed receipt roll back together when receipt 
   assert.equal(restored.applyFixed(input).start, 1);
 });
 
-test('v3 migration preserves prior messages and adds no fictitious operation receipts', (t) => {
+test('v3 content is refused without adding or inventing fixed receipts', (t) => {
   const disk = fixture(t);
   const store = disk.open();
   const transcript = create(store);
   const expected = transcript.exportState();
   store.close();
   disk.edit((database) => database.exec('DROP TABLE transcript_appends; DROP TABLE memory_applies; DROP TABLE file_creations; PRAGMA user_version = 3;'));
-  const migrated = disk.open();
-  assert.deepEqual(migrated.loadContent().transcript, expected);
-  const restored = Transcript.restore(migrated.loadContent().transcript, { persistence: migrated.transcript });
-  assert.equal(restored.confirmFixed(request(restored)), undefined);
-  assert.equal(restored.applyFixed(request(restored)).start, 1);
-  migrated.close();
-  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6));
+  assert.throws(() => disk.open(), /Unsupported Observer persistence schema/);
+  disk.edit((database) => {
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 3);
+    assert.equal(database.prepare("SELECT name FROM sqlite_master WHERE name = 'transcript_appends'").get(), undefined);
+    assert.equal(database.prepare('SELECT id FROM transcripts').get().id, expected.id);
+    assert.equal(database.prepare('SELECT count(*) AS count FROM messages').get().count, expected.messages.length);
+  });
 });
 
 test('saved fixed receipt identity and actual message body are checked independently', (t) => {

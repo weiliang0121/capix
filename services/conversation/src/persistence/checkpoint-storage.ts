@@ -1,5 +1,5 @@
 import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib';
-import { CHECKPOINT_MAX_BYTES, cloneCheckpointImage, cloneCheckpointDelivery, type CheckpointImage, type CheckpointDelivery } from '@capix/checkpoint';
+import { CHECKPOINT_MAX_BYTES, cloneCheckpointDelivery, type CheckpointDelivery } from '@capix/checkpoint';
 import { z } from 'zod';
 import { decodeCheckpointData } from '@capix/checkpoint/storage';
 
@@ -7,21 +7,16 @@ import { decodeCheckpointData } from '@capix/checkpoint/storage';
 const payloadSchema = z.strictObject({ encoding: z.literal('br'), jsonBytes: z.number().int().positive().max(CHECKPOINT_MAX_BYTES), data: z.string() });
 const maxStoredBytes = Math.ceil((CHECKPOINT_MAX_BYTES + 1024) / 3) * 4 + 1024;
 
-/** Storage encoding also preserves opaque historical formats during SQL migration. */
+/** Compress an already validated checkpoint value within the storage byte limit. */
 export function encodeCheckpointStorage(value: unknown): string {
   return JSON.stringify(encode(value));
 }
 
-export function decodeCheckpointImage(body: string): CheckpointImage {
-  return cloneCheckpointImage(decodeCheckpointStorage(body));
-}
-
 export function decodeCheckpointDelivery(body: string): CheckpointDelivery {
-  const value = decodeCheckpointStorage(body);
-  return cloneCheckpointDelivery(value && typeof value === 'object' && 'format' in value && value.format === 'capix.checkpoint.value@1' ? decodeCheckpointData(JSON.stringify(value)) : value);
+  return cloneCheckpointDelivery(decodeCheckpointData(JSON.stringify(decodeCheckpointStorage(body))));
 }
 
-/** Migration validates storage and identity without certifying an old Frame as recoverable. */
+/** Decode bounded compressed value data; its caller authenticates the value and identity. */
 export function decodeCheckpointStorage(body: string): unknown {
   return decode(payloadSchema.parse(parseStored(body)));
 }

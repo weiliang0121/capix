@@ -1,5 +1,7 @@
 # Action、局部草稿与资源承诺边界：第十轮验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07。承接[真实调用生命周期与事实表示](invocation-lifecycle-facts-validation.md)。本轮只新增隔离实验与报告，不修改生产 Context／Relation、资源、Frame、恢复资格或现行原引用契约，不提交代码。
 
 ## 1. 本轮的边界与结论

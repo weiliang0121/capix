@@ -1,5 +1,7 @@
 # 固定事实、按需查询与当前组合：第十二轮验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 2026-11-07。承接[接纳固定契约验证](reception-contract-validation.md)。本轮只改隔离实验、计数和报告，未迁移生产 Context／Relation、Frame v5、原引用契约、取消规则或恢复资格，未提交代码。
 
 ## 1. 这轮回答的问题

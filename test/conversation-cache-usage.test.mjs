@@ -32,7 +32,7 @@ test('completion contract and CP codecs preserve optional cache counts and rejec
   }
 });
 
-test('cache usage and historical replies survive Interaction and CP persistence reopening', async (t) => {
+test('cache usage and current replies survive Interaction and CP persistence reopening', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'capix-cache-usage-'));
   const path = join(directory, 'conversation.sqlite');
   const opened = [];
@@ -53,7 +53,7 @@ test('cache usage and historical replies survive Interaction and CP persistence 
     await interaction.settled();
     const contextId = `completion-${results.length}`;
     const input = node.checkpoint.input.encode(request);
-    store.checkpoints.save({ id: `image-${results.length}`, formatVersion: 5, contract: { key: node.checkpoint.key, version: node.checkpoint.version }, point: point.name, frame: { owner: { contextId, kind: 'node' }, round: 1, phase: 'execute', input, currentInput: input, nextChildOrder: 0, children: [] }, state: point.state.encode(value), references: {} }, 0);
+    store.checkpoints.save({ id: `image-${results.length}`, formatVersion: 6, contract: { key: node.checkpoint.key, version: node.checkpoint.version }, point: point.name, frame: { owner: { contextId, kind: 'node' }, round: 1, phase: 'execute', input, currentInput: input, nextChildOrder: 0, children: [] }, state: point.state.encode(value), references: {} }, 0);
     store.checkpoints.finish(contextId, 1, { status: 'succeeded', output: node.checkpoint.output.encode(value), progress: { round: 1, currentInput: input, phase: 'execute' } });
     results.push({ contextId, interactionId: interaction.id, value });
   }

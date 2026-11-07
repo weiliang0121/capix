@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -29,56 +29,12 @@ function fixture(t) {
 }
 
 function image(id = 'image-1', contextId = 'root') {
-  return { id, formatVersion: 5, contract: { key: 'conversation.test', version: 1 }, point: 'waiting', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { text: 'question' }, currentInput: { text: 'question' }, nextChildOrder: 0, children: [] }, state: { step: 'answer' }, references: {} };
+  return { id, formatVersion: 6, contract: { key: 'conversation.test', version: 1 }, point: 'waiting', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { text: 'question' }, currentInput: { text: 'question' }, nextChildOrder: 0, children: [] }, state: { step: 'answer' }, references: {} };
 }
 
 function reply(text = 'answer') {
   return { id: 'reply', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
 }
-
-test('v1 migrates transactionally while retaining content, View and fixed entity receipts', (t) => {
-  const files = fixture(t);
-  const initial = files.open();
-  const content = loadConversationContent(initial);
-  content.transcript.applyFixed({ contract: { key: 'transcript.append', version: 1 }, operation: { parentContextId: 'parent', childContextId: 'child', position: 'answer' }, transcriptId: content.transcript.id, messages: [{ role: 'user', content: 'preserved' }] });
-  content.memories.applyFixed({ contract: { key: 'memories.apply', version: 1 }, operation: { contextId: 'memory', position: 'apply' }, memoriesId: content.memories.id, changes: [] });
-  const state = initial.load();
-  initial.close();
-  const legacy = new DatabaseSync(files.path);
-  for (const row of legacy.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) legacy.exec(`DROP TRIGGER ${row.name}`);
-  legacy.exec('DROP TABLE archive_usage');
-  legacy.exec('DROP TABLE checkpoint_values; DROP TABLE checkpoint_relations; DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1;');
-  legacy.close();
-
-  const migrated = files.open();
-  assert.deepEqual(migrated.load(), state);
-  assert.deepEqual(migrated.checkpoints.listRoots(), []);
-  assert.equal(migrated.interactions.read('unknown'), undefined);
-  migrated.checkpoints.save(image(), 0);
-  migrated.close();
-  const metadata = new DatabaseSync(files.path);
-  try {
-    assert.equal(metadata.prepare('PRAGMA user_version').get().user_version, 7);
-  } finally {
-    metadata.close();
-  }
-  assert.deepEqual(files.open().load(), state);
-});
-
-test('unrecognized v1 layouts are rejected before any migration or journal changes', (t) => {
-  const files = fixture(t);
-  const store = files.open();
-  loadConversationContent(store);
-  store.close();
-  const malformed = new DatabaseSync(files.path);
-  for (const row of malformed.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) malformed.exec(`DROP TRIGGER ${row.name}`);
-  malformed.exec('DROP TABLE archive_usage');
-  malformed.exec('DROP TABLE checkpoint_values; DROP TABLE checkpoint_relations; DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1; ALTER TABLE messages RENAME COLUMN body TO payload;');
-  malformed.close();
-  const bytes = readFileSync(files.path);
-  assert.throws(() => ConversationStore.open(files.path), PersistenceError);
-  assert.deepEqual(readFileSync(files.path), bytes);
-});
 
 test('checkpoint images and delivery survive reopen, retain detached frozen values and distinguish roots', (t) => {
   const files = fixture(t);
@@ -171,6 +127,21 @@ test('checkpoint write failure rolls back image/head together and closes admissi
   assert.deepEqual(reopened.checkpoints.listRoots(), []);
   assert.equal(reopened.checkpoints.read('root'), undefined);
   assert.equal(reopened.load().transcript.messages.length, 0);
+});
+
+test('closing a current store invalidates its retained checkpoint port', (t) => {
+  const files = fixture(t);
+  const store = files.open();
+  loadConversationContent(store);
+  const port = store.checkpoints;
+  port.save(image(), 0);
+  store.close();
+  assert.equal(store.checkpoints, port);
+  assert.throws(() => port.save(image('next'), 1), PersistenceError);
+  assert.throws(() => port.finish('root', 1, { status: 'failed' }), PersistenceError);
+  assert.throws(() => port.read('root'), PersistenceError);
+  assert.doesNotThrow(() => store.close());
+  assert.equal(files.open().checkpoints.read('root').image.id, 'image-1');
 });
 
 test('stored checkpoint corruption is a persistence failure, not a missing or resumable root', (t) => {

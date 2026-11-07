@@ -118,7 +118,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 - Interaction 有自己的生命；调用退出不等待其结束、不取消外部发送、不重发未知请求。晚到反馈仍可保存。
 - 技术故障已归属后不能由业务 catch 清除；声明异常按 ChildCallFailure 传播凭据判断，不能扫描原错误对象猜来源。
 
-普通调用只执行一次 run，业务循环每次建立新子调用；没有旧 continue/maxRounds 状态机。调用输入、输出和父接纳在事实成立边界固定为稳定数据；真实异常对象仍保持引用，另行固定其诊断。新保存使用 Frame v6，v5 可低层只读解释，新的执行恢复拒绝 v5 及旧 round 2/continuation 镜像。详见 [异常边界](exceptions.md)。
+普通调用只执行一次 run，业务循环每次建立新子调用；没有旧 continue/maxRounds 状态机。调用输入、输出和父接纳在事实成立边界固定为稳定数据；真实异常对象仍保持引用，另行固定其诊断。CP 只接收 Frame v6，旧格式不读取或迁移，执行恢复拒绝旧 round 2/continuation 镜像。详见 [异常边界](exceptions.md)。
 
 ### 调用独立包与装配接缝
 
@@ -268,7 +268,7 @@ sequenceDiagram
 
 接纳的异步作用域由调用包共享一个 AsyncLocalStorage 载体，每个父调用持有独立 owner，每次接纳建立带子调用身份的局部帧。嵌套接纳仍能查询有效祖先；并发链各自隔离，退出后帧失效。读取同一 owner 时只检查最近帧，不跳过失效帧借用外层权限。该载体不保存业务历史，也不为每个历史父调用保留独立异步钩子；200 会话验证曾暴露后者对所有后续 Promise 的传播成本。回归见 `test/invocation-reception-scope.test.mjs`。
 
-实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v6 保持完整逻辑直接关系、业务 state/refs、接纳契约位置及 handled 事实；物理提交只写新增固定正文、变化关系和 head，冷恢复完整重建。state/refs 仍每次完整提交，point.check 仍每次执行；缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md)。
+实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v6 保持完整逻辑直接关系、业务 state/refs、接纳契约位置及 handled 事实；物理提交只写新增固定正文、变化关系和 head，冷恢复完整重建。state 仍每次完整提交，point.check 仍每次执行；many refs 可用完整数组替换，也可显式传入有序选择并提交出现项增删。选择不隐式跨点沿用，缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md) 和[增量引用选择](checkpoint-selection.md)。
 
 ## 进展、观测与记录
 

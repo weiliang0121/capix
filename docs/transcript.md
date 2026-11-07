@@ -20,7 +20,7 @@ Scene 正式追加输入 → 任务 Group 获得 message / messageIndex
 
 ## 既有分段能力
 
-Transcript 仍保留 `activeStart`、`segments()` 和正式 `startSegment` 能力，历史分段继续恢复和观测。段之间共享同一份不可变消息，不复制正文、不删除旧段。默认服务不再自动调用 `startSegment`；已有分段用于迁移时确定初始活跃消息，索引建立后的维护不靠改写段边界表达。
+Transcript 仍保留 `activeStart`、`segments()` 和正式 `startSegment` 能力，历史分段继续恢复和观测。段之间共享同一份不可变消息，不复制正文、不删除旧段。默认服务不再自动调用 `startSegment`；分段是正式消息内容，活跃索引维护不靠改写段边界表达。
 
 `conversation/segment.ts` 保留串行消息的 `segmentCandidates` 辅助函数，可供显式策略使用；它调用消息包的相邻配对预设，另行选择最多两对历史消息的候选。这个数量和候选范围是服务策略，不是通用轮次实体，也不在默认提交链中自动执行。单独的历史选择声明同样保留为可选业务能力，不再决定默认请求材料。
 

@@ -6,7 +6,7 @@ import { runSample } from './fixture.mjs';
 
 /** Isolated diagnostic process only. These hooks must never be used for timing. */
 export async function relationQuerySample(plan, path) {
-  const counts = { relationSqlReads: 0, relationSqlRows: 0, relationSqlBytes: 0, relationEnvelopeParses: 0 };
+  const counts = { relationSqlReads: 0, relationSqlRows: 0, relationSqlBytes: 0, relationEnvelopeParses: 0, selectionSqlReads: 0, occurrenceSqlReads: 0 };
   const originalPrepare = DatabaseSync.prototype.prepare;
   const originalParse = JSON.parse;
   DatabaseSync.prototype.prepare = function (sql) {
@@ -21,6 +21,14 @@ export async function relationQuerySample(plan, path) {
           if (typeof row.body === 'string') counts.relationSqlBytes += Buffer.byteLength(row.body);
         }
         return row;
+      };
+    }
+    const kind = /SELECT body FROM checkpoint_selections WHERE context_id=\? AND id=\?/i.test(sql) ? 'selectionSqlReads' : /SELECT occurrence_id,ordinal,body FROM checkpoint_occurrences WHERE context_id=\? AND selection_id=\? AND occurrence_id=\?/i.test(sql) ? 'occurrenceSqlReads' : undefined;
+    if (kind) {
+      const originalGet = statement.get;
+      statement.get = function (...args) {
+        counts[kind]++;
+        return originalGet.apply(this, args);
       };
     }
     return statement;
@@ -50,7 +58,7 @@ export async function relationQuerySample(plan, path) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [path, output, n = '128', refs = 'all'] = process.argv.slice(2);
-  if (!path || !output || !['current', 'all'].includes(refs)) throw new Error('Pass NEW_DB OUTPUT_JSON [N] [current|all]');
+  if (!path || !output || !['current', 'all', 'incremental'].includes(refs)) throw new Error('Pass NEW_DB OUTPUT_JSON [N] [current|all|incremental]');
   const result = await relationQuerySample({ family: 'growth', n: Number(n), refs, inputBytes: 1024, valueBytes: 64 }, path);
   await writeFile(output, JSON.stringify(result) + '\n', { flag: 'wx', mode: 0o600 });
   console.log(JSON.stringify({ status: result.status, counts: result.counts, changedParentRelations: result.changedParentRelations }));

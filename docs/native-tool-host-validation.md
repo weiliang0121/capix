@@ -1,5 +1,7 @@
 # 工具宿主闭环验证
 
+> 历史设计／验证记录：下文版本、测量和“下一步”保留当轮语境，不是当前兼容承诺。现行接口见 [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)；旧格式与数据库策略见[开发期兼容](development-compatibility.md)。文档脉络见[导航](README.md)。
+
 日期：2026-11-06。范围为 CLI/Web 工具模式、真实历史工具、入口归档门槛、集合按次载入/卸载、根 CP 续接与阶段交付。实现关系见 [宿主设计](native-tool-host-integration.md)，复现入口见 [tool-host-study](../examples/tool-host-study/README.md)。
 
 ## 交付与边界

@@ -4,7 +4,7 @@
 
 服务启动不自动恢复未完成步骤、本地等待队列与服务提交身份。新调用默认保存 checkpoint，内置对话、决策、文件与记忆声明可在有可靠依据的位置由宿主显式续接，见 [Checkpoint](checkpoints.md)；它不重放原 Promise、输入接纳或旧提交反馈。独立 Interaction 另行保存固定模型请求与已接收反馈，允许按 ID 读取，不自动重发。历史记录用于解释已经观测到的过程，不能用于驱动旧执行。暂不新增 Thread、任务账本或后台工作队列。
 
-当前 checkpoint 使用 Frame v4，Scene/任务 Group 的声明契约分别为 version 4/6。v1/v2/v3 及未知恢复格式返回 `CHECKPOINT_FORMAT_UNSUPPORTED`，不自动迁移旧 image；它们存于同一库中不会阻止健康消息、记忆、历史记录读取，也不会阻止新调用产生 v4。
+当前 checkpoint 使用 Frame v6，Scene/任务 Group 的声明契约分别为 version 5/7。旧 CP 格式在读取边界拒绝，不保留旧格式解析或自动转换。数据库只打开当前格式；旧版本文件拒绝打开，不升级、不清空、不覆盖。要开始新的本地数据集，应保留旧文件并显式指定新的 `CAPIX_DATA_DIR`。
 
 ## 依赖与位置
 
@@ -12,7 +12,7 @@
 
 `pnpm start` 默认使用仓库 `.capix/observer.sqlite`；`CAPIX_DATA_DIR` 可覆盖目录。目录自动创建，数据库与已有 SQLite sidecar 文件设为 `0600`，新目录为 `0700`。数据目录必须位于 `CAPIX_FILES_ROOT` 之外，避免对话文件能力访问消息、记忆和记录存储。`.capix/` 已被 Git 忽略。
 
-数据库启用 WAL、`synchronous=FULL` 和外键检查，当前保持独占锁，一个数据库只支持一个写服务。第二个服务启动明确失败，不用各自内存副本竞争写入。数据库格式使用 `user_version=6`，v1 先增加独立 interactions 表，再由 v2 迁移对话目录和来源归属。v3→v4 增加 `transcript_appends`，保存固定消息操作的依据与凭据。v4→v5 增加 `memory_applies` 与 `file_creations`，分别保存固定记忆批次和文件创建意图/凭据。v5→v6 增加 `active_content`，保存所属消息/记忆集合的活跃成员与索引修订；旧库以当前消息段和全部已有记忆初始化，不重新激活已归档段。旧内容成为默认对话，保留原实体与记录身份；未知版本及内容损坏拒绝加载，不静默清空或创建空对话替代。恢复接口分为 `ObserverStoredContent`（version 1）和 `ObserverStoredRecording`，与数据库格式版本分别维护。
+数据库启用 WAL、`synchronous=FULL` 和外键检查，当前保持独占锁，一个数据库只支持一个写服务。第二个服务启动明确失败，不用各自内存副本竞争写入。Observer 的当前数据库格式为 `user_version=6`，新库一次建立内容、固定效果、活跃索引、交互、记录及 CP 所需表。已存在的库必须同时满足版本与完整表形状，版本号相同不替代形状核验。旧版本、缺表、未知表形状或内容损坏均明确拒绝，不通过自动建表补齐旧库，不静默创建空对话替代。恢复接口分为 `ObserverStoredContent`（version 1）和 `ObserverStoredRecording`，与数据库格式版本分别维护；并排的新对话服务使用独立的 schema 8，不能混用两个服务的库。
 
 程序化装配保持显式：
 
