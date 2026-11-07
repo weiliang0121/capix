@@ -167,3 +167,14 @@ node examples/checkpoint-computation/fixed-boundary.mjs --out NEW_DIRECTORY
 ```
 
 每配置两个独立进程，Runner 用三层调用比较原始对象和已固定值，服务每次建立相同32条历史并执行一次真实材料装配、离线Provider及正式消息追加。构建与 `stableValue` 预固定成本单独记录；服务没有模型网络等待、CP、记录器或SQLite。字符串本身不可变，2 MiB文本不意味着要复制2 MiB字符。100,000项对象则会在未知输入进入时遍历一次。原始/可信对照来自同一版本，不能冒充迁移前后对照；服务总耗时还包含Schema、JSON、实体与资源操作，不能全部归因于稳定值。
+
+## SQLite 关系读取诊断
+
+`relation-query.mjs` 在独立 diagnostic 进程中观察关系行点查、非空行、返回编码字节及 child 封套解析次数，复用原有提交探针计数变化关系。它不修改生产实现，退出时恢复临时挂钩；带挂钩的耗时不能用于性能比较。
+
+```sh
+node examples/checkpoint-computation/relation-query.mjs NEW_DB NEW_JSON 128 all
+node --test test/checkpoint-relation-query-benchmark.test.mjs
+```
+
+模式支持 `current|all`。SQL返回字节不是物理磁盘I/O；解析复用不意味着减少SQL读取或refs认证。计时继续使用上面的 `--suite migration --case ... --mode timing`。本轮构建摘要、直接基线与扩展结果见[关系查询验证](../../docs/checkpoint-relation-query-validation.md)。

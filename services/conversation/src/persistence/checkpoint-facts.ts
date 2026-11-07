@@ -1,7 +1,7 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { CheckpointCommit, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from '@capix/checkpoint';
 import { cloneCheckpointDelivery, checkpointFinishReceipt } from '@capix/checkpoint';
-import { prepareCheckpointCommit, materializeCheckpointHead, encodeCheckpointRecord, decodeCheckpointRecord, isCheckpointRecord, encodeCheckpointData, type CheckpointStoredHead, type CheckpointStoredChild, type CheckpointStoredValue } from '@capix/checkpoint/storage';
+import { prepareCheckpointCommit, materializeCheckpointHead, encodeCheckpointRecord, decodeCheckpointRecord, isCheckpointRecord, encodeCheckpointData, type CheckpointStoredHead, type CheckpointStoredChild, type CheckpointStoredValue, type CheckpointRelationCache, type CheckpointRelationRow } from '@capix/checkpoint/storage';
 import { RecoveryConflict } from './recovery.js';
 import { RuntimeError } from '@capix/contracts';
 import { encodeCheckpointStorage, decodeCheckpointStorage, decodeCheckpointDelivery } from './checkpoint-storage.js';
@@ -10,7 +10,7 @@ type Row = Record<string, string | number | bigint | Uint8Array | null>;
 const select = 'SELECT h.context_id, h.revision, h.image_id, h.delivery, i.context_id AS image_context, i.revision AS image_revision, i.body FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id = h.image_id';
 
 /** The caller owns the transaction. No second invocation state or process-global cache. */
-export function saveCheckpointFacts(database: DatabaseSync, request: CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt {
+export function saveCheckpointFacts(database: DatabaseSync, request: CheckpointCommit, expectedRevision: number, relations: CheckpointRelationCache): CheckpointSaveReceipt {
   const contextId = request.frame.owner.contextId;
   const row = database.prepare(`${select} WHERE h.context_id = ?`).get(contextId);
   if (row && (typeof row.body !== 'string' || !isCheckpointRecord(row.body))) throw conflict('Legacy checkpoint scope cannot advance under stable facts');
@@ -24,7 +24,7 @@ export function saveCheckpointFacts(database: DatabaseSync, request: CheckpointC
   const imageStatement = database.prepare('SELECT 1 FROM checkpoint_images WHERE id = ?');
   let bodyStatement: StatementSync | undefined;
   const readValue = readOnce((id) => valueInfo(valueStatement, contextId, id));
-  const readChild = readOnce((id) => childInfo(childStatement, contextId, id));
+  const readChild = readOnce((id) => relations.decode(contextId, id, childStatement.get(contextId, id) as CheckpointRelationRow | undefined));
   const readBody = readOnce((id) => valueBody((bodyStatement ??= database.prepare('SELECT body FROM checkpoint_values WHERE context_id=? AND id=?')), contextId, id));
   const plan = prepare(() =>
     prepareCheckpointCommit(request, expectedRevision, {
@@ -97,11 +97,6 @@ function valueBody(statement: StatementSync, contextId: string, id: string): str
   if (body === null || body === undefined) return undefined;
   if (typeof body !== 'string') throw new Error('Invalid checkpoint value body');
   return JSON.stringify(decodeCheckpointStorage(body));
-}
-
-function childInfo(statement: StatementSync, contextId: string, id: string): CheckpointStoredChild | undefined {
-  const row = statement.get(contextId, id);
-  return row ? decodeChild(row) : undefined;
 }
 
 function readOnce<Value>(read: (id: string) => Value): (id: string) => Value {

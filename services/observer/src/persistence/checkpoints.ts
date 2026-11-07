@@ -3,7 +3,7 @@ import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
 import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt, checkpointHeadCommit, CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
 import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt, CheckpointCommit } from '@capix/checkpoint';
-import { isCheckpointRecord, checkpointImageCommit } from '@capix/checkpoint/storage';
+import { isCheckpointRecord, checkpointImageCommit, CheckpointRelationCache } from '@capix/checkpoint/storage';
 import { initializeCheckpointRetention } from './checkpoint-retention.js';
 import { initializeCheckpointFacts, saveCheckpointFacts, readCheckpointFacts, finishCheckpointFacts } from './checkpoint-facts.js';
 
@@ -11,6 +11,7 @@ type Row = Record<string, string | number | bigint | Uint8Array | null>;
 
 /** Uses the host's single-writer connection; checkpoint commits never include content or records. */
 export class SqliteCheckpointStore implements CheckpointStore {
+  readonly #relations = new CheckpointRelationCache();
   constructor(private readonly database: DatabaseSync) {
     this.transaction(() => {
       initializeCheckpointRetention(this.database);
@@ -23,19 +24,20 @@ export class SqliteCheckpointStore implements CheckpointStore {
     try {
       return this.readHead(contextId);
     } catch (cause) {
+      this.#relations.clear();
       if (cause instanceof RuntimeError && cause.code === 'CHECKPOINT_FORMAT_UNSUPPORTED') throw cause;
       throw storageFailure(cause);
     }
   }
 
   save(image: CheckpointImage | CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt {
-    if ('kind' in image && image.kind === 'commit') return this.transaction(() => saveCheckpointFacts(this.database, image, expectedRevision));
+    if ('kind' in image && image.kind === 'commit') return this.transaction(() => saveCheckpointFacts(this.database, image, expectedRevision, this.#relations));
     const fixed = cloneCheckpointImage(image);
     requireRevision(expectedRevision);
     if (fixed.formatVersion === 6) {
       this.transaction(() => {
         const current = this.readHead(fixed.frame.owner.contextId);
-        return saveCheckpointFacts(this.database, checkpointImageCommit(fixed, current && checkpointHeadCommit(current)), expectedRevision);
+        return saveCheckpointFacts(this.database, checkpointImageCommit(fixed, current && checkpointHeadCommit(current)), expectedRevision, this.#relations);
       });
       return checkpointSaveReceipt(fixed, expectedRevision + 1);
     }
@@ -62,16 +64,20 @@ export class SqliteCheckpointStore implements CheckpointStore {
     requireContext(contextId);
     requireRevision(expectedRevision);
     const fixed = cloneCheckpointDelivery(delivery);
-    return this.transaction(() => {
-      const row = this.database.prepare('SELECT h.context_id,h.revision,h.image_id,h.delivery,i.context_id AS image_context,i.revision AS image_revision,i.body FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id=h.image_id WHERE h.context_id=?').get(contextId);
-      if (row && typeof row.body === 'string' && isCheckpointRecord(row.body)) return finishCheckpointFacts(this.database, row, expectedRevision, fixed);
-      const current = this.readHead(contextId);
-      if (!current) throw conflict('Cannot finish a checkpoint scope without a saved image');
-      requireCurrent(current, expectedRevision);
-      const revision = expectedRevision + 1;
-      requireWrite(this.database.prepare('UPDATE checkpoint_heads SET revision = ?, delivery = ? WHERE context_id = ? AND revision = ? AND delivery IS NULL').run(revision, JSON.stringify(fixed), contextId, expectedRevision).changes);
-      return checkpointFinishReceipt(contextId, current.image.id, fixed, revision);
-    });
+    try {
+      return this.transaction(() => {
+        const row = this.database.prepare('SELECT h.context_id,h.revision,h.image_id,h.delivery,i.context_id AS image_context,i.revision AS image_revision,i.body FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id=h.image_id WHERE h.context_id=?').get(contextId);
+        if (row && typeof row.body === 'string' && isCheckpointRecord(row.body)) return finishCheckpointFacts(this.database, row, expectedRevision, fixed);
+        const current = this.readHead(contextId);
+        if (!current) throw conflict('Cannot finish a checkpoint scope without a saved image');
+        requireCurrent(current, expectedRevision);
+        const revision = expectedRevision + 1;
+        requireWrite(this.database.prepare('UPDATE checkpoint_heads SET revision = ?, delivery = ? WHERE context_id = ? AND revision = ? AND delivery IS NULL').run(revision, JSON.stringify(fixed), contextId, expectedRevision).changes);
+        return checkpointFinishReceipt(contextId, current.image.id, fixed, revision);
+      });
+    } finally {
+      this.#relations.forget(contextId);
+    }
   }
 
   private readHead(contextId: string): CheckpointHead | undefined {
@@ -93,6 +99,7 @@ export class SqliteCheckpointStore implements CheckpointStore {
       this.database.exec('COMMIT');
       return result;
     } catch (cause) {
+      this.#relations.clear();
       if (begun && this.database.isTransaction) {
         try {
           this.database.exec('ROLLBACK');

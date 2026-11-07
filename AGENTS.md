@@ -97,6 +97,7 @@
 - 当前 CP 支持 run 内明确点、等待关系、成功返回/接纳、以及已完成 failed 接收的 handled 值；不复活失败子调用或重跑已处理回调。Frame v6 的完整逻辑关系与业务 state/refs 分开；物理提交只写新增固定正文、变化关系和当前 head，refs 仍是作者显式选择的认证子集。历史 round/continuation 诊断格式仍可读取，新执行恢复明确拒绝 round !== 1 或含 continuation 的镜像。父契约版本与固定成员位置关联跨进程声明，位置/含义变化需升版本。v1/v2/v3/v4/v5 均不进入新的执行恢复，不把 v5 原引用语义自动升级；低层 v5 只读核验及既有内容/记录仍保留。childContextId、直接归属、order 为准确依据，key 不是身份；未知或缺失依据不重发。
 - 同步 CheckpointStore 的不可变 image、head revision 与最终交付独立于 Recorder；内存与 SQLite 两种实现。宿主复用同一端口并独占恢复入口，本地防并发不是跨进程租约。每个 image/delivery 8 MiB，严格纯数据边界；不自动迁移声明版本。
 - CP v6 热保存只处理未发布事实和变化关系，旧稳定输入/交付/接纳不重新编码或重检 reception。每次仍完整提交 state/refs、按点核验全部选择并执行 point.check；查询端口仅在本次同步 check 内有效，已取出的稳定值可保留，Promise/thenable、重入及查询逃逸拒绝。many 仍为有序完整数组，重复项保留；有序增量 refs、按 point 的作者认证 basis 尚未迁移，不宣称作者成本已增量化。完整逻辑 Frame 按出现次数计费，8 MiB/100000 值/深度64/4096直接关系不因物理去重放宽；冷读取完整重建并复检。Head.publication 是可序列化的准确块引用元数据，冷核对其与完整 Image 一致后才能复用，不依赖 JS 对象身份或赋予恢复资格。旧 v5 行的有界推进缓存仅留在兼容路径。
+- SQLite v6 的关系解析缓存按单个 Store/连接共享，owner/child 隔离身份；默认4,096项/16 MiB计费材料，多会话共用该容量，可能相互挤出缓存。每次仍核对准确 SQL 行；淘汰只增加重新解析成本，不删除持久事实、不改变恢复资格或引用认证，不把单会话命中率外推为多会话性能承诺。
 - Transcript 的固定 applyFixed 在真实子接纳范围派生父子身份，业务只提供position和消息。实体将依据／凭据和消息同事务提交，重复同依据返回原位置，不重复发布；异依据冲突。资源端点与 CP writer 绑定当前窗口，离开后失效；CP resume 使用独立资源/行动窗口，正常 run 和其中的操作接收共用正常窗口。
 - 恢复使用新 activityId 的 CheckpointFact：历史 installed 基线与新变化分开；恢复调用事实不写原 Recorder/Invocation changes；实体新变化仍经自身出口发布。不装 Recorder 仍可恢复。观测默认隔离，可显式传播；最终交付提交后通知失败不能修改已固定交付。
 - Memories 固定批次按本 A 身份与效果位置确认，变更与凭据同事务；重复确认不占新顺序。宿主恢复使用原记忆快照，并核对原 E 精确子树中连续的落实凭据及当前正文。WorkspaceFiles 固定创建先保存 pending、同步文件与目录、再保存凭据；已确认只读原结果，pending 明确未知，不从文件存在猜成功或重写。

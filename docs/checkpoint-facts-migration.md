@@ -97,7 +97,7 @@ Memory、Conversation SQLite 和 Observer SQLite 已适配。Conversation 数据
 
 测试与测量产物集中在 `.capix/stable-facts-migration-20261107/`；本轮不调用真实模型或改动用户运行数据库。
 
-最终 `pnpm check` 全部通过：工作区构建、类型检查、3,289 项测试（0 失败、0 跳过）及全仓格式检查。完整日志为 `.capix/stable-facts-migration-20261107/check-final.log`；`git diff --check` 亦通过。原有未提交工作与前几轮实验保留，本轮尚未提交。
+最终 `pnpm check` 全部通过：工作区构建、类型检查、3,289 项测试（0 失败、0 跳过）及全仓格式检查。完整日志为 `.capix/stable-facts-migration-20261107/check-final.log`；`git diff --check` 亦通过。这组迁移、既有优化与前几轮验证已于后续推进前提交为 `ee96942`。
 
 ## 6. 性能与尚存成本
 
@@ -112,3 +112,5 @@ Memory、Conversation SQLite 和 Observer SQLite 已适配。Conversation 数据
 已明确保留的成本：完整 refs 数组重复提交、作者全量 check、大 state 重编码、首次隔离大输入、实体每个 revision 首次构造完整快照、活调用持有全部关系，以及冷恢复完整认证。它们不因本轮已固定旧正文而自动变成常量。
 
 这次迁移不将未完成的 many API、实体分块、内存卸载或保留策略打包成新框架概念。后续按实际成本继续推进，也不把强制 continue-as-new 当作解决这些问题的前提。
+
+基线提交后的首个小闭环见[关系查询优化与复验](checkpoint-relation-query-validation.md)。它保持存储读回和引用认证范围，只复用准确未变行的解析结果；本节性能数字仍指上面这轮迁移本身。

@@ -315,7 +315,7 @@ for (const kind of ['observer', 'conversation']) {
 }
 
 for (const kind of ['observer', 'conversation']) {
-  test(`${kind}: one commit reuses row reads without retaining them across saves or skipping ref checks`, (t) => {
+  test(`${kind}: each commit rereads current rows while repeated refs share that commit's reads`, (t) => {
     const h = fixture(t, kind);
     const first = initial();
     h.store.save(first, 0);
@@ -361,7 +361,7 @@ for (const kind of ['observer', 'conversation']) {
     assert.ok(!updated.includes('state-2'), 'unchanged state must not rewrite old metadata');
     h.store.save(next(4), 3);
     assert.deepEqual(prepared, { child: 2, value: 2 });
-    assert.equal(reads.child.get('child'), 2, 'the next commit rereads and decodes the relation');
+    assert.equal(reads.child.get('child'), 2, 'the next commit rereads the current row; unchanged parsing may be reused');
     assert.throws(() => h.store.save(next(5, [childRef, { ...childRef, target: { position: 1 } }]), 4), /reference|storage|persistence/i, 'each occurrence is checked even when the row is reused');
     assert.equal(reads.child.get('child'), 3);
     h.reopen();

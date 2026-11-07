@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { cloneCheckpointImage, cloneCheckpointDelivery, cloneCheckpointValue, checkpointSaveReceipt, checkpointFinishReceipt, checkpointHeadCommit, type CheckpointStore, type CheckpointImage, type CheckpointDelivery, type CheckpointHead, type CheckpointSaveReceipt, type CheckpointFinishReceipt, type CheckpointCommit } from '@capix/checkpoint';
-import { isCheckpointRecord, checkpointImageCommit } from '@capix/checkpoint/storage';
+import { isCheckpointRecord, checkpointImageCommit, CheckpointRelationCache } from '@capix/checkpoint/storage';
 import { z } from 'zod';
 import { RecoveryConflict, requireIdentity, requireRevision, type RecoveryTransaction } from './recovery.js';
 import { encodeCheckpointStorage, decodeCheckpointImage, decodeCheckpointDelivery } from './checkpoint-storage.js';
@@ -28,6 +28,7 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
   // Hold stable advancement fields, never a Frame/children or terminal delivery.
   // The byte charge bounds encoded retained material, not exact JavaScript RSS.
   #previous = new Map<string, CachedBasis>();
+  readonly #relations = new CheckpointRelationCache();
   #cachedBytes = 0;
   constructor(
     private readonly database: DatabaseSync,
@@ -37,16 +38,17 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
   /** Host cleanup only; not part of the public checkpoint persistence port. */
   clearCache(): void {
     this.#previous.clear();
+    this.#relations.clear();
     this.#cachedBytes = 0;
   }
 
   read(contextId: string): CheckpointHead | undefined {
     requireIdentity(contextId);
-    return this.transaction('checkpoint.read', () => this.readCurrent(contextId));
+    return this.withTransaction('checkpoint.read', () => this.readCurrent(contextId));
   }
 
   listRoots(): readonly CheckpointHead[] {
-    return this.transaction('checkpoint.list', () => {
+    return this.withTransaction('checkpoint.list', () => {
       if (this.database.prepare('SELECT 1 FROM checkpoint_images i LEFT JOIN checkpoint_heads h ON h.context_id = i.context_id WHERE h.context_id IS NULL LIMIT 1').get()) throw new Error('Checkpoint images have no owning head');
       if (this.database.prepare('SELECT 1 FROM checkpoint_values v LEFT JOIN checkpoint_heads h ON h.context_id=v.context_id WHERE h.context_id IS NULL UNION ALL SELECT 1 FROM checkpoint_relations r LEFT JOIN checkpoint_heads h ON h.context_id=r.context_id WHERE h.context_id IS NULL LIMIT 1').get()) throw new Error('Checkpoint facts have no owning head');
       const roots: CheckpointHead[] = [];
@@ -62,13 +64,13 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
   }
 
   save(image: CheckpointImage | CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt {
-    if ('kind' in image && image.kind === 'commit') return this.transaction('checkpoint.save', () => saveCheckpointFacts(this.database, image, expectedRevision));
+    if ('kind' in image && image.kind === 'commit') return this.withTransaction('checkpoint.save', () => saveCheckpointFacts(this.database, image, expectedRevision, this.#relations));
     const fixed = cloneCheckpointImage(image);
     requireRevision(expectedRevision);
     if (fixed.formatVersion === 6) {
-      this.transaction('checkpoint.save', () => {
+      this.withTransaction('checkpoint.save', () => {
         const current = this.readCurrent(fixed.frame.owner.contextId);
-        return saveCheckpointFacts(this.database, checkpointImageCommit(fixed, current && checkpointHeadCommit(current)), expectedRevision);
+        return saveCheckpointFacts(this.database, checkpointImageCommit(fixed, current && checkpointHeadCommit(current)), expectedRevision, this.#relations);
       });
       return checkpointSaveReceipt(fixed, expectedRevision + 1);
     }
@@ -76,7 +78,7 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
     let candidate: CachedBasis | undefined;
     let receipt: CheckpointSaveReceipt;
     try {
-      receipt = this.transaction('checkpoint.save', () => {
+      receipt = this.withTransaction('checkpoint.save', () => {
         const previous = this.readPrevious(contextId);
         const current = previous?.basis;
         requireCurrent(current, expectedRevision);
@@ -114,7 +116,7 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
     requireRevision(expectedRevision);
     const fixed = cloneCheckpointDelivery(delivery);
     try {
-      return this.transaction('checkpoint.finish', () => {
+      return this.withTransaction('checkpoint.finish', () => {
         const row = this.readRow(contextId);
         if (row && isCheckpointRecord(row.body)) return finishCheckpointFacts(this.database, row, expectedRevision, fixed);
         const current = this.readPrevious(contextId)?.basis;
@@ -127,6 +129,17 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
       });
     } finally {
       this.forget(contextId);
+      this.#relations.forget(contextId);
+    }
+  }
+
+  private withTransaction<Result>(operation: string, work: () => Result): Result {
+    try {
+      return this.transaction(operation, work);
+    } catch (error) {
+      // Includes COMMIT failures after the callback and use of a closed host.
+      this.clearCache();
+      throw error;
     }
   }
 
