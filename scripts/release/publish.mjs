@@ -12,13 +12,6 @@ try {
   const plan = join(temporary, 'plan.json');
   command('pnpm', ['exec', 'changeset', 'status', '--output', plan]);
   assert.equal((await json(plan)).releases.length, 0, 'Run release:version and review its changes before publishing');
-  if (process.env.GITHUB_ACTIONS === 'true') {
-    assert.equal(process.env.GITHUB_REF, 'refs/heads/main', 'Only main may publish');
-    assert.ok(process.env.ACTIONS_ID_TOKEN_REQUEST_URL, 'GitHub OIDC permission is required');
-    assert.ok(process.env.npm_config_npm_path, 'Pin the npm executable used by pnpm publish');
-    const version = command(process.env.npm_config_npm_path, ['--version'], { encoding: 'utf8', stdio: 'pipe' }).trim().split('.').map(Number);
-    assert.ok(version[0] > 11 || (version[0] === 11 && (version[1] > 5 || (version[1] === 5 && version[2] >= 1))), 'Trusted publishing requires npm >= 11.5.1');
-  }
   const archives = await check();
   const environment = { ...process.env, npm_config_registry: registry, NPM_CONFIG_PROVENANCE: 'false', npm_config_provenance: 'false' };
   const publication = join(temporary, 'publication.json');

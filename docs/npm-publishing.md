@@ -28,30 +28,32 @@ pnpm release:check
 
 检查或打包不会发布 npm。发布前审阅实际打包列表，确认未包含密钥、私有路径或不应公开的文本。
 
-## 第一次发布与 npm 设置
+## 第一次本地发布
 
-新包不能仅凭 GitHub OIDC 创建完整信任关系：先手动发布一次，才能在 npm 包设置中登记 trusted publisher。官方 Changesets 指南也采用这种 bootstrap 方式，参见 [首次发布](https://changesets.dev/guide/versioning-and-publishing#publishing-for-the-first-time)。
+发布由维护者在本地终端完成。GitHub 只保留 CI 与自动版本 PR，不需要配置 npm GitHub token、trusted publisher 或发布 Environment。
 
-1. 使用已确定的 CAPiX 品牌与 `@weiliang0121` scope。维护者使用持有该 scope 的 npm 账户，确认本次 17 个准确包名和版本；本地验证不能证明远端名称占用或发布权限。
-2. 在干净的、已审阅提交上完成上述验证。当前初始版本是 `0.1.0`；bootstrap 可直接发布这批真实包，不创建占位包，也不先运行 `release:version` 把版本推进一轮。
-3. 由维护者在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天。
-4. 执行 `pnpm release:publish` 发布当前尚未存在的版本。此命令会写入 npm，只有决定正式首发时才执行；多包发布不是原子事务，失败后先核对 registry 中每个准确版本，再对同一已验证提交补齐未发布包。
-5. 对每个 npm 包单独设置 trusted publisher：GitHub owner、repository 必须准确匹配实际私有仓库；workflow filename 填 `publish.yml`；environment 填 `npm`；显式允许直接 `npm publish`。当前流程不用 `npm stage publish`。
-6. 当前 npm 要求新配置在两天内首次成功发布，否则配置过期，需删除重建。可在准备下次发布时设置这些 publisher，避免 bootstrap 后长期闲置导致失效。确认 OIDC 正常后，可按 npm 设置限制传统 token 发布。
+1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次 17 个准确包名及其发布权限。本地验证不能证明远端名称占用或发布权限。
+2. 在干净的、已审阅提交上完成上述验证。当前首发版本为 `0.1.0`，直接发布当前真实包；首发前不运行 `release:version`，不额外推进版本。
+3. 在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天；发布时按终端提示完成认证。
+4. 执行 `pnpm release:publish`，上传当前尚未存在的版本。此命令会写入 npm，只有决定正式发布时才执行。
 
-当前 npm trusted publishing 要求 npm CLI ≥11.5.1、Node ≥22.14.0，并支持 GitHub 托管 runner；workflow 使用固定 npm 11.6.2。仓库使用的 pnpm 10.7.1 本身会把实际上传委托给 npm：Changesets 3.0.3 → `pnpm publish` → `runNpm`。workflow 显式设置 `npm_config_npm_path` 到升级后的 npm 可执行文件，因此认证落到支持 OIDC 的 npm，而非假设升级全局 npm 就能改变所有包管理器的行为。依据：[Changesets pnpm 适配](https://github.com/changesets/changesets/blob/%40changesets%2Fcli%403.0.3/packages/cli/src/lib/pnpm.ts)、[pnpm 10.7.1 发布实现](https://github.com/pnpm/pnpm/blob/v10.7.1/releasing/plugin-commands-publishing/src/publish.ts)、[npm 官方设置与限制](https://docs.npmjs.com/trusted-publishers/)。
+多包发布不是原子事务。失败后先核对 registry 中每个准确版本，再从同一已审阅提交补齐未发布包。npm 每个准确版本只能发布一次；脚本只上传尚未发布且通过本次产物验收的版本。Changesets 可能创建本地版本 tags；当前流程不推送 tag、不创建 GitHub Release。
 
-私有 GitHub 仓库可使用 OIDC，但不生成 npm provenance。workflow 显式设置 `NPM_CONFIG_PROVENANCE=false`，不尝试公开源码或开启来源证明。将来若公开仓库，需要独立决定是否启用 provenance。[npm provenance 条件](https://docs.npmjs.com/trusted-publishers/#automatic-provenance-generation)
+## GitHub 设置与后续发布
 
-## GitHub 设置与日常发布
+- 在仓库 Actions 设置中允许 GitHub Actions 创建 PR。`version.yml` 使用仓库内置的 `GITHUB_TOKEN`，只授予 `contents: write` 和 `pull-requests: write`，无需长期 PAT。
+- CI 对 main 的 push、PR 及手动运行执行全仓检查和发布包验证，不具有发布权限。Actions 以完整提交 SHA 固定版本；升级需单独审阅。
+- 修改需要发布的行为或公开契约后，作者运行 `pnpm changeset`，选择实际修改的包和 bump 类型，说明用户可观察到的变化。Changeset 随代码合并到 main 后，`Version packages` 自动创建或更新版本 PR，执行 `pnpm release:version`，更新版本、CHANGELOG 与锁文件。当前使用 `changesets/action/version` v2.1.2 配合 CLI v3.0.3。
+- 内置 `GITHUB_TOKEN` 创建或更新版本 PR 时，`opened`、`synchronize`、`reopened` 对应的 PR CI 运行需要批准。维护者可使用 **Approve workflows to run** 批准，或在 Actions 手动运行 `CI` 并选择版本 PR 分支，核对该分支当前提交的结果。参见 [GitHub 工作流触发规则](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)。
+- 人工审阅并合并版本 PR 后，在本地拉取 main 的已审阅提交并发布。合并本身不会发布 npm。
 
-- 在仓库 Actions 设置中允许 GitHub Actions 创建 PR。`version.yml` 使用仓库内置的 `GITHUB_TOKEN`，只授予 `contents: write` 和 `pull-requests: write`。不配置长期 PAT。
-- 创建名为 `npm` 的 GitHub Environment，并限制到 main；若当前 GitHub 计划支持，可添加 required reviewers。npm publisher 的 environment 必须与工作流完全一致。手动启动工作流仍会受已有环境保护规则约束。
-- CI 对 main 的 push、PR 及手动运行执行全仓检查和发布包验证，不具有发布权限。Actions 以完整提交 SHA 固定到已核实的正式版本；版本升级需单独审阅。
-- `Version packages` 在 main 收到 changeset 后创建版本 PR，执行 `pnpm release:version`，刷新版本、CHANGELOG 与锁文件。它没有 npm token、OIDC 权限或 publish 步骤。当前使用 `changesets/action/version` v2.1.2 配合 CLI v3.0.3，不能直接替换成仅兼容 CLI v2 的 action v1。
-- 内置 `GITHUB_TOKEN` 创建或更新 PR 不会触发常规 PR CI。维护者须从 Actions 手动运行 `CI`，选择版本 PR 的分支，并检查该分支当前提交的结果；也可以在本地完成同样验证。若需要全自动触发，应独立配置 GitHub App，不默认引入 PAT。参见 [GitHub 的工作流触发限制](https://docs.github.com/en/actions/how-tos/writing-workflows/choosing-when-your-workflow-runs/triggering-a-workflow#triggering-a-workflow-from-a-workflow)。
-- 审阅版本 PR 并合并后，选择 main 手动启动 `Publish packages`，输入准备发布的完整 40 位提交 SHA。工作流核对其与本次 main 运行提交一致，再从该提交重新安装、检查和打包。非 main 运行会跳过发布。后续 main 推进不会替换本次已经选定的提交。
-- 发布 job 只有 `contents: read` 与 `id-token: write`，使用 GitHub 托管 `ubuntu-24.04` 和 `npm` 环境，通过 OIDC 发布。无需 `NPM_TOKEN`、`NODE_AUTH_TOKEN` 或 `registry-url` 的 token 配置。发布构建不复用依赖缓存。
-- Changesets 可能创建本地版本 tags；当前工作流不推送 tag、不创建 GitHub Release。npm 每个准确版本只能发布一次；若部分包已经成功，重跑前核对版本和日志，保持同一已审阅提交及产物。
+```sh
+git switch main
+git pull --ff-only
+pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
+pnpm check
+pnpm release:check
+pnpm release:publish
+```
 
-品牌、scope 和包名已确定；本轮仅完成发布准备与本地验证，不执行 npm 发布。npm 登录与 2FA、首次发布、每包 trusted publisher、GitHub 环境保护和真实 OIDC 发布仍需维护者在相应服务落实，不能由离线检查证明。
+执行前确认工作区干净，拉取后核对准备发布的提交。`release:publish` 会再次执行产物验收；npm 登录和 2FA 仍由维护者在终端完成。
