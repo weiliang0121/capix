@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { check } from './check.mjs';
 import { command, json, registry, releaseDirectory } from './packages.mjs';
 import { verifiedPlan } from './plan.mjs';
+import { upload } from './upload.mjs';
 
 const temporary = await mkdtemp(join(tmpdir(), 'capix-publish-'));
 try {
@@ -18,7 +19,7 @@ try {
   command('pnpm', ['exec', 'changeset', 'publish-plan', '--output', publication], { env: environment });
   const verified = await verifiedPlan(await json(publication), archives, releaseDirectory);
   await writeFile(join(releaseDirectory, 'publish-plan.json'), JSON.stringify(verified, null, 2) + '\n');
-  command('pnpm', ['exec', 'changeset', 'publish', '--from-pack-dir', releaseDirectory], { env: environment });
+  await upload(verified, releaseDirectory);
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

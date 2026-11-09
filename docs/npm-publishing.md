@@ -24,7 +24,7 @@ pnpm release:check
 
 `release:build` 为公开包清理并重建发布产物，移除内部注释并压缩 JavaScript；不进行跨包 bundle，不混合依赖实体身份。`release:check` 构建并检查实际 tarball，验证包白名单、入口、内部依赖和仓库外消费者安装。原始 `.ts`、实现 source map、声明 map、测试、服务和内部文档不应进入 tarball。公开 `.d.ts` 本身会暴露必要类型结构。
 
-`release:publish` 先要求干净工作区及已处理完的 changesets，再执行同样的产物验收。随后用 Changesets 3 的 `publish-plan` 查询官方 registry，取得尚未发布版本和依赖顺序，将计划严格匹配到已验收包的名称、版本与 tarball，并由仓库脚本重新核对 SHA-256，最后通过 `publish --from-pack-dir` 上传这批文件。上传阶段不重新打包；CLI 自身不会核验计划中的 integrity，摘要验证由仓库脚本承担。`.capix/release/verified.json` 记录本次验收包及其摘要，属于本地验证产物，不进入 npm 包。
+`release:publish` 先要求干净工作区及已处理完的 changesets，再执行同样的产物验收。随后用 Changesets 3 的 `publish-plan` 查询官方 registry，取得尚未发布版本和依赖顺序，将计划严格匹配到已验收包的名称、版本与 tarball。上传器按依赖顺序逐包重新核对 SHA-256，然后直接执行 `npm publish <tarball> --auth-type=web` 并继承终端，支持浏览器二次认证；不经过 Changesets 的非交互发布探测。上传阶段不重新打包、不执行生命周期脚本；首次失败立即停止，不自动重试未知结果。`.capix/release/verified.json` 记录本次验收包及其摘要，属于本地验证产物，不进入 npm 包。
 
 检查或打包不会发布 npm。发布前审阅实际打包列表，确认未包含密钥、私有路径或不应公开的文本。
 
@@ -37,7 +37,9 @@ pnpm release:check
 3. 在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天；发布时按终端提示完成认证。
 4. 执行 `pnpm release:publish`，上传当前尚未存在的版本。此命令会写入 npm，只有决定正式发布时才执行。
 
-多包发布不是原子事务。失败后先核对 registry 中每个准确版本，再从同一已审阅提交补齐未发布包。npm 每个准确版本只能发布一次；脚本只上传尚未发布且通过本次产物验收的版本。Changesets 可能创建本地版本 tags；当前流程不推送 tag、不创建 GitHub Release。
+多包发布不是原子事务。失败后先核对 registry 中每个准确版本，再从同一已审阅提交补齐未发布包。npm 可能先确认受理，再延迟开放公开查询；已收到成功回执时应等待生效，不能因短暂 404 认定未上传并立即补发。npm 每个准确版本只能发布一次；脚本只上传尚未发布且通过本次产物验收的版本。当前流程不创建或推送版本 tag，也不创建 GitHub Release。
+
+登录成功不等于完成发布认证。发布时需保持交互终端，并在 npm 打开的网页完成验证；网页若提供短期免重复验证选项，可按需启用。Changesets 3.0.3 仅把 `EOTP` 识别为交互重试条件，非交互请求返回 `E403` 时不会进入浏览器流程；因此本仓库只用它生成发布计划，上传直接交给 npm。不要把验证码或 token 传入聊天或写进仓库。
 
 ## GitHub 设置与后续发布
 
