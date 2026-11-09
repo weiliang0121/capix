@@ -1,4 +1,4 @@
-import type { Message } from '@capix/protocol';
+import type { Message } from '@weiliang0121/capix-protocol';
 import type { TranscriptAppendState } from './append.js';
 
 /** Restorable content state; revisions describe mutations, not delivery cursors. */

@@ -1,8 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChildCallFailure, ExceptionContract, Group, defineNode, defineGroup, defineScene, reception } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { ChildCallFailure, ExceptionContract, Group, defineNode, defineGroup, defineScene, reception } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 const metadata = { name: 'reception-fixture', label: 'Reception fixture', source: 'test' };
 const issue = new ExceptionContract('RECEPTION_FIXTURE');

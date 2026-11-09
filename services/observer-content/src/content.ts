@@ -1,9 +1,9 @@
-import { ChangeBuffer, type EventConsumer } from '@capix/changes';
-import { RuntimeError } from '@capix/contracts';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { ChangeBuffer, type EventConsumer } from '@weiliang0121/capix-changes';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { ActiveView } from './view/active.js';
-import type { Message, ObserverChange, TranscriptEvent, MemoryEvent } from '@capix/protocol';
+import type { Message, ObserverChange, TranscriptEvent, MemoryEvent } from '@weiliang0121/capix-protocol';
 import { ChangeConsumer } from './synchronization/consumer.js';
 import { TranscriptFeed } from './synchronization/transcript.js';
 import type { ContentObservation } from './observation.js';

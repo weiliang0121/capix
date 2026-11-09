@@ -5,8 +5,8 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { characterizeCurrent } from './current.mjs';
 import { Facts, FixedData, StudyJournal, digest, restoreBundle } from './model.mjs';
 

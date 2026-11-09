@@ -5,11 +5,11 @@ import { captureSource } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, Group } from '@capix/server-runtime';
-import { CallableRecord } from '@capix/records';
-import { TranscriptResource } from '@capix/transcript';
-import { MemoryResource } from '@capix/memory';
-import { ResourceOffer } from '@capix/resources';
+import { Initializer, Group } from '@weiliang0121/capix-runtime';
+import { CallableRecord } from '@weiliang0121/capix-records';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
+import { MemoryResource } from '@weiliang0121/capix-memory';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 import { initializeObserver, ModelSettingsResource } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };

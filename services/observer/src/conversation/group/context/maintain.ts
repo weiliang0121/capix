@@ -1,5 +1,5 @@
-import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/structure';
-import type { ModelSettings } from '@capix/protocol';
+import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@weiliang0121/capix-structure';
+import type { ModelSettings } from '@weiliang0121/capix-protocol';
 import { isEqual } from 'es-toolkit';
 import { ActiveViewResource, type ActiveViewManager } from '@capix/observer-content';
 import type { ActiveViewSnapshot } from '@capix/observer-content';

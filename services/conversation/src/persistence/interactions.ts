@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import { Interaction, type InteractionState, type InteractionPersistence, type InteractionCommit } from '@capix/interaction';
-import type { ModelRequest, ModelReply } from '@capix/model-provider';
+import { Interaction, type InteractionState, type InteractionPersistence, type InteractionCommit } from '@weiliang0121/capix-interaction';
+import type { ModelRequest, ModelReply } from '@weiliang0121/capix-model-provider';
 import { z } from 'zod';
 import { CompletionInteraction } from '../model/completion-contract.js';
 import { RecoveryConflict, requireIdentity, requireRevision, type RecoveryTransaction } from './recovery.js';

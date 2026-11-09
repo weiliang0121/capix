@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeBuffer } from '@capix/changes';
-import { Recorder, RecordBook, RecordingRootRecord } from '@capix/records';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
+import { Recorder, RecordBook, RecordingRootRecord } from '@weiliang0121/capix-records';
 import { ChangeConsumer } from '@capix/observer-content';
 import { RecordSource, SourceIncomplete, initializeObserver, ObservationFeed } from '@capix/observer-service';
 import { ClientRuntime, ObservationSequenceError } from '@capix/client-runtime';

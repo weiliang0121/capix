@@ -1,6 +1,6 @@
-import { MemoryResource } from '@capix/memory';
-import type { ResourcesOf } from '@capix/resources';
-import { Node, checkpointPoint } from '@capix/structure';
+import { MemoryResource } from '@weiliang0121/capix-memory';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Node, checkpointPoint } from '@weiliang0121/capix-structure';
 import { voidCodec } from '../recovery/codecs.js';
 import { memoryApplyCodec, memoryIdsCodec, type MemoryMaintenanceApply } from './codecs.js';
 

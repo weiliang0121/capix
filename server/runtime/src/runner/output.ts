@@ -1,5 +1,5 @@
-import { ProgressChannel } from '@capix/changes';
-import type { InvocationOutputEvent, InvocationOutputReceiver, ProgressReceiver } from '@capix/contracts';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import type { InvocationOutputEvent, InvocationOutputReceiver, ProgressReceiver } from '@weiliang0121/capix-contracts';
 
 /** Entry identity separates new runs and restoration activities without changing call identity. */
 export type RunnerOutputEvent<Result, Delta = never> = InvocationOutputEvent<Result, Delta> & Readonly<{ entryId: string }>;

@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { ObserverConversations, SqliteObserverStore, SqliteCheckpointStore, MemoryConversationCheckpointRuns, copyConversationCheckpointRun, checkpointTranscriptFingerprint, validateConversationCheckpointContent, validateConversationCheckpointDeliveryContent, validateConversationCheckpointReceipt, validateConversationCheckpointHeads } from '@capix/observer-service/assembly';
 
 const settings = { model: 'test', contextBudget: 16000, maxOutputTokens: 1536, timeoutMs: 1000 };

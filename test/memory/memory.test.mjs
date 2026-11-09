@@ -1,16 +1,16 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { ActiveView } from '@capix/observer-content';
-import { readOutput } from '@capix/protocol';
+import { readOutput } from '@weiliang0121/capix-protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, createConversationStructure } from '@capix/observer-service';
 
-import { bindRecording } from '@capix/server-runtime';
-import { observeMemory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder } from '@capix/records';
-import { Memories, Memory } from '@capix/memory';
-import { Transcript } from '@capix/transcript';
-import { MessageUsage } from '@capix/measurement';
+import { bindRecording } from '@weiliang0121/capix-runtime';
+import { observeMemory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder } from '@weiliang0121/capix-records';
+import { Memories, Memory } from '@weiliang0121/capix-memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });

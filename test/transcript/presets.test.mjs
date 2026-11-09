@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, TranscriptRangeRef, TranscriptRangeReader, TranscriptResource } from '@capix/transcript';
-import { groupAdjacentPairs } from '@capix/transcript/presets';
-import { Resource } from '@capix/resources';
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Transcript, TranscriptRangeRef, TranscriptRangeReader, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { groupAdjacentPairs } from '@weiliang0121/capix-transcript/presets';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 const messages = (...roles) => roles.map((role, index) => ({ role, content: `message ${index}` }));
 const indexes = (groups) => groups.map((group) => group.map((entry) => entry.index));
@@ -73,7 +73,7 @@ test('the service chooses its retention limit and never treats grouping as an au
 });
 
 test('the optional preset is available separately from the entity root', async () => {
-  const root = await import('@capix/transcript');
+  const root = await import('@weiliang0121/capix-transcript');
   assert.equal('groupAdjacentPairs' in root, false);
   assert.equal(typeof groupAdjacentPairs, 'function');
 });

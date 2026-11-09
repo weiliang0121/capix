@@ -1,5 +1,5 @@
 import { bindResources } from '../fixtures/resources.mjs';
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures } from '@weiliang0121/capix-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import filesystem, { mkdtemp, writeFile, readFile, mkdir, symlink, readdir, rm, open, rename } from 'node:fs/promises';
@@ -8,9 +8,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { WorkspaceFiles, FileAccessException, FileResources, isRelativeFilePath } from '@capix/observer-service/assembly';
-import { ProgressChannel } from '@capix/changes';
-import { InvocationCancelled, Resources, Node, Scene, Runner } from '@capix/server-runtime';
-import { Resource } from '@capix/resources';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { InvocationCancelled, Resources, Node, Scene, Runner } from '@weiliang0121/capix-runtime';
+import { Resource } from '@weiliang0121/capix-resources';
 
 async function workspace(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'capix-files-'));

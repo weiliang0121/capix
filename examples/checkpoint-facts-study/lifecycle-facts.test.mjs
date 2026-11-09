@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkCheckpointSaveReceipt, checkCheckpointFinishReceipt, checkpointReference, cloneCheckpointImage } from '@capix/checkpoint';
+import { checkCheckpointSaveReceipt, checkCheckpointFinishReceipt, checkpointReference, cloneCheckpointImage } from '@weiliang0121/capix-checkpoint';
 import { FactCall } from './fact-call.mjs';
 import { FactStore, identity as carrierIdentity } from './fact-store.mjs';
 import { LifecycleFacts } from './lifecycle-facts.mjs';

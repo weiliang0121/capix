@@ -1,10 +1,10 @@
 import { createConversationScene, createInteractionAnswer, createCompletionReplyNode, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
-import { Interactions, type InteractionCursor, type InteractionReference } from '@capix/interaction';
-import { modelReplyText, type ModelReply } from '@capix/model-provider';
-import type { Message } from '@capix/protocol';
-import type { ResourcesOf } from '@capix/resources';
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Interactions, type InteractionCursor, type InteractionReference } from '@weiliang0121/capix-interaction';
+import { modelReplyText, type ModelReply } from '@weiliang0121/capix-model-provider';
+import type { Message } from '@weiliang0121/capix-protocol';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 type Messages = readonly Readonly<Message>[];
 const messages: Messages = [{ role: 'user', content: 'question' }];

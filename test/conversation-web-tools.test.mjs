@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { createConversationWebHost } from '@capix/conversation-service/web';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 

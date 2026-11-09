@@ -4,10 +4,10 @@ import { createEnvironment } from './fixtures/environment.mjs';
 import { ExecutionFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix/observer-service';
-import { ExecutionRecordHelper } from '@capix/records';
+import { ExecutionRecordHelper } from '@weiliang0121/capix-records';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook } from '@capix/records';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 import { createConversationStructure } from '@capix/observer-service';
 

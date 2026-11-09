@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { Resource, ResourceOffer, Resources, ResourceAccessClosed, ResourcePortError } from '@capix/resources';
+import { Resource, ResourceOffer, Resources, ResourceAccessClosed, ResourcePortError } from '@weiliang0121/capix-resources';
 
 const failures = { isProtected: () => false, isCancellation: (error, signal) => error === signal.reason, describe: () => null };
 
@@ -272,7 +272,7 @@ test('cleanup supports close reentry and detach during draining without duplicat
 test('async and non-void cleanup are rejected while every remaining cleanup runs, without unhandled rejection', () => {
   const source = `
     import assert from 'node:assert/strict';
-    import { Resource, ResourceOffer, Resources, ResourcePortError } from '@capix/resources';
+    import { Resource, ResourceOffer, Resources, ResourcePortError } from '@weiliang0121/capix-resources';
     for (const mode of ['return', 'promise', 'abort']) {
       const controller = new AbortController();
       let cleaned = 0;

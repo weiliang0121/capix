@@ -1,7 +1,7 @@
 import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib';
-import { CHECKPOINT_MAX_BYTES, cloneCheckpointDelivery, type CheckpointDelivery } from '@capix/checkpoint';
+import { CHECKPOINT_MAX_BYTES, cloneCheckpointDelivery, type CheckpointDelivery } from '@weiliang0121/capix-checkpoint';
 import { z } from 'zod';
-import { decodeCheckpointData } from '@capix/checkpoint/storage';
+import { decodeCheckpointData } from '@weiliang0121/capix-checkpoint/storage';
 
 // This is a SQLite representation, not a new Checkpoint Frame or recovery contract.
 const payloadSchema = z.strictObject({ encoding: z.literal('br'), jsonBytes: z.number().int().positive().max(CHECKPOINT_MAX_BYTES), data: z.string() });

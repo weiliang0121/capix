@@ -1,5 +1,5 @@
 {
-  "name": "@capix/invocation",
+  "name": "@weiliang0121/capix-invocation",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -14,13 +14,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/contracts": "workspace:*",
-    "@capix/protocol": "workspace:*",
-    "@capix/resources": "workspace:*",
-    "@capix/changes": "workspace:*",
-    "@capix/checkpoint": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-checkpoint": "workspace:*",
     "es-toolkit": "1.52.0",
-    "@capix/diagnostics": "workspace:*"
+    "@weiliang0121/capix-diagnostics": "workspace:*"
   },
   "description": "Invocation lifecycle, child relations, reception, output, and checkpoint activity for CAPiX.",
   "license": "MIT",

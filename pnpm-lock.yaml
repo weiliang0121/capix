@@ -8,78 +8,78 @@ importers:
 
   .:
     devDependencies:
-      '@capix/changes':
-        specifier: workspace:*
-        version: link:server/changes
-      '@capix/checkpoint':
-        specifier: workspace:*
-        version: link:server/checkpoint
       '@capix/client-http':
         specifier: workspace:*
         version: link:client/http
       '@capix/client-runtime':
         specifier: workspace:*
         version: link:client/runtime
-      '@capix/contracts':
-        specifier: workspace:*
-        version: link:contracts
       '@capix/conversation-service':
         specifier: workspace:*
         version: link:services/conversation
-      '@capix/diagnostics':
-        specifier: workspace:*
-        version: link:server/diagnostics
-      '@capix/interaction':
-        specifier: workspace:*
-        version: link:server/interaction
-      '@capix/invocation':
-        specifier: workspace:*
-        version: link:server/invocation
-      '@capix/measurement':
-        specifier: workspace:*
-        version: link:server/measurement
-      '@capix/memory':
-        specifier: workspace:*
-        version: link:server/memory
-      '@capix/model-exchanges':
-        specifier: workspace:*
-        version: link:server/model-exchanges
-      '@capix/model-provider':
-        specifier: workspace:*
-        version: link:server/model-provider
       '@capix/observer-content':
         specifier: workspace:*
         version: link:services/observer-content
       '@capix/observer-service':
         specifier: workspace:*
         version: link:services/observer
-      '@capix/protocol':
-        specifier: workspace:*
-        version: link:protocol
-      '@capix/records':
-        specifier: workspace:*
-        version: link:server/records
-      '@capix/resources':
-        specifier: workspace:*
-        version: link:server/resources
-      '@capix/server-runtime':
-        specifier: workspace:*
-        version: link:server/runtime
-      '@capix/structure':
-        specifier: workspace:*
-        version: link:server/structure
-      '@capix/transcript':
-        specifier: workspace:*
-        version: link:server/transcript
-      '@capix/view':
-        specifier: workspace:*
-        version: link:server/view
       '@changesets/cli':
         specifier: 3.0.3
         version: 3.0.3
       '@types/node':
         specifier: 22.19.11
         version: 22.19.11
+      '@weiliang0121/capix-changes':
+        specifier: workspace:*
+        version: link:server/changes
+      '@weiliang0121/capix-checkpoint':
+        specifier: workspace:*
+        version: link:server/checkpoint
+      '@weiliang0121/capix-contracts':
+        specifier: workspace:*
+        version: link:contracts
+      '@weiliang0121/capix-diagnostics':
+        specifier: workspace:*
+        version: link:server/diagnostics
+      '@weiliang0121/capix-interaction':
+        specifier: workspace:*
+        version: link:server/interaction
+      '@weiliang0121/capix-invocation':
+        specifier: workspace:*
+        version: link:server/invocation
+      '@weiliang0121/capix-measurement':
+        specifier: workspace:*
+        version: link:server/measurement
+      '@weiliang0121/capix-memory':
+        specifier: workspace:*
+        version: link:server/memory
+      '@weiliang0121/capix-model-exchanges':
+        specifier: workspace:*
+        version: link:server/model-exchanges
+      '@weiliang0121/capix-model-provider':
+        specifier: workspace:*
+        version: link:server/model-provider
+      '@weiliang0121/capix-protocol':
+        specifier: workspace:*
+        version: link:protocol
+      '@weiliang0121/capix-records':
+        specifier: workspace:*
+        version: link:server/records
+      '@weiliang0121/capix-resources':
+        specifier: workspace:*
+        version: link:server/resources
+      '@weiliang0121/capix-runtime':
+        specifier: workspace:*
+        version: link:server/runtime
+      '@weiliang0121/capix-structure':
+        specifier: workspace:*
+        version: link:server/structure
+      '@weiliang0121/capix-transcript':
+        specifier: workspace:*
+        version: link:server/transcript
+      '@weiliang0121/capix-view':
+        specifier: workspace:*
+        version: link:server/view
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
@@ -101,7 +101,7 @@ importers:
       '@capix/client-runtime':
         specifier: workspace:*
         version: link:../../client/runtime
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
       class-variance-authority:
@@ -165,7 +165,7 @@ importers:
       '@capix/client-runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
       es-toolkit:
@@ -177,7 +177,7 @@ importers:
 
   client/runtime:
     dependencies:
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
       es-toolkit:
@@ -188,16 +188,16 @@ importers:
 
   protocol:
     dependencies:
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
 
   server/changes:
     dependencies:
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
       es-toolkit:
@@ -206,7 +206,7 @@ importers:
 
   server/checkpoint:
     dependencies:
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
       es-toolkit:
@@ -215,7 +215,7 @@ importers:
 
   server/diagnostics:
     dependencies:
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
       es-toolkit:
@@ -224,13 +224,13 @@ importers:
 
   server/interaction:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
       es-toolkit:
@@ -239,22 +239,22 @@ importers:
 
   server/invocation:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
-      '@capix/checkpoint':
+      '@weiliang0121/capix-checkpoint':
         specifier: workspace:*
         version: link:../checkpoint
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
       es-toolkit:
@@ -263,34 +263,34 @@ importers:
 
   server/measurement:
     dependencies:
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
 
   server/memory:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
-      '@capix/transcript':
+      '@weiliang0121/capix-transcript':
         specifier: workspace:*
         version: link:../transcript
-      '@capix/view':
+      '@weiliang0121/capix-view':
         specifier: workspace:*
         version: link:../view
       es-toolkit:
@@ -299,22 +299,22 @@ importers:
 
   server/model-exchanges:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@capix/model-provider':
+      '@weiliang0121/capix-model-provider':
         specifier: workspace:*
         version: link:../model-provider
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
-      '@capix/view':
+      '@weiliang0121/capix-view':
         specifier: workspace:*
         version: link:../view
 
@@ -322,16 +322,16 @@ importers:
 
   server/records:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
       es-toolkit:
@@ -340,43 +340,43 @@ importers:
 
   server/resources:
     dependencies:
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
 
   server/runtime:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
-      '@capix/checkpoint':
+      '@weiliang0121/capix-checkpoint':
         specifier: workspace:*
         version: link:../checkpoint
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@capix/interaction':
+      '@weiliang0121/capix-interaction':
         specifier: workspace:*
         version: link:../interaction
-      '@capix/invocation':
+      '@weiliang0121/capix-invocation':
         specifier: workspace:*
         version: link:../invocation
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/records':
+      '@weiliang0121/capix-records':
         specifier: workspace:*
         version: link:../records
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
-      '@capix/structure':
+      '@weiliang0121/capix-structure':
         specifier: workspace:*
         version: link:../structure
       es-toolkit:
@@ -385,31 +385,31 @@ importers:
 
   server/structure:
     dependencies:
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
 
   server/transcript:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
-      '@capix/view':
+      '@weiliang0121/capix-view':
         specifier: workspace:*
         version: link:../view
       es-toolkit:
@@ -418,61 +418,61 @@ importers:
 
   server/view:
     dependencies:
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
 
   services/conversation:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../../server/changes
-      '@capix/checkpoint':
+      '@weiliang0121/capix-checkpoint':
         specifier: workspace:*
         version: link:../../server/checkpoint
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/diagnostics':
+      '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../../server/diagnostics
-      '@capix/interaction':
+      '@weiliang0121/capix-interaction':
         specifier: workspace:*
         version: link:../../server/interaction
-      '@capix/memory':
+      '@weiliang0121/capix-memory':
         specifier: workspace:*
         version: link:../../server/memory
-      '@capix/model-exchanges':
+      '@weiliang0121/capix-model-exchanges':
         specifier: workspace:*
         version: link:../../server/model-exchanges
-      '@capix/model-provider':
+      '@weiliang0121/capix-model-provider':
         specifier: workspace:*
         version: link:../../server/model-provider
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/records':
+      '@weiliang0121/capix-records':
         specifier: workspace:*
         version: link:../../server/records
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../../server/resources
-      '@capix/server-runtime':
+      '@weiliang0121/capix-runtime':
         specifier: workspace:*
         version: link:../../server/runtime
-      '@capix/structure':
+      '@weiliang0121/capix-structure':
         specifier: workspace:*
         version: link:../../server/structure
-      '@capix/transcript':
+      '@weiliang0121/capix-transcript':
         specifier: workspace:*
         version: link:../../server/transcript
-      '@capix/view':
+      '@weiliang0121/capix-view':
         specifier: workspace:*
         version: link:../../server/view
       zod:
@@ -481,49 +481,49 @@ importers:
 
   services/observer:
     dependencies:
-      '@capix/changes':
-        specifier: workspace:*
-        version: link:../../server/changes
-      '@capix/checkpoint':
-        specifier: workspace:*
-        version: link:../../server/checkpoint
-      '@capix/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@capix/interaction':
-        specifier: workspace:*
-        version: link:../../server/interaction
-      '@capix/invocation':
-        specifier: workspace:*
-        version: link:../../server/invocation
-      '@capix/measurement':
-        specifier: workspace:*
-        version: link:../../server/measurement
-      '@capix/memory':
-        specifier: workspace:*
-        version: link:../../server/memory
       '@capix/observer-content':
         specifier: workspace:*
         version: link:../observer-content
-      '@capix/protocol':
+      '@weiliang0121/capix-changes':
+        specifier: workspace:*
+        version: link:../../server/changes
+      '@weiliang0121/capix-checkpoint':
+        specifier: workspace:*
+        version: link:../../server/checkpoint
+      '@weiliang0121/capix-contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@weiliang0121/capix-interaction':
+        specifier: workspace:*
+        version: link:../../server/interaction
+      '@weiliang0121/capix-invocation':
+        specifier: workspace:*
+        version: link:../../server/invocation
+      '@weiliang0121/capix-measurement':
+        specifier: workspace:*
+        version: link:../../server/measurement
+      '@weiliang0121/capix-memory':
+        specifier: workspace:*
+        version: link:../../server/memory
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/records':
+      '@weiliang0121/capix-records':
         specifier: workspace:*
         version: link:../../server/records
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../../server/resources
-      '@capix/server-runtime':
+      '@weiliang0121/capix-runtime':
         specifier: workspace:*
         version: link:../../server/runtime
-      '@capix/structure':
+      '@weiliang0121/capix-structure':
         specifier: workspace:*
         version: link:../../server/structure
-      '@capix/transcript':
+      '@weiliang0121/capix-transcript':
         specifier: workspace:*
         version: link:../../server/transcript
-      '@capix/view':
+      '@weiliang0121/capix-view':
         specifier: workspace:*
         version: link:../../server/view
       es-toolkit:
@@ -535,25 +535,25 @@ importers:
 
   services/observer-content:
     dependencies:
-      '@capix/changes':
+      '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../../server/changes
-      '@capix/contracts':
+      '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/memory':
+      '@weiliang0121/capix-memory':
         specifier: workspace:*
         version: link:../../server/memory
-      '@capix/protocol':
+      '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix/resources':
+      '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../../server/resources
-      '@capix/transcript':
+      '@weiliang0121/capix-transcript':
         specifier: workspace:*
         version: link:../../server/transcript
-      '@capix/view':
+      '@weiliang0121/capix-view':
         specifier: workspace:*
         version: link:../../server/view
       es-toolkit:

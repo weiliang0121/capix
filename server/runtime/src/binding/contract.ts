@@ -1,12 +1,12 @@
-import type { CallableContext, InvocationWork, InvocationFact } from '@capix/invocation';
-import type { ResourceRequirements, ResourceRefinement, ResourceIdentity } from '@capix/resources';
+import type { CallableContext, InvocationWork, InvocationFact } from '@weiliang0121/capix-invocation';
+import type { ResourceRequirements, ResourceRefinement, ResourceIdentity } from '@weiliang0121/capix-resources';
 import type { BoundChildren } from './children/bound.js';
 import type { ObservationInstallation } from './observation.js';
 import type { InvocationObservationDeclaration } from './observation.js';
 import type { ChildResourceBinding } from './resources.js';
 import type { AnyCallable } from './declarations.js';
 import type { CallableSnapshot } from './snapshot.js';
-import type { ChildCallable } from '@capix/structure';
+import type { ChildCallable } from '@weiliang0121/capix-structure';
 
 /** Assembly conditions are fixed once and shared by the single callable binder. */
 export interface ChildBindingOptions {

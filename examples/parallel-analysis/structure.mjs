@@ -1,4 +1,4 @@
-import { Group } from '@capix/structure';
+import { Group } from '@weiliang0121/capix-structure';
 
 /** Only this business condition permits an answer without the secondary analysis. */
 export class AnalysisUnavailable extends Error {}

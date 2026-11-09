@@ -1,5 +1,5 @@
 import { isUndefined } from 'es-toolkit/predicate';
-import type { InvocationOrigin } from '@capix/protocol';
+import type { InvocationOrigin } from '@weiliang0121/capix-protocol';
 import type { EventConsumer } from './consumer.js';
 import { combineFaults } from './error.js';
 import type { ChangeCapture } from './capture.js';

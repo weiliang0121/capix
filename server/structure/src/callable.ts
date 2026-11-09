@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { CallableKind, invocationSignature, InvocationSignature } from '@capix/contracts';
+import type { CallableKind, invocationSignature, InvocationSignature } from '@weiliang0121/capix-contracts';
 import { initializeStructureConfiguration } from './configuration.js';
 import type { CallableDescription, CallableDefinition, CallableRun, EmptyResources } from './definition/callable.js';
 import type { ChildContractsOf } from './definition/children.js';
-import type { ResourceRequirements } from '@capix/resources';
+import type { ResourceRequirements } from '@weiliang0121/capix-resources';
 
 /** Heterogeneous storage erases I/O and resources; author objects retain them. */
 export type CallableStructure<Kind extends CallableKind> = Callable<any, any, Kind, any, any>;

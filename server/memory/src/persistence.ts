@@ -1,4 +1,4 @@
-import type { MemoryContent } from '@capix/protocol';
+import type { MemoryContent } from '@weiliang0121/capix-protocol';
 import type { MemoryApplyState } from './apply.js';
 
 export interface MemoryState extends MemoryContent {

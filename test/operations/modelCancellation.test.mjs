@@ -1,7 +1,7 @@
 import { bindResources } from '../fixtures/resources.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { InvocationCancelled, isInvocationCancelled } from '@capix/server-runtime';
+import { InvocationCancelled, isInvocationCancelled } from '@weiliang0121/capix-runtime';
 
 import { DeepSeekProvider, ModelResource, ModelSource, ModelInteractions } from '@capix/observer-service';
 

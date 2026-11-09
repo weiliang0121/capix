@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group } from '@capix/server-runtime';
+import { Group } from '@weiliang0121/capix-runtime';
 
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 

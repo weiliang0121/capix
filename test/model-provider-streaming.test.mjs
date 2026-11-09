@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, ProviderError, modelReplyText } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError, modelReplyText } from '@weiliang0121/capix-model-provider';
 
 const messages = [{ role: 'user', content: 'Explain this material' }];
 const encoder = new TextEncoder();

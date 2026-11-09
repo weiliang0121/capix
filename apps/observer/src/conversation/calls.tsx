@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { readOutput, type CallableRecord, type ConversationCallDetail, type RecordedRelationChange } from '@capix/protocol';
+import { readOutput, type CallableRecord, type ConversationCallDetail, type RecordedRelationChange } from '@weiliang0121/capix-protocol';
 
 const relations: Record<RecordedRelationChange['kind'], string> = { attached: '已建立', returned: '子层返回', receiving: '接纳中', accepted: '已接纳', handled: '异常已处理', failed: '接纳失败' };
 

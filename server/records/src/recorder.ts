@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import type { RecordChangeEvent, RecordMutation } from '@capix/protocol';
-import type { ChangeCapture } from '@capix/changes';
-import { captureChange } from '@capix/changes';
+import type { RecordChangeEvent, RecordMutation } from '@weiliang0121/capix-protocol';
+import type { ChangeCapture } from '@weiliang0121/capix-changes';
+import { captureChange } from '@weiliang0121/capix-changes';
 import { snapshotValue } from './value/snapshot.js';
 import { RecordBook } from './book.js';
 import type { BaseRecord } from './record.js';

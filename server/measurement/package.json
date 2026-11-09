@@ -1,5 +1,5 @@
 {
-  "name": "@capix/measurement",
+  "name": "@weiliang0121/capix-measurement",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -14,8 +14,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/protocol": "workspace:*",
-    "@capix/resources": "workspace:*"
+    "@weiliang0121/capix-protocol": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*"
   },
   "description": "Message usage measurement and resource contracts for CAPiX.",
   "license": "MIT",

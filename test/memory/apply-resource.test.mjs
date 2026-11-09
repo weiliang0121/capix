@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeError } from '@capix/contracts';
-import { PersistenceError } from '@capix/diagnostics';
-import { Memories, Memory, MemoryResource } from '@capix/memory';
-import { Resource, Resources, ResourceAccessClosed } from '@capix/resources';
-import { Transcript } from '@capix/transcript';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Memories, Memory, MemoryResource } from '@weiliang0121/capix-memory';
+import { Resource, Resources, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const create = (content) => ({ action: 'create', memoryId: null, change: 'create memory', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
 const update = (memory, content) => ({ ...create(content), action: 'update', memoryId: memory.id });

@@ -1,10 +1,10 @@
 import { isArray, isFinite } from 'es-toolkit/compat';
 import { isString } from 'es-toolkit/predicate';
 import type { ModelOutput, ModelProvider, ModelRequest, ModelTextDelta, Purpose } from '../conversation/model/types.js';
-import { isObject } from '@capix/server-runtime';
-import { InvocationCancelled } from '@capix/invocation';
-import { RuntimeError } from '@capix/contracts';
-import { type ProgressChannel } from '@capix/changes';
+import { isObject } from '@weiliang0121/capix-runtime';
+import { InvocationCancelled } from '@weiliang0121/capix-invocation';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { type ProgressChannel } from '@weiliang0121/capix-changes';
 import { receiveModelStream } from './modelStream.js';
 
 export class DeepSeekProvider implements ModelProvider {

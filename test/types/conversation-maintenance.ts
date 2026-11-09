@@ -1,10 +1,10 @@
 import { ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, createMessageInclusion, type AcceptedConversationMessage, type ConversationMaintenance, type ConversationMaterialSources, type ConversationViewManagementSource } from '@capix/conversation-service';
-import { Memories } from '@capix/memory';
-import { Resource, type ResourcesOf } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group, Node } from '@capix/structure';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View, type ViewPersistence } from '@capix/view';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Resource, type ResourcesOf } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group, Node } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View, type ViewPersistence } from '@weiliang0121/capix-view';
 
 const transcript = new Transcript();
 const memories = new Memories(transcript);

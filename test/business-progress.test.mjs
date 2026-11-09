@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { ArchiveStore, PublicationArchive } from '../examples/business-progress/archive.mjs';
 import { InteractionJournal, createGateway } from '../examples/business-progress/interaction.mjs';
 import { ProgressStore, PublicationProgress, publicationOperation } from '../examples/business-progress/progress.mjs';

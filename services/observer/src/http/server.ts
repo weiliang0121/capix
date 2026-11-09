@@ -3,11 +3,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConversationAdmission, ConversationSubmissionDiscovery, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@capix/protocol';
+import type { ConversationAdmission, ConversationSubmissionDiscovery, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@weiliang0121/capix-protocol';
 import { isTaskRecord, taskSnapshot } from '../observation/calls.js';
-import { observeMemory } from '@capix/records';
-import { isObject } from '@capix/server-runtime';
-import { RuntimeError } from '@capix/contracts';
+import { observeMemory } from '@weiliang0121/capix-records';
+import { isObject } from '@weiliang0121/capix-runtime';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { ObserverConversations } from '../assembly/conversations.js';
 import { transcriptSnapshot } from '@capix/observer-content';
 import { ObservationFeed } from '../observation/feed.js';

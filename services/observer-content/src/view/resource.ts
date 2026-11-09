@@ -1,4 +1,4 @@
-import { ResourceOffer } from '@capix/resources';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 import type { ActiveView } from './active.js';
 import type { ActiveViewSelection, ActiveViewSnapshot } from './state.js';
 

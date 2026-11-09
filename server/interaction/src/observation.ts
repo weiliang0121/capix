@@ -1,4 +1,4 @@
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { InteractionProgressFact } from './progress/types.js';
 
 /** One registration shares a passive consumer; recursive new exchanges cannot recurse forever. */

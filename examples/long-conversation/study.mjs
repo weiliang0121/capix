@@ -6,8 +6,8 @@ import { createConversationInteractions, createConversationResources, createMate
 import { defaultConversationOutputBudget, ModelCompletionIncomplete } from '@capix/conversation-service';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { createConversationRecording } from '@capix/conversation-service/recording';
-import { RecordBook, Recorder } from '@capix/records';
-import { Runner } from '@capix/server-runtime';
+import { RecordBook, Recorder } from '@weiliang0121/capix-records';
+import { Runner } from '@weiliang0121/capix-runtime';
 import { jsonBytes, textBytes, measureFiles, measureDatabase, measureUsage } from './measurement.mjs';
 import { renderReport, renderReview } from './report.mjs';
 

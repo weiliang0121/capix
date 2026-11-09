@@ -1,14 +1,14 @@
-import { stableValue, type Stable } from '@capix/contracts';
+import { stableValue, type Stable } from '@weiliang0121/capix-contracts';
 import { randomUUID } from 'node:crypto';
 import { isEqual } from 'es-toolkit';
 import type { Invocation } from '../invocation/invocation.js';
 import type { InvocationContext } from '../context/context.js';
-import { ProgressChannel } from '@capix/changes';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
 import type { InvocationObservation } from '../observation/invocation.js';
 import { ObserverSession } from '../observation/session.js';
 import type { CheckpointFact, CheckpointInstallation, CheckpointRestoration, CheckpointWriter, CheckpointSaveReferences, InvocationCheckpointSelection } from './contract.js';
-import type { CheckpointHead, CheckpointChild, CheckpointReference, CheckpointReferences, CheckpointValueBlock, CheckpointCommit, InvocationCheckpointFrame, CheckpointSelectionSlots, CheckpointSelectionReference, CheckpointSelectionSnapshot } from '@capix/checkpoint';
-import { cloneCheckpointHead, cloneCheckpointDelivery, cloneCheckpointValue, checkCheckpointFinishReceipt, checkpointHeadCommit, createCheckpointValueBlock, checkCheckpointCommitReceipt, checkpointReferenceChild } from '@capix/checkpoint';
+import type { CheckpointHead, CheckpointChild, CheckpointReference, CheckpointReferences, CheckpointValueBlock, CheckpointCommit, InvocationCheckpointFrame, CheckpointSelectionSlots, CheckpointSelectionReference, CheckpointSelectionSnapshot } from '@weiliang0121/capix-checkpoint';
+import { cloneCheckpointHead, cloneCheckpointDelivery, cloneCheckpointValue, checkCheckpointFinishReceipt, checkpointHeadCommit, createCheckpointValueBlock, checkCheckpointCommitReceipt, checkpointReferenceChild } from '@weiliang0121/capix-checkpoint';
 import type { InvocationCheckpointWork } from './work.js';
 import type { InvocationTarget } from '../invocation/relation.js';
 import { publishCheckpointChild, publishCheckpointValue, encodeCheckpointFact, restoredCheckpointChild, type PublishedCheckpointValue, type PublishedCheckpointChild } from './publication.js';
@@ -209,7 +209,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       const block = createCheckpointValueBlock(randomUUID(), references);
       blocks.push(block);
       const logical = block.value as unknown as CheckpointReferences;
-      return { logical, physical: Object.freeze({ id: block.id, digest: block.digest }), changes: Object.freeze([]) as readonly import('@capix/checkpoint').CheckpointSelectionChange[], check: (frame: InvocationCheckpointFrame, lookup: (id: string) => CheckpointChild | undefined) => checkCheckpointReferences(frame, logical, declarations, lookup), acknowledge() {} };
+      return { logical, physical: Object.freeze({ id: block.id, digest: block.digest }), changes: Object.freeze([]) as readonly import('@weiliang0121/capix-checkpoint').CheckpointSelectionChange[], check: (frame: InvocationCheckpointFrame, lookup: (id: string) => CheckpointChild | undefined) => checkCheckpointReferences(frame, logical, declarations, lookup), acknowledge() {} };
     }
     const slots: Record<string, CheckpointSelectionSlots['slots'][string]> = Object.create(null);
     const logical: Record<string, CheckpointReference | readonly CheckpointReference[]> = Object.create(null);

@@ -1,5 +1,5 @@
 {
-  "name": "@capix/resources",
+  "name": "@weiliang0121/capix-resources",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -18,8 +18,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/protocol": "workspace:*",
-    "@capix/contracts": "workspace:*"
+    "@weiliang0121/capix-protocol": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*"
   },
   "description": "Resource definitions, fixed supplies, and controlled access endpoints for CAPiX.",
   "license": "MIT",

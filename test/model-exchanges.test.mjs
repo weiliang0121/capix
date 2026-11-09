@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ModelExchanges, ModelExchangeResource, ModelExchangeViewSource, feedbackDigest, requireExchangeFeedbackReceipt, requireExchangeIntakeReceipt } from '@capix/model-exchanges';
-import { Resources, Resource } from '@capix/resources';
-import { PersistenceError } from '@capix/diagnostics';
+import { ModelExchanges, ModelExchangeResource, ModelExchangeViewSource, feedbackDigest, requireExchangeFeedbackReceipt, requireExchangeIntakeReceipt } from '@weiliang0121/capix-model-exchanges';
+import { Resources, Resource } from '@weiliang0121/capix-resources';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 const operation = (child, position = 'model-reply') => ({ parentContextId: 'loop', childContextId: child, position });
 const result = (text = 'ok', status = 'ok') => ({ status, content: [{ kind: 'text', text }] });

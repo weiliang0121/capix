@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { CompletionInteraction, createCompletionNode } from '@capix/conversation-service';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';
-import { Interaction } from '@capix/interaction';
+import { Interaction } from '@weiliang0121/capix-interaction';
 
 const request = { messages: [{ role: 'user', content: 'question' }] };
 const baseUsage = { promptTokens: 20, completionTokens: 5, totalTokens: 25 };

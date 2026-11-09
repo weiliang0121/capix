@@ -1,8 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene } from '@capix/server-runtime';
-import { MemoryCheckpointStore, cloneCheckpointImage } from '@capix/checkpoint';
+import { Scene } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore, cloneCheckpointImage } from '@weiliang0121/capix-checkpoint';
 
 function historicalImage(reception = false, typed = false) {
   const ref = { contextId: 'child', parentContextId: 'root', parentRound: 1, order: 0, target: { position: 0 } };

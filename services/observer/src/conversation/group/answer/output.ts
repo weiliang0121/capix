@@ -1,7 +1,7 @@
 import type { ModelAcceptanceInput } from '../../node/model/accept.js';
 import { z } from 'zod';
-import type { GenerationOutput } from '@capix/protocol';
-import { RuntimeError } from '@capix/contracts';
+import type { GenerationOutput } from '@weiliang0121/capix-protocol';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { ModelOutputContract } from '../../model/contract.js';
 import { modelTextSchema } from '../../model/schema.js';
 

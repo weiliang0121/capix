@@ -1,6 +1,6 @@
-import { RuntimeError } from '@capix/contracts';
-import { PersistenceError } from '@capix/diagnostics';
-import { Interaction, Interactions } from '@capix/interaction';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Interaction, Interactions } from '@weiliang0121/capix-interaction';
 
 function nonempty(value, field) {
   if (typeof value !== 'string' || value.trim().length === 0) throw new TypeError(`${field} must be a nonempty string`);

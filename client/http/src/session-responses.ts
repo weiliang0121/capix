@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { validateExecutionRecordSnapshot, validateInvocationRecordValue, type CallableRecord, type ConversationCallDetail, type ConversationInspection, type ConversationRecordingState, type ConversationServiceInfo, type InvocationBoundaryRecord, type MemoryRecord, type ResourceRecord, type TranscriptRecord } from '@capix/protocol';
+import { validateExecutionRecordSnapshot, validateInvocationRecordValue, type CallableRecord, type ConversationCallDetail, type ConversationInspection, type ConversationRecordingState, type ConversationServiceInfo, type InvocationBoundaryRecord, type MemoryRecord, type ResourceRecord, type TranscriptRecord } from '@weiliang0121/capix-protocol';
 import { acceptResponse, admissionResponse, recordEntryResponse, submissionBaselineResponse } from './responses.js';
 import { HttpTransportError } from './errors.js';
 

@@ -7,9 +7,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { CompletionInteraction } from '@capix/conversation-service';
-import { Interaction } from '@capix/interaction';
-import { ModelExchanges } from '@capix/model-exchanges';
-import { PersistenceError } from '@capix/diagnostics';
+import { Interaction } from '@weiliang0121/capix-interaction';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { retainedCheckpointBytes } from './fixtures/checkpoint-accounting.mjs';
 
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));

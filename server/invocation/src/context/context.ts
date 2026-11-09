@@ -2,7 +2,7 @@ import type { InvocationFailure } from '../invocation/failure.js';
 import { randomUUID } from 'node:crypto';
 import type { InvocationResult } from '../invocation/result.js';
 import type { CheckpointContinuationFact } from '../checkpoint/continuation.js';
-import { stableValue, type Stable, type RuntimeErrorValue } from '@capix/contracts';
+import { stableValue, type Stable, type RuntimeErrorValue } from '@weiliang0121/capix-contracts';
 import { failureDiagnostic } from '../invocation/failure.js';
 
 /** Per-invocation controls; application settings and resource selection belong to binding. */

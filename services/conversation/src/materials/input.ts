@@ -1,6 +1,6 @@
-import type { ResourcesOf } from '@capix/resources';
-import { Node, checkpointPoint } from '@capix/structure';
-import type { ViewSnapshot } from '@capix/view';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Node, checkpointPoint } from '@weiliang0121/capix-structure';
+import type { ViewSnapshot } from '@weiliang0121/capix-view';
 import type { AcceptedConversationMessage } from '../scene.js';
 import { requireText } from '../text.js';
 import { ConversationViewResource, type ConversationMaterialSources } from './view.js';

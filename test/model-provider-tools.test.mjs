@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, ProviderError, modelReplyText, requireModelReply, requireModelRequest, requireModelExchange, requireToolResult, requireToolFeedback } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError, modelReplyText, requireModelReply, requireModelRequest, requireModelExchange, requireToolResult, requireToolFeedback } from '@weiliang0121/capix-model-provider';
 
 const messages = [{ role: 'user', content: 'Read the file.' }];
 const usage = { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, prompt_cache_hit_tokens: 12, prompt_cache_miss_tokens: 8 };

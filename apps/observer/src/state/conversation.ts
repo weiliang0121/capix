@@ -1,4 +1,4 @@
-import type { Message, FileTask, FileOutput } from '@capix/protocol';
+import type { Message, FileTask, FileOutput } from '@weiliang0121/capix-protocol';
 import type { SubmissionNotice } from './data.js';
 
 export interface ConversationMessage {

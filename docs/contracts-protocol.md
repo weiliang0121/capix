@@ -1,6 +1,6 @@
 # 包内类型、共同契约与跨端协议
 
-状态：2026-11-07。`@capix/contracts` 提供结构、调用与 Runtime 装配共同使用的端口和稳定数据契约；InvocationIdentity 由这里向 invocation 和 checkpoint 包提供同一定义。`@capix/invocation` 承载单次调用，Runtime 负责连接结构与调用；CP 使用 Frame v6 和显式增量引用选择。Sequence / Dynamic 是普通 Group 预设。
+状态：2026-11-07。`@weiliang0121/capix-contracts` 提供结构、调用与 Runtime 装配共同使用的端口和稳定数据契约；InvocationIdentity 由这里向 invocation 和 checkpoint 包提供同一定义。`@weiliang0121/capix-invocation` 承载单次调用，Runtime 负责连接结构与调用；CP 使用 Frame v6 和显式增量引用选择。Sequence / Dynamic 是普通 Group 预设。
 
 ## 三种归属
 
@@ -10,7 +10,7 @@
 | 共同契约 | 多个包需要遵守同一形状，但不需要知道实现对象     | CallableContract、InvocationIdentity、ChildCalls、Work、操作接收、输出端口、CP 编码与认证事实 |
 | 跨端协议 | 实际跨端传输的共享形状，需要解析、版本和兼容约定 | 会话提交、消息同步、观测增量、记录快照                                                        |
 
-类型不会因为 `export` 或有两个 import 就自动晋级。单纯持久化也不自动属于 protocol，例如 CP Frame 属于 `@capix/checkpoint` 的保存格式，invocation 依据它安装运行关系，尚不构成跨端协议。先确定它表达的责任及消费者，再决定归属；使用者可以从所属包的公开入口取得类型。共同契约的改变需要同时检查提供者与消费者，成为协议还需要检查编码、接纳和历史兼容。
+类型不会因为 `export` 或有两个 import 就自动晋级。单纯持久化也不自动属于 protocol，例如 CP Frame 属于 `@weiliang0121/capix-checkpoint` 的保存格式，invocation 依据它安装运行关系，尚不构成跨端协议。先确定它表达的责任及消费者，再决定归属；使用者可以从所属包的公开入口取得类型。共同契约的改变需要同时检查提供者与消费者，成为协议还需要检查编码、接纳和历史兼容。
 
 ## 当前依赖
 
@@ -78,7 +78,7 @@ invocation：执行固定工作入口，维护活动窗口、关系、交付与�
 structure 中的处理函数：消费端点，返回业务结果
 ```
 
-绑定者依赖两边以完成接线，但两边无需相互导入实现。`@capix/structure/construction` 仅提供结构构建状态及检查；`@capix/invocation` 提供单次机制；`@capix/server-runtime/construction` 暴露连接两者的具体构造能力。Runtime 既有调用出口精确重导同一对象，不产生第二份异常类、Context 或调用实现。没有为了拆包新增的平行结构或统一服务定位器。
+绑定者依赖两边以完成接线，但两边无需相互导入实现。`@weiliang0121/capix-structure/construction` 仅提供结构构建状态及检查；`@weiliang0121/capix-invocation` 提供单次机制；`@weiliang0121/capix-runtime/construction` 暴露连接两者的具体构造能力。Runtime 既有调用出口精确重导同一对象，不产生第二份异常类、Context 或调用实现。没有为了拆包新增的平行结构或统一服务定位器。
 
 ## 维护与验证
 

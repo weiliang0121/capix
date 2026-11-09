@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { InteractionObservation } from '@capix/protocol';
+import type { InteractionObservation } from '@weiliang0121/capix-protocol';
 import type { CallDetail } from '../../state/data.js';
 import { useAppCommands } from '../../state/react.js';
 import { errorMessage } from '../../lib/errors.js';

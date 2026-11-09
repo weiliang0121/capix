@@ -1,6 +1,6 @@
-import type { CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver } from '@capix/contracts';
-import type { ProgressReceiver } from '@capix/changes';
-import { requireNotCancelled, type InvocationProgress } from '@capix/invocation';
+import type { CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver } from '@weiliang0121/capix-contracts';
+import type { ProgressReceiver } from '@weiliang0121/capix-changes';
+import { requireNotCancelled, type InvocationProgress } from '@weiliang0121/capix-invocation';
 import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable, ResolvedCallable } from './declarations.js';
 import type { PreparedCall } from './calls.js';

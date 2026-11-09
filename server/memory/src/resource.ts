@@ -1,5 +1,5 @@
-import { ResourceOffer } from '@capix/resources';
-import { RuntimeError } from '@capix/contracts';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { Memories } from './memories.js';
 import type { MemoryChange } from './change.js';
 import type { MemoryState } from './persistence.js';

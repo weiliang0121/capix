@@ -1,4 +1,4 @@
-import type { ConfigurationResponse } from '@capix/protocol';
+import type { ConfigurationResponse } from '@weiliang0121/capix-protocol';
 import { useRef } from 'react';
 import { ArrowUp, LoaderCircle, Square } from 'lucide-react';
 import { Input } from '../../components/ui/input.js';

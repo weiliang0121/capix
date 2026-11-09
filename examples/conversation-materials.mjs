@@ -1,11 +1,11 @@
 // pnpm build && node examples/conversation-materials.mjs
 // 离线验证实体、View 与服务装配；固定模型替身不代表真实模型质量。
 import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, createMessageInclusion } from '@capix/conversation-service';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource, TranscriptViewSource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 // 1. 实体保存正式内容。记忆由宿主预置，本例没有自动提取策略。
 const transcript = new Transcript([

@@ -1,16 +1,16 @@
 // Run from an independent directory containing the installed npm tarballs.
 import assert from 'node:assert/strict';
-import * as contracts from '@capix/contracts';
-import * as diagnostics from '@capix/diagnostics';
-import * as invocation from '@capix/invocation';
-import * as structure from '@capix/structure';
-import * as structureConstruction from '@capix/structure/construction';
-import * as runtime from '@capix/server-runtime';
-import * as construction from '@capix/server-runtime/construction';
-import * as recording from '@capix/server-runtime/recording';
-import { Resource, ResourceOffer, ResourceAccessClosed } from '@capix/resources';
-import { receiveOperation } from '@capix/resources/operation';
-import { MemoryCheckpointStore, cloneCheckpointHead } from '@capix/checkpoint';
+import * as contracts from '@weiliang0121/capix-contracts';
+import * as diagnostics from '@weiliang0121/capix-diagnostics';
+import * as invocation from '@weiliang0121/capix-invocation';
+import * as structure from '@weiliang0121/capix-structure';
+import * as structureConstruction from '@weiliang0121/capix-structure/construction';
+import * as runtime from '@weiliang0121/capix-runtime';
+import * as construction from '@weiliang0121/capix-runtime/construction';
+import * as recording from '@weiliang0121/capix-runtime/recording';
+import { Resource, ResourceOffer, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { receiveOperation } from '@weiliang0121/capix-resources/operation';
+import { MemoryCheckpointStore, cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
 
 const { Scene, Group, Node, Runner, Resources, checkpointPoint } = runtime;
 const { RuntimeError, StableValueError, stableValue } = contracts;

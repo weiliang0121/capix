@@ -1,7 +1,7 @@
 import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext } from '@capix/invocation';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
 
 const signal = () => new AbortController().signal;
 

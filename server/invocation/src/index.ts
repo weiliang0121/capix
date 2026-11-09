@@ -32,7 +32,7 @@ export { InvocationObservation } from './observation/invocation.js';
 export { ObserverSession, publishSessions } from './observation/session.js';
 export { ObservationError } from './observation/error.js';
 
-// Live checkpoint adaptation; immutable images and stores come from @capix/checkpoint.
+// Live checkpoint adaptation; immutable images and stores come from @weiliang0121/capix-checkpoint.
 export type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter, CheckpointFact, CheckpointSaveReferences, InvocationCheckpointSelection, InvocationCheckpointOccurrence } from './checkpoint/contract.js';
 export type { InvocationCheckpointWork, CheckpointBinding, CheckpointChildBinding, CheckpointReferenceSlot } from './checkpoint/work.js';
 export { prepareCheckpointRestoration } from './checkpoint/restoration.js';
@@ -40,9 +40,9 @@ export { captureCheckpointContinuation, restoreCheckpointContinuation, type Chec
 export { checkpointChildBinding, checkpointReceptionBinding, decodeCheckpointReception, decodeCheckpointHandledReception, checkCheckpointReferences, decodeCheckpointFrame, decodeCheckpointDiagnostic, type DecodedCheckpointReception, type DecodedCheckpointHandledReception, type DecodedCheckpointChild, type DecodedCheckpointFrame } from './checkpoint/facts.js';
 
 // Shared diagnostic implementations retain object identity across package entrypoints.
-export { RuntimeError } from '@capix/contracts';
-export { PersistenceError } from '@capix/diagnostics';
-export { RuntimeErrorHelper } from '@capix/diagnostics';
+export { RuntimeError } from '@weiliang0121/capix-contracts';
+export { PersistenceError } from '@weiliang0121/capix-diagnostics';
+export { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 export { isNonEmptyArray, hasUniqueItems } from './value/array.js';
 export { isObjectLike, isObject } from './value/object.js';
 export { nonBlankStringPattern, isNonBlankString } from './value/string.js';

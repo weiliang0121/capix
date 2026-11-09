@@ -2,7 +2,7 @@
 import { open } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { catalog, decisionInstructions } from './catalog.mjs';
 import { fixtures, studyPlan } from './fixtures.mjs';
 import { runCase, summarize } from './experiment.mjs';

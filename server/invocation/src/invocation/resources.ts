@@ -1,8 +1,8 @@
 import { InvocationResources } from './resource-access.js';
 import type { InvocationContext } from '../context/context.js';
-import type { ResourceFailurePolicy } from '@capix/resources';
+import type { ResourceFailurePolicy } from '@weiliang0121/capix-resources';
 import { isProtectedOperationFailure } from '../operation/failure.js';
-import { RuntimeErrorHelper } from '@capix/diagnostics';
+import { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 import { isInvocationCancelled } from './cancellation.js';
 import type { Invocation } from './invocation.js';
 

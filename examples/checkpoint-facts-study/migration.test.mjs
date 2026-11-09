@@ -4,13 +4,13 @@ import { test } from 'node:test';
 import './migration-hooks.mjs';
 import { fixed, statistics, StableBoundaryFailure } from './migration-values.mjs';
 
-const { Invocation, InvocationContext } = await import('@capix/invocation');
-const { Runner, Resources, Scene, Node } = await import('@capix/server-runtime');
-const { ResourceOffer } = await import('@capix/resources');
+const { Invocation, InvocationContext } = await import('@weiliang0121/capix-invocation');
+const { Runner, Resources, Scene, Node } = await import('@weiliang0121/capix-runtime');
+const { ResourceOffer } = await import('@weiliang0121/capix-resources');
 const signal = new AbortController().signal;
-const { MemoryCheckpointStore } = await import('@capix/checkpoint');
-const { Memory } = await import('@capix/memory');
-const { Transcript } = await import('@capix/transcript');
+const { MemoryCheckpointStore } = await import('@weiliang0121/capix-checkpoint');
+const { Memory } = await import('@weiliang0121/capix-memory');
+const { Transcript } = await import('@weiliang0121/capix-transcript');
 const codec = { encode: (value) => value, decode: (value) => value };
 
 test('automatic input boundary precedes capture; raw aliases remain editable', async () => {

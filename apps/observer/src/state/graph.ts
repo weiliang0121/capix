@@ -1,5 +1,5 @@
 import type { ObservationStatus } from '../observation/status.js';
-import type { RelationChangeRecord } from '@capix/protocol';
+import type { RelationChangeRecord } from '@weiliang0121/capix-protocol';
 
 export interface CallGraphNode {
   readonly id: string;

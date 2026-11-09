@@ -1,4 +1,4 @@
-import { ChildCallFailure, DeclaredException } from '@capix/invocation';
+import { ChildCallFailure, DeclaredException } from '@weiliang0121/capix-invocation';
 import { z } from 'zod';
 import { modelOutputRejected } from './rejection.js';
 import { modelRequestSchema, modelOutputSchema } from './interactions.js';

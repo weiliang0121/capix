@@ -1,5 +1,5 @@
-import type { AnswerPreviewChange, AnswerPreviewSnapshot, ConversationAdmission, ConversationFailure, ConversationSubmissionBaseline, ConversationSubmissionChange, ConversationSubmissionFrame, ConversationSubmissionSnapshot, TranscriptEvent } from '@capix/protocol';
-import type { RunnerObservation, RunnerOutput } from '@capix/server-runtime';
+import type { AnswerPreviewChange, AnswerPreviewSnapshot, ConversationAdmission, ConversationFailure, ConversationSubmissionBaseline, ConversationSubmissionChange, ConversationSubmissionFrame, ConversationSubmissionSnapshot, TranscriptEvent } from '@weiliang0121/capix-protocol';
+import type { RunnerObservation, RunnerOutput } from '@weiliang0121/capix-runtime';
 import type { ConversationEvents } from './events.js';
 import { ModelCompletionIncomplete } from '../model/incomplete.js';
 import type { AcceptedConversationMessage } from '../scene.js';

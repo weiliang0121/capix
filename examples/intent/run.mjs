@@ -1,6 +1,6 @@
 // 默认完全离线。真实模型：node examples/intent/run.mjs --live
 import { open } from 'node:fs/promises';
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { fixtures, conditions } from './fixtures.mjs';
 import { runMatrix } from './experiment.mjs';
 

@@ -1,4 +1,4 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

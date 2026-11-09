@@ -1,4 +1,4 @@
-import { ExceptionContract } from '@capix/invocation';
+import { ExceptionContract } from '@weiliang0121/capix-invocation';
 
 export type FileFailureReason = 'path' | 'unavailable' | 'workspace-unavailable' | 'outside' | 'symbolic-link' | 'not-file' | 'too-large' | 'encoding' | 'changed' | 'exists' | 'not-allowed' | 'io';
 

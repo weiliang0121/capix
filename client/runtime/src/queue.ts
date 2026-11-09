@@ -1,4 +1,4 @@
-import type { ConversationAdmission, ConversationRequest, ConversationSubmissionBaseline, FileTask } from '@capix/protocol';
+import type { ConversationAdmission, ConversationRequest, ConversationSubmissionBaseline, FileTask } from '@weiliang0121/capix-protocol';
 import type { ConversationTransport } from './transport.js';
 import { acceptConversationRequest } from './request.js';
 import { validAdmission } from './admission.js';

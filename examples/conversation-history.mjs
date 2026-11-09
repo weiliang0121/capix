@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { CompletionResource, createConversationScene, createHistoryAnswer, HistoryResource } from '@capix/conversation-service';
-import { ChatCompletionsProvider } from '@capix/model-provider';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 // 默认离线固定响应，只验证材料交接与结果落实；--live 才会请求真实模型。
 const args = process.argv.slice(2);

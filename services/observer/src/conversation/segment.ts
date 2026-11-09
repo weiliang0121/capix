@@ -1,5 +1,5 @@
-import { TranscriptRangeReader } from '@capix/transcript';
-import { groupAdjacentPairs } from '@capix/transcript/presets';
+import { TranscriptRangeReader } from '@weiliang0121/capix-transcript';
+import { groupAdjacentPairs } from '@weiliang0121/capix-transcript/presets';
 
 /** Retain up to two consecutive user/assistant pairs immediately before this input. */
 export function segmentCandidates(range: TranscriptRangeReader): readonly TranscriptRangeReader[] {

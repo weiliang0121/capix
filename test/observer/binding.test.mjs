@@ -1,11 +1,11 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ProgressChannel } from '@capix/changes';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { MessageUsage } from '@capix/measurement';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
 import { ActiveView } from '@capix/observer-content';
 import { createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 import { MemoryConversationCheckpointRuns } from '@capix/observer-service/assembly';

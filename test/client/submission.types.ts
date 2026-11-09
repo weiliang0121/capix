@@ -1,5 +1,5 @@
 import { ClientSubmission, type ClientRuntime } from '@capix/client-runtime';
-import type { ConversationRequest } from '@capix/protocol';
+import type { ConversationRequest } from '@weiliang0121/capix-protocol';
 
 declare const runtime: ClientRuntime;
 declare const request: ConversationRequest;

@@ -1,6 +1,6 @@
-import { Memories, MemoryViewSource, type MemoriesPersistence, type MemoriesState } from '@capix/memory';
-import { Transcript, TranscriptViewSource, type TranscriptPersistence, type TranscriptState } from '@capix/transcript';
-import { View, type ViewPersistence, type ViewState } from '@capix/view';
+import { Memories, MemoryViewSource, type MemoriesPersistence, type MemoriesState } from '@weiliang0121/capix-memory';
+import { Transcript, TranscriptViewSource, type TranscriptPersistence, type TranscriptState } from '@weiliang0121/capix-transcript';
+import { View, type ViewPersistence, type ViewState } from '@weiliang0121/capix-view';
 import type { ConversationMaterialSources, ConversationViewSource } from '../materials/view.js';
 
 /** Persistent content only. No structure, running call, model request or subscription. */

@@ -1,15 +1,15 @@
-import { Resources } from '@capix/server-runtime';
-import type { BuiltCallable, CallableInput, Group, GroupWork } from '@capix/server-runtime';
-import { CallableBuilder, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationContext, type InvocationWorkBinding, type InvocationOptions, type CallableSourceBinding, createRootInvocation } from '@capix/server-runtime/construction';
-import { Transcript } from '@capix/transcript';
-import { RecordResource, type ResourceRecord as ResourceRecordEntity } from '@capix/records';
-import type { ResourceRecord, ExecutionRecordSnapshot } from '@capix/protocol/recording';
-import type { ConversationRequest } from '@capix/protocol/conversation';
-import type { InvocationOrigin } from '@capix/protocol/invocation';
-import type { TranscriptSnapshot } from '@capix/protocol/content';
-import type { ObserverChange } from '@capix/protocol/observer';
+import { Resources } from '@weiliang0121/capix-runtime';
+import type { BuiltCallable, CallableInput, Group, GroupWork } from '@weiliang0121/capix-runtime';
+import { CallableBuilder, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationContext, type InvocationWorkBinding, type InvocationOptions, type CallableSourceBinding, createRootInvocation } from '@weiliang0121/capix-runtime/construction';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { RecordResource, type ResourceRecord as ResourceRecordEntity } from '@weiliang0121/capix-records';
+import type { ResourceRecord, ExecutionRecordSnapshot } from '@weiliang0121/capix-protocol/recording';
+import type { ConversationRequest } from '@weiliang0121/capix-protocol/conversation';
+import type { InvocationOrigin } from '@weiliang0121/capix-protocol/invocation';
+import type { TranscriptSnapshot } from '@weiliang0121/capix-protocol/content';
+import type { ObserverChange } from '@weiliang0121/capix-protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
-import { defineGroup, defineNode, defineScene } from '@capix/server-runtime';
+import { defineGroup, defineNode, defineScene } from '@weiliang0121/capix-runtime';
 import { ActiveViewResource } from '@capix/observer-content';
 import { MaintainConversationContent, PrepareConversationContext, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
 
@@ -125,7 +125,7 @@ const work: InvocationOptions<string, number, CallContext>['work'] = {
 declare const reusable: BuiltCallable<Group<string, number>, {}>;
 // @ts-expect-error A reusable E structure is not the state of one E invocation.
 const callContext: CallContext = reusable;
-declare const node: import('@capix/server-runtime').Node<string, number>;
+declare const node: import('@weiliang0121/capix-runtime').Node<string, number>;
 declare const invocationBindings: CallableSourceBinding<{}, { label: string }, typeof node>;
 // @ts-expect-error a source binding does not contain a separate entry resource scope.
 invocationBindings.entry({ text: 'input' });

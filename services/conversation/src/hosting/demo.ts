@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ChatCompletionsProvider, type ModelProvider, type ModelReply, type ModelRequest } from '@capix/model-provider';
+import { ChatCompletionsProvider, type ModelProvider, type ModelReply, type ModelRequest } from '@weiliang0121/capix-model-provider';
 import { z } from 'zod';
 
 const material = z.object({ query: z.object({ content: z.string() }), materials: z.object({ entries: z.array(z.object({ source: z.enum(['messages', 'memories']), value: z.object({ content: z.string() }) })) }) });

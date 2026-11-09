@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { RuntimeError } from '@capix/contracts';
-import { type ObservationInstallation } from '@capix/server-runtime';
-import { type InvocationControls, type CheckpointInstallation } from '@capix/invocation';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import type { ConversationDescriptor, ConversationListResponse, Message } from '@capix/protocol';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { type ObservationInstallation } from '@weiliang0121/capix-runtime';
+import { type InvocationControls, type CheckpointInstallation } from '@weiliang0121/capix-invocation';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import type { ConversationDescriptor, ConversationListResponse, Message } from '@weiliang0121/capix-protocol';
 import type { ModelInitialization } from '../conversation/model/types.js';
 import { conversationTitle } from '../conversation/title.js';
 import { ModelSource } from '../conversation/model/source.js';

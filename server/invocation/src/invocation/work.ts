@@ -1,5 +1,5 @@
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
-import type { OperationOutcome, OutputDeclaration, Stable } from '@capix/contracts';
+import type { OperationOutcome, OutputDeclaration, Stable } from '@weiliang0121/capix-contracts';
 import { InvocationStopped } from './stop.js';
 import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';

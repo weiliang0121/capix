@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 
 // 示例自己的静态 Skill 来源，不是框架新增的 Skill 实体或注册平台。
 // 内容构造后不变，因此版本固定；可变来源必须在成员/正文变化时换版本。

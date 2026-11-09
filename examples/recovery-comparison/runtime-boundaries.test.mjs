@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Node, Resources, Runner, Scene } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 
 // This is a negative control using the real public runtime. Running a scene
 // again with cached resource answers is NOT restoration of the original call.

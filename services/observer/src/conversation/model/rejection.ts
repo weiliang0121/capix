@@ -1,4 +1,4 @@
-import { ExceptionContract } from '@capix/invocation';
+import { ExceptionContract } from '@weiliang0121/capix-invocation';
 import type { ModelOutput } from './types.js';
 
 export interface ModelOutputRejection {

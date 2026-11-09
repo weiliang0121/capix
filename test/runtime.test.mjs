@@ -1,13 +1,13 @@
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix/observer-service';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
-import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
+import { readOutput, validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clock, CallableContext } from '@capix/server-runtime';
-import { Recorder, RecordBook } from '@capix/records';
-import { RuntimeError } from '@capix/contracts';
+import { Clock, CallableContext } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';

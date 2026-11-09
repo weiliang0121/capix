@@ -1,5 +1,5 @@
-import { RuntimeError } from '@capix/contracts';
-import type { CheckpointHead, CheckpointStore } from '@capix/checkpoint';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import type { CheckpointHead, CheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 /** Host read boundary; author facts deliberately do not expose the Frame's order cursor. */
 export function readToolCheckpoint(store: Pick<CheckpointStore, 'read'>, contextId: string): CheckpointHead | undefined {

@@ -1,4 +1,4 @@
-import type { ConversationAdmission } from '@capix/protocol';
+import type { ConversationAdmission } from '@weiliang0121/capix-protocol';
 import { isPlainObject } from 'es-toolkit/predicate';
 
 /** Admission is separate from an old submission's outcome, even on custom transports. */

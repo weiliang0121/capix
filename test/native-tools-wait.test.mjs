@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ModelReplyPending } from '@capix/conversation-service';
-import { ResourceOffer } from '@capix/resources';
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { createHarness } from '../examples/native-tools/assembly.mjs';
 import { ModelContract } from '../examples/native-tools/structure.mjs';
 import { finalReply } from '../examples/native-tools/fixtures.mjs';

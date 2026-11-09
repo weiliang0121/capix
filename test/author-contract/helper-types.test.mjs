@@ -35,7 +35,7 @@ function rejects(source, codes, withinService = false) {
 
 const capabilitySetup = `
 import {z} from 'zod';
-import type { ChildCalls, Group } from '@capix/server-runtime';
+import type { ChildCalls, Group } from '@weiliang0121/capix-runtime';
 import {conversationCapability} from './capability.js';
 declare const read: Group<{ path: string }, { content: string }, {}, { text: string }>;
 declare const summary: Group<{ text: string }, { summary: string }>;
@@ -88,7 +88,7 @@ conversationCapability({ ...options, output: { receive: (event) => { if (event.k
 });
 
 const sequenceSetup = `
-import { Sequence, Node, type SequenceStep, type CallableOutput, type ChildCalls, type Group } from '@capix/server-runtime';
+import { Sequence, Node, type SequenceStep, type CallableOutput, type ChildCalls, type Group } from '@weiliang0121/capix-runtime';
 declare const read: Group<{ path: string }, { content: string }, {}, { text: string }>;
 declare const summary: Group<{ text: string }, { summary: string }>;
 declare const exists: Group<{ path: string }, { exists: boolean }>;
@@ -150,7 +150,7 @@ void unionOutput; void dispatch;
 
 test('output-only helpers infer the returned value without the whole declaration tree', () => {
   accepts(`
-import type { ChildCall, Group } from '@capix/server-runtime';
+import type { ChildCall, Group } from '@weiliang0121/capix-runtime';
 declare const call: ChildCall<Group<{ path: string }, { content: string }>>;
 function receive<Output>(port: { readonly run: () => Promise<Output> }): Promise<Output> { return port.run(); }
 const result: Promise<{ content: string }> = receive(call);
@@ -158,7 +158,7 @@ void result;
 `);
   rejects(
     `
-import type { ChildCall, Group } from '@capix/server-runtime';
+import type { ChildCall, Group } from '@weiliang0121/capix-runtime';
 declare const call: ChildCall<Group<{ path: string }, { content: string }>>;
 function receive<Output>(port: { readonly run: () => Promise<Output> }): Promise<Output> { return port.run(); }
 const wrong: Promise<{ summary: string }> = receive(call);

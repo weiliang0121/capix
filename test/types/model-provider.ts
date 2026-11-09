@@ -1,6 +1,6 @@
-import { ChatCompletionsProvider, ProviderError, modelReplyText, requireModelReply, requireModelRequest, type ModelToolCall, type ToolResult, type ModelProvider, type ModelRequestInspection } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError, modelReplyText, requireModelReply, requireModelRequest, type ModelToolCall, type ToolResult, type ModelProvider, type ModelRequestInspection } from '@weiliang0121/capix-model-provider';
 import { createConversationRunner } from '@capix/conversation-service';
-import { Transcript } from '@capix/transcript';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const provider = new ChatCompletionsProvider({ endpoint: 'https://provider.example/chat/completions', apiKey: 'fixture', model: 'fixture-model', timeoutMs: 1000, maxResponseBytes: 4096, thinking: 'disabled', fetch });
 const request = { messages: [{ role: 'user', content: 'Hello' }] } as const;

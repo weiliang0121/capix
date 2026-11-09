@@ -1,8 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import { DatabaseSync } from 'node:sqlite';
-import { Scene, Group, Node, childReference } from '@capix/server-runtime';
-import { TranscriptResource, Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { Scene, Group, Node, childReference } from '@weiliang0121/capix-runtime';
+import { TranscriptResource, Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { SqliteCheckpointStore, SqliteObserverStore } from '@capix/observer-service';
 
 const [path, mode, boundary] = process.argv.slice(2);

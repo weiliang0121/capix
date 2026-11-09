@@ -1,6 +1,6 @@
-import { Node, Scene, Sequence, Dynamic, withDependencies } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Node, Scene, Sequence, Dynamic, withDependencies } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 // A local, model-free resource. No files or external services are touched.
 const texts = new ResourceOffer({

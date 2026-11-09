@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { CallInteractionLinks, InteractionObservation } from '@capix/protocol';
+import type { CallInteractionLinks, InteractionObservation } from '@weiliang0121/capix-protocol';
 import { acceptResponse, deliver, parseLine } from './responses.js';
 import { HttpTransportError } from './errors.js';
 import { readLines } from './stream.js';

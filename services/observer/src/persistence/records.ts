@@ -1,4 +1,4 @@
-import type { RecordEntry, RecordMutation, InvocationValue, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
+import type { RecordEntry, RecordMutation, InvocationValue, ProcessRecord, RelationChangeRecord } from '@weiliang0121/capix-protocol';
 
 /** Apply the producer's declared mutation, never infer changes by comparing snapshots. */
 export function updateRecord(entry: RecordEntry, mutation: Exclude<RecordMutation, { kind: 'added' | 'replaced' }>): RecordEntry {

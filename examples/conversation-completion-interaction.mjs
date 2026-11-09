@@ -2,13 +2,13 @@
 // 固定模型替身；验证完整模型请求、材料回答与独立交互的组合，不访问网络。
 import assert from 'node:assert/strict';
 import { CompletionInteraction, CompletionInteractionResource, ConversationViewResource, createCompletionStartNode, createCompletionReplyNode, createConversationScene, createInteractionCompletion, createMaterialAnswer, createMaterialPreparation, createMessageInclusion } from '@capix/conversation-service';
-import { Interactions } from '@capix/interaction';
-import { Memories } from '@capix/memory';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Scene } from '@capix/structure';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Scene } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const delayed = Promise.withResolvers();
 const previewed = Promise.withResolvers();

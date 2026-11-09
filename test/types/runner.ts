@@ -1,5 +1,5 @@
-import { Runner, Resources, Interactions, Scene, Node, callableHooks, type InteractionChannel, type InteractionContract } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
+import { Runner, Resources, Interactions, Scene, Node, callableHooks, type InteractionChannel, type InteractionContract } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 declare function expectType<Value>(value: Value): void;
 

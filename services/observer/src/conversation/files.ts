@@ -1,4 +1,4 @@
-import type { FileOutput } from '@capix/protocol';
+import type { FileOutput } from '@weiliang0121/capix-protocol';
 import type { FileProgress } from '../files/index.js';
 
 /** Interprets one requested output independently of the enclosing call and its answer. */

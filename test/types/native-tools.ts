@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Node } from '@capix/structure';
+import { Node } from '@weiliang0121/capix-structure';
 import { tool } from '../../examples/native-tools/catalog.mjs';
 import { acceptReply, acceptFeedback, type ToolResult } from '../../examples/native-tools/protocol.mjs';
 

@@ -2,8 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Transcript } from '@capix/transcript';
-import type { ConversationCallDetail, ConversationInspection, ConversationRecordingState, ConversationServiceInfo, ConversationSubmissionFrame, TranscriptFrame, ConversationRecoverySummary, ConversationRecoveryActivity } from '@capix/protocol';
+import type { Transcript } from '@weiliang0121/capix-transcript';
+import type { ConversationCallDetail, ConversationInspection, ConversationRecordingState, ConversationServiceInfo, ConversationSubmissionFrame, TranscriptFrame, ConversationRecoverySummary, ConversationRecoveryActivity } from '@weiliang0121/capix-protocol';
 import { ConversationEvents } from './events.js';
 import { ConversationHttpError, ConversationSubmissions, type ConversationRunner } from './submission.js';
 import { streamFrames } from './stream.js';

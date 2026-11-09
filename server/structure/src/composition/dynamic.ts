@@ -2,7 +2,7 @@ import { types } from 'node:util';
 import { Group } from '../group.js';
 import type { MemberInput } from './input.js';
 import type { ChildCallable } from '../definition/children.js';
-import type { CallableInput, CallableOutput, Stable } from '@capix/contracts';
+import type { CallableInput, CallableOutput, Stable } from '@weiliang0121/capix-contracts';
 import type { MemberRegistration, NamedMembers } from '../definition/composition.js';
 import { checkMemberName } from '../members.js';
 

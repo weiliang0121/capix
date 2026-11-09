@@ -1,5 +1,5 @@
-import { Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 function text(value) {
   if (typeof value !== 'string') throw new TypeError('Expected text');

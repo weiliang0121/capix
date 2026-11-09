@@ -1,5 +1,5 @@
-import { ResourceOffer } from '@capix/resources';
-import type { RecordEntry } from '@capix/protocol';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import type { RecordEntry } from '@weiliang0121/capix-protocol';
 import type { RecordBookState } from './book.js';
 import { BaseRecord } from './record.js';
 import type { Recorder } from './recorder.js';

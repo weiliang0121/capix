@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, ProviderError } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError } from '@weiliang0121/capix-model-provider';
 import { createSession } from '../examples/shared-provider/assembly.mjs';
 import { createControlledProvider } from '../examples/shared-provider/transport.mjs';
 

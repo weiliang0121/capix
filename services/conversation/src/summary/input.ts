@@ -1,4 +1,4 @@
-import type { Message } from '@capix/protocol';
+import type { Message } from '@weiliang0121/capix-protocol';
 import { requireText } from '../text.js';
 
 export interface HistoryInput {

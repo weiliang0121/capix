@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isProxy } from 'node:util/types';
-import { requireToolFeedback } from '@capix/model-provider';
+import { requireToolFeedback } from '@weiliang0121/capix-model-provider';
 import type { ExchangeOperation, ExchangeReference, ExchangeIntakeReceipt, ExchangeFeedbackReceipt } from './types.js';
 import { maximumModelExchangeEntryBytes } from './limits.js';
 

@@ -4,9 +4,9 @@ import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import ts from 'typescript';
-import * as resourcesPackage from '@capix/resources';
-import { Resource, ResourceOffer, Resources } from '@capix/resources';
-import { receiveOperation } from '@capix/resources/operation';
+import * as resourcesPackage from '@weiliang0121/capix-resources';
+import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
+import { receiveOperation } from '@weiliang0121/capix-resources/operation';
 
 // This consumer intentionally imports no runtime. Its host owns access lifetime
 // and identifies its own protected failures; no Scene or Invocation is needed.
@@ -144,7 +144,7 @@ test('a broken host failure classifier preserves both faults and never enters bu
 test('async host failure classifiers reject their contract without leaking unhandled rejections', () => {
   const source = `
     import assert from 'node:assert/strict';
-    import { Resource, ResourceOffer, Resources } from '@capix/resources';
+    import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
     for (const method of ['isProtected', 'isCancellation']) {
       const controller = new AbortController();
       const original = new Error('operation failure');
@@ -182,14 +182,14 @@ test('async host failure classifiers reject their contract without leaking unhan
 test('resource package declarations contain no reverse runtime dependency or private cross-package imports', async () => {
   const root = new URL('../server/resources/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
-  for (const name of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.notEqual(name, '@capix/server-runtime');
+  for (const name of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.notEqual(name, '@weiliang0121/capix-runtime');
   async function inspect(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const child = new URL(entry.name + (entry.isDirectory() ? '/' : ''), directory);
       if (entry.isDirectory()) await inspect(child);
       else if (entry.name.endsWith('.d.ts')) {
         const content = await readFile(child, 'utf8');
-        assert.doesNotMatch(content, /@capix\/server-runtime|(?:\.\.\/)+runtime\//, fileURLToPath(child));
+        assert.doesNotMatch(content, /@weiliang0121\/capix-runtime|(?:\.\.\/)+runtime\//, fileURLToPath(child));
       }
     }
   }

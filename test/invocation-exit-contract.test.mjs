@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Invocation, InvocationCancelled, InvocationContext } from '@capix/invocation';
-import { Resource, ResourceAccessClosed, ResourceOffer } from '@capix/resources';
-import { Node, Resources, Runner, Scene, checkpointPoint } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Invocation, InvocationCancelled, InvocationContext } from '@weiliang0121/capix-invocation';
+import { Resource, ResourceAccessClosed, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Node, Resources, Runner, Scene, checkpointPoint } from '@weiliang0121/capix-runtime';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const probe = new ResourceOffer({

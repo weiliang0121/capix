@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CheckpointReference, CheckpointSelectionChange, CheckpointSelectionReference, CheckpointSelectionSnapshot } from '@capix/checkpoint';
+import type { CheckpointReference, CheckpointSelectionChange, CheckpointSelectionReference, CheckpointSelectionSnapshot } from '@weiliang0121/capix-checkpoint';
 import type { InvocationCheckpointOccurrence, InvocationCheckpointSelection } from './contract.js';
 
 interface Entry {

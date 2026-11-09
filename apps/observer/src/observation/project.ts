@@ -1,8 +1,8 @@
 import { observationStatus } from './status.js';
-import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import type { ExecutionRecordSnapshot, CallableRecord, InvocationValue, GenerationOutput } from '@capix/protocol';
+import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
+import type { ExecutionRecordSnapshot, CallableRecord, InvocationValue, GenerationOutput } from '@weiliang0121/capix-protocol';
 import type { CallSpan, Trace } from './types.js';
-export { validateExecutionRecordSnapshot } from '@capix/protocol';
+export { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 /** A task is selected by the service. Every call keeps its actual kind and direct parent. */
 export function projectExecution(facts: ExecutionRecordSnapshot): Trace {

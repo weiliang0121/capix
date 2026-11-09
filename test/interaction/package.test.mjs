@@ -9,13 +9,13 @@ import ts from 'typescript';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const interactionDirectory = resolve(root, 'server/interaction');
-const dependencies = ['@capix/contracts', '@capix/changes', '@capix/diagnostics', 'es-toolkit'];
-const excludedPackages = ['@capix/server-runtime', '@capix/invocation', '@capix/structure', '@capix/resources'];
+const dependencies = ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-diagnostics', 'es-toolkit'];
+const excludedPackages = ['@weiliang0121/capix-runtime', '@weiliang0121/capix-invocation', '@weiliang0121/capix-structure', '@weiliang0121/capix-resources'];
 const excludedDirectories = ['server/runtime', 'server/invocation', 'server/structure', 'server/resources'];
 
 test('interaction package exposes external exchanges with only lower dependencies', async () => {
   const manifest = JSON.parse(await readFile(resolve(interactionDirectory, 'package.json'), 'utf8'));
-  assert.equal(manifest.name, '@capix/interaction');
+  assert.equal(manifest.name, '@weiliang0121/capix-interaction');
   assert.deepEqual(Object.keys(manifest.exports), ['.']);
   assert.deepEqual(Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).sort(), [...dependencies].sort());
   async function inspect(directory) {
@@ -26,7 +26,7 @@ test('interaction package exposes external exchanges with only lower dependencie
         const source = await readFile(file, 'utf8');
         for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
           const specifier = match[2];
-          if (specifier.startsWith('@capix/')) assert.ok(dependencies.includes(specifier), `${file} cannot import ${specifier}`);
+          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.ok(dependencies.includes(specifier), `${file} cannot import ${specifier}`);
           if (specifier.startsWith('.')) assert.ok(!relative(interactionDirectory, resolve(dirname(file), specifier)).startsWith('..'), `${file} crosses its package boundary`);
         }
       }
@@ -34,16 +34,16 @@ test('interaction package exposes external exchanges with only lower dependencie
   }
   await inspect(resolve(interactionDirectory, 'src'));
   await inspect(resolve(interactionDirectory, 'dist'));
-  const interaction = await import('@capix/interaction');
+  const interaction = await import('@weiliang0121/capix-interaction');
   for (const name of ['Interaction', 'Interactions']) assert.equal(typeof interaction[name], 'function');
   for (const name of ['Runner', 'Scene', 'Group', 'Node', 'Invocation', 'CallableContext', 'Resource', 'Resources', 'Recorder', 'CheckpointStore']) assert.equal(name in interaction, false, `${name} does not belong to the interaction package`);
-  for (const specifier of ['@capix/interaction/interaction', '@capix/interaction/src/interaction.js', '@capix/interaction/dist/interaction.js']) await assert.rejects(import(specifier), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+  for (const specifier of ['@weiliang0121/capix-interaction/interaction', '@weiliang0121/capix-interaction/src/interaction.js', '@weiliang0121/capix-interaction/dist/interaction.js']) await assert.rejects(import(specifier), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 });
 
 test('interaction builds declarations and runs a typed consumer without Runtime, Invocation, Structure or Resources', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'capix-interaction-package-'));
   try {
-    const packageDirectory = resolve(directory, 'node_modules/@capix/interaction');
+    const packageDirectory = resolve(directory, 'node_modules/@weiliang0121/capix-interaction');
     await mkdir(packageDirectory, { recursive: true });
     await writeFile(resolve(packageDirectory, 'package.json'), await readFile(resolve(interactionDirectory, 'package.json')));
     await mkdir(resolve(directory, 'src'));
@@ -85,7 +85,7 @@ test('interaction builds declarations and runs a typed consumer without Runtime,
     await writeFile(
       fixture,
       `import assert from 'node:assert/strict';
-import { Interaction, Interactions, type InteractionContract, type InteractionState } from '@capix/interaction';
+import { Interaction, Interactions, type InteractionContract, type InteractionState } from '@weiliang0121/capix-interaction';
 type Reply = { text: string };
 const contract: InteractionContract<string, Reply> = {
   key: 'standalone.echo.v1',
@@ -183,10 +183,10 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 });
 
 test('Runtime exports preserve the independent interaction and shared persistence error identities', async () => {
-  const interaction = await import('@capix/interaction');
-  const diagnostics = await import('@capix/diagnostics');
-  const invocation = await import('@capix/invocation');
-  const runtime = await import('@capix/server-runtime');
+  const interaction = await import('@weiliang0121/capix-interaction');
+  const diagnostics = await import('@weiliang0121/capix-diagnostics');
+  const invocation = await import('@weiliang0121/capix-invocation');
+  const runtime = await import('@weiliang0121/capix-runtime');
   assert.equal(runtime.Interaction, interaction.Interaction);
   assert.equal(runtime.Interactions, interaction.Interactions);
   assert.equal(runtime.PersistenceError, diagnostics.PersistenceError);
@@ -196,10 +196,10 @@ test('Runtime exports preserve the independent interaction and shared persistenc
 });
 
 test('real interaction persistence failures remain protected through resource result.failed', async (t) => {
-  const { Interactions } = await import('@capix/interaction');
-  const { PersistenceError } = await import('@capix/diagnostics');
-  const { Resources, Runner, Scene } = await import('@capix/server-runtime');
-  const { ResourceOffer } = await import('@capix/resources');
+  const { Interactions } = await import('@weiliang0121/capix-interaction');
+  const { PersistenceError } = await import('@weiliang0121/capix-diagnostics');
+  const { Resources, Runner, Scene } = await import('@weiliang0121/capix-runtime');
+  const { ResourceOffer } = await import('@weiliang0121/capix-resources');
   for (const phase of ['create', 'feedback', 'read']) {
     await t.test(phase, async () => {
       const cause = new Error(`fixture persistence ${phase} failed`);

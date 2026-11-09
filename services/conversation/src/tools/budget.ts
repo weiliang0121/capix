@@ -1,6 +1,6 @@
 import { types } from 'node:util';
-import { maximumModelExchangeEntryBytes, type ModelExchangeEntry } from '@capix/model-exchanges';
-import { requireModelReply, requireModelRequest, requireToolFeedback, requireToolResult, type ModelReply, type ModelRequest, type ModelRequestInspection, type ToolResult } from '@capix/model-provider';
+import { maximumModelExchangeEntryBytes, type ModelExchangeEntry } from '@weiliang0121/capix-model-exchanges';
+import { requireModelReply, requireModelRequest, requireToolFeedback, requireToolResult, type ModelReply, type ModelRequest, type ModelRequestInspection, type ToolResult } from '@weiliang0121/capix-model-provider';
 
 /** UTF-8 bytes of complete JSON values, including protocol envelopes and call IDs. */
 export interface ToolByteBudgets {

@@ -6,10 +6,10 @@ import { pathToFileURL } from 'node:url';
 import { createConversationInteractions, createConversationResources, createMaterialConversationScene, loadConversationContent } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { ConversationRecording } from '@capix/conversation-service/recording';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const profiles = new Set(['memory', 'sqlite', 'checkpoint', 'recording']);
 const configuration = 'capacity-material-conversation-v1';

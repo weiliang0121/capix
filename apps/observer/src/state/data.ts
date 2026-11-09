@@ -1,5 +1,5 @@
 import type { ObservationStatus } from '../observation/status.js';
-import type { ConversationDescriptor, FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, MemoryResultSource, Message, ResourceRecord, ProcessRecord, RelationChangeRecord, InvocationSummary, RecordingArchiveOrigin } from '@capix/protocol';
+import type { ConversationDescriptor, FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, MemoryResultSource, Message, ResourceRecord, ProcessRecord, RelationChangeRecord, InvocationSummary, RecordingArchiveOrigin } from '@weiliang0121/capix-protocol';
 import type { ConversationItem } from './conversation.js';
 import type { CallSpan } from '../observation/types.js';
 import type { CallGraphModel } from './graph.js';

@@ -1,8 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, defineNode, defineGroup, bindRecording, defineObservation } from '@capix/server-runtime';
-import { Recorder, RecordBook } from '@capix/records';
+import { Sequence, defineNode, defineGroup, bindRecording, defineObservation } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
 import { runtimeDefinition, recordedCall } from '../fixtures/declarations.mjs';
 
 const metadata = { name: 'composed', label: 'Composed', source: 'test' };

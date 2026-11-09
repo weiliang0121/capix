@@ -1,7 +1,7 @@
-import { Node, Group, Scene, checkpointPoint, childReference, reception } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { TranscriptResource } from '@capix/transcript';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Node, Group, Scene, checkpointPoint, childReference, reception } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { isDeepStrictEqual } from 'node:util';
 import { keys } from './store.mjs';
 

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Driver, Node, defineNode } from '@capix/server-runtime';
+import { Driver, Node, defineNode } from '@weiliang0121/capix-runtime';
 
 const entry = fileURLToPath(new URL('./types/flat-configuration.ts', import.meta.url));
 const source = readFileSync(entry, 'utf8');

@@ -1,9 +1,9 @@
-import { stableValue } from '@capix/contracts';
+import { stableValue } from '@weiliang0121/capix-contracts';
 import { decodeCheckpointData, runCheckpointCheck } from './data.js';
-import type { RuntimeErrorDetail, RuntimeErrorValue, CheckpointValue } from '@capix/contracts';
-import type { CheckpointChild, CheckpointChildReception, CheckpointHandledReception, CheckpointReferences, InvocationCheckpointFrame } from '@capix/checkpoint';
+import type { RuntimeErrorDetail, RuntimeErrorValue, CheckpointValue } from '@weiliang0121/capix-contracts';
+import type { CheckpointChild, CheckpointChildReception, CheckpointHandledReception, CheckpointReferences, InvocationCheckpointFrame } from '@weiliang0121/capix-checkpoint';
 import type { CheckpointBinding, CheckpointChildBinding, CheckpointReferenceSlot } from './work.js';
-import { checkpointReferenceChild } from '@capix/checkpoint';
+import { checkpointReferenceChild } from '@weiliang0121/capix-checkpoint';
 import type { InvocationReceptionBinding } from '../invocation/reception.js';
 
 type ChildProgress = { readonly round: number; readonly currentInput: unknown; readonly phase: 'execute' | 'receive' | 'handling' };

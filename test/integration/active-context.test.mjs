@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver } from '@capix/observer-service/assembly';
 import { createConversationStructure } from '@capix/observer-service/conversation';
-import { Group } from '@capix/server-runtime';
+import { Group } from '@weiliang0121/capix-runtime';
 
 const settings = { model: 'fixture', contextBudget: 100000, maxOutputTokens: 512, timeoutMs: 1000 };
 const input = (content) => ({ messages: [{ role: 'user', content }] });

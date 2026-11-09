@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Node, Group, Scene, Driver, reception } from '@capix/server-runtime';
+import { Node, Group, Scene, Driver, reception } from '@weiliang0121/capix-runtime';
 
 const binding = { providers: [], source: { capture: () => null } };
 

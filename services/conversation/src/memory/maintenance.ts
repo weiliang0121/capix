@@ -1,7 +1,7 @@
-import type { MemoryChange } from '@capix/memory';
+import type { MemoryChange } from '@weiliang0121/capix-memory';
 import { isDeepStrictEqual } from 'node:util';
-import type { ResourcesOf } from '@capix/resources';
-import { Group, checkpointPoint, childReference, reception, type GroupWork, type CheckpointFacts } from '@capix/structure';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Group, checkpointPoint, childReference, reception, type GroupWork, type CheckpointFacts } from '@weiliang0121/capix-structure';
 import { z } from 'zod';
 import type { ConversationCompletion } from '../completion.js';
 import type { AcceptedConversationMessage } from '../scene.js';

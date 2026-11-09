@@ -1,7 +1,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { assertConversationRecovery, createConversationInteractions, createConversationResources, createMaterialConversationScene, loadConversationContent } from '@capix/conversation-service/assembly';
-import { Runner } from '@capix/server-runtime';
+import { Runner } from '@weiliang0121/capix-runtime';
 
 const [mode, database, boundary = 'none'] = process.argv.slice(2);
 const store = ConversationStore.open(database);

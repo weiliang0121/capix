@@ -1,6 +1,6 @@
 import { decisionInputCodec, checkLeafResult } from '../group/checkpoint.js';
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import { Group, type CheckpointCodec, checkpointPoint, type GroupWork } from '@capix/structure';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import { Group, type CheckpointCodec, checkpointPoint, type GroupWork } from '@weiliang0121/capix-structure';
 import type { ConversationDecision, ConversationDecisionInput } from './types.js';
 
 // The E acceptance contract, not this optional persistence port, decides whether a proposal is executable.

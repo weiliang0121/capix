@@ -1,6 +1,6 @@
 import { isEqual } from 'es-toolkit/predicate';
 import { preflightInputCodec, preflightCodec, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/structure';
+import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@weiliang0121/capix-structure';
 import { FileResources, type FileInspector } from '../../../files/index.js';
 import { InspectFileTask } from '../../node/files/check.js';
 import type { FilePreflightInput, FilePreflightOutput } from './types.js';

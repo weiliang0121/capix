@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { ModelRequest } from '@capix/model-provider';
-import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork, type ResumeWork } from '@capix/structure';
+import type { ModelRequest } from '@weiliang0121/capix-model-provider';
+import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork, type ResumeWork } from '@weiliang0121/capix-structure';
 import { createCompletionNode, requireCompletionText, type ConversationCompletion } from '../completion.js';
 import { requireString, requireText } from '../text.js';
 import { defaultConversationOutputBudget, requireOutputTokens } from '../model/budget.js';

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import { ResourceOffer, ResourcePortError } from '@capix/resources';
-import { RuntimeError } from '@capix/contracts';
-import type { Transcript } from '@capix/transcript';
+import { ResourceOffer, ResourcePortError } from '@weiliang0121/capix-resources';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import type { Transcript } from '@weiliang0121/capix-transcript';
 import type { ConversationMaterialInput } from '../../materials/input.js';
 import { assertToolFeedbackBytes, assertToolOutputBytes, ToolBudgetError } from '../../tools/budget.js';
 import type { ToolConversationPolicy } from '../../hosting/tool-policy.js';

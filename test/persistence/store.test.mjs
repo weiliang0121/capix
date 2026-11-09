@@ -4,12 +4,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { PersistenceError } from '@capix/diagnostics';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { SqliteObserverStore, initializeObserver, observeOverview } from '@capix/observer-service';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
-import { CallableRecord, CallableRecordHelper } from '@capix/records';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
+import { CallableRecord, CallableRecordHelper } from '@weiliang0121/capix-records';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const provider = {

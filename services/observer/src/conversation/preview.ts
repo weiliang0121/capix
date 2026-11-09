@@ -1,4 +1,4 @@
-import type { AnswerPreviewChange, AnswerPreviewSnapshot } from '@capix/protocol';
+import type { AnswerPreviewChange, AnswerPreviewSnapshot } from '@weiliang0121/capix-protocol';
 import type { AnswerProgress, AnswerSource } from './group/answer/stream.js';
 
 /** Submission-local public interpretation of explicitly selected answer outputs. */

@@ -1,4 +1,4 @@
-import type { FileTask } from '@capix/protocol';
+import type { FileTask } from '@weiliang0121/capix-protocol';
 
 export interface FilePreflightInput {
   readonly task: FileTask;

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { stableValue, StableValueError } from '@capix/contracts';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Invocation, InvocationContext, InvocationObservation, ObserverSession, InvocationCancelled } from '@capix/invocation';
-import { Node, Scene, Resources, Runner, CallableInvocationBuilder } from '@capix/server-runtime';
-import { ResourceOffer, ResourceSupply } from '@capix/resources';
+import { stableValue, StableValueError } from '@weiliang0121/capix-contracts';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Invocation, InvocationContext, InvocationObservation, ObserverSession, InvocationCancelled } from '@weiliang0121/capix-invocation';
+import { Node, Scene, Resources, Runner, CallableInvocationBuilder } from '@weiliang0121/capix-runtime';
+import { ResourceOffer, ResourceSupply } from '@weiliang0121/capix-resources';
 import { installCallable } from './fixtures/driver.mjs';
 
 const codec = { encode: (value) => value, decode: (value) => value };

@@ -1,5 +1,5 @@
-import { Group, checkpointPoint, childReference, type ChildCall, type ChildrenOf, type GroupWork, type ResumeWork, type CheckpointFacts } from '@capix/structure';
-import type { GenerationOutput } from '@capix/protocol';
+import { Group, checkpointPoint, childReference, type ChildCall, type ChildrenOf, type GroupWork, type ResumeWork, type CheckpointFacts } from '@weiliang0121/capix-structure';
+import type { GenerationOutput } from '@weiliang0121/capix-protocol';
 import { isEqual } from 'es-toolkit/predicate';
 import { RequestModel } from '../model/request.js';
 import { AcceptModelOutput, type ModelAcceptanceInput } from '../../node/model/accept.js';

@@ -1,4 +1,4 @@
-import type { CallableKind, Work, CompositeWork, ChildContract, AuthorCheckpointWriter, ContinuationFact, OutputWork } from '@capix/contracts';
+import type { CallableKind, Work, CompositeWork, ChildContract, AuthorCheckpointWriter, ContinuationFact, OutputWork } from '@weiliang0121/capix-contracts';
 import type { ChildContractsOf } from './children.js';
 
 type Children<Kind extends CallableKind, Allowed extends ChildContractsOf<Kind>, Restoring extends boolean> = Kind extends 'node' ? object : CompositeWork<Allowed, Restoring>;

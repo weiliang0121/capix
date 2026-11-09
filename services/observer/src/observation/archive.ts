@@ -1,5 +1,5 @@
-import type { RecordingArchive, RecordingArchiveOrigin } from '@capix/protocol';
-import type { RecordBook } from '@capix/records';
+import type { RecordingArchive, RecordingArchiveOrigin } from '@weiliang0121/capix-protocol';
+import type { RecordBook } from '@weiliang0121/capix-records';
 
 /** Resolve saved provenance through direct record links, without copying ancestor IDs into records. */
 export function executionArchive(book: RecordBook, archives: readonly RecordingArchive[] | undefined, executionId: string): RecordingArchiveOrigin | undefined {

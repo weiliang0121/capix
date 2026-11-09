@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { isUndefined } from 'es-toolkit/predicate';
-import { Clock, type InvocationControls } from '@capix/invocation';
+import { Clock, type InvocationControls } from '@weiliang0121/capix-invocation';
 import { bindDriverObservation } from '../binding/observation.js';
-import type { EventConsumer } from '@capix/changes';
+import type { EventConsumer } from '@weiliang0121/capix-changes';
 import type { DriverFact } from '../observation/driver.js';
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { AnyBuiltCallable, BuiltCallable, BuiltOptions } from '../structure/construction.js';
 import { buildCallableFromSource } from './binding.js';
 import { runEntry, type EntryChange, type EntryState } from '../entry.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from '../construction/capabilities.js';
 import { type CallableBindingOptions } from './binding.js';
 import type { AnyCallable } from '../binding/declarations.js';
-import type { CallableInput, CallableOutput, Stable } from '@capix/contracts';
-import type { CheckpointStore } from '@capix/checkpoint';
+import type { CallableInput, CallableOutput, Stable } from '@weiliang0121/capix-contracts';
+import type { CheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 /** Legacy multi-root host. New hosts use Runner; both share entry and invocation mechanisms. */
 export class Driver {

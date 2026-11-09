@@ -1,15 +1,15 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { CompletionInteraction, CompletionInteractionResource, CompletionResource, ConversationViewResource, createCompletionNode, createInteractionCompletion, createMaterialAnswer, createMaterialPreparation } from '@capix/conversation-service';
-import { Interactions } from '@capix/interaction';
-import { Memories } from '@capix/memory';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Scene, checkpointPoint, childReference } from '@capix/structure';
-import { Transcript } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Scene, checkpointPoint, childReference } from '@weiliang0121/capix-structure';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const clone = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 const response = { id: 'saved-reply', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: '正式回答' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };

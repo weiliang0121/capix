@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent, restoreConversationContent } from '@capix/conversation-service/assembly';
-import { TranscriptViewSource } from '@capix/transcript';
-import { MemoryViewSource } from '@capix/memory';
-import { PersistenceError } from '@capix/diagnostics';
+import { TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { MemoryViewSource } from '@weiliang0121/capix-memory';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'capix-conversation-store-'));

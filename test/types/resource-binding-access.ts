@@ -1,4 +1,4 @@
-import { Resources, Resource, ResourceOffer, ResourceBinding, ResourceSupply, type ResourceOperation, type ResourceRequirements } from '@capix/resources';
+import { Resources, Resource, ResourceOffer, ResourceBinding, ResourceSupply, type ResourceOperation, type ResourceRequirements } from '@weiliang0121/capix-resources';
 
 declare function expectType<Value>(value: Value): void;
 const numbers = new ResourceOffer({

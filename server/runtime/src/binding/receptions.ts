@@ -1,5 +1,5 @@
-import type { ChildContract, ReceptionDefinition, ReceptionRegistration } from '@capix/contracts';
-import type { InvocationReceptionBinding } from '@capix/invocation';
+import type { ChildContract, ReceptionDefinition, ReceptionRegistration } from '@weiliang0121/capix-contracts';
+import type { InvocationReceptionBinding } from '@weiliang0121/capix-invocation';
 import type { BoundChildren } from './children/bound.js';
 import { originalReception } from './snapshot.js';
 

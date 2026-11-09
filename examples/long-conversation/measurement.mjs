@@ -2,8 +2,8 @@ import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
-import { CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
-import { decodeCheckpointRecord, isCheckpointRecord } from '@capix/checkpoint/storage';
+import { CHECKPOINT_MAX_BYTES } from '@weiliang0121/capix-checkpoint';
+import { decodeCheckpointRecord, isCheckpointRecord } from '@weiliang0121/capix-checkpoint/storage';
 
 /** UTF-8 bytes of the text itself, without JSON quotes or escaping. */
 export function textBytes(text) {

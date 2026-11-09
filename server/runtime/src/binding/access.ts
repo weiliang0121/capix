@@ -1,6 +1,6 @@
-import type { InvocationResources, CallableContext, Invocation } from '@capix/invocation';
-import type { ChildContract } from '@capix/contracts';
-import type { ResourceRequirements } from '@capix/resources';
+import type { InvocationResources, CallableContext, Invocation } from '@weiliang0121/capix-invocation';
+import type { ChildContract } from '@weiliang0121/capix-contracts';
+import type { ResourceRequirements } from '@weiliang0121/capix-resources';
 import type { ChildBindingsBuilder } from './children/builder.js';
 import type { InvocationChildReferences } from './children/references.js';
 
@@ -41,7 +41,7 @@ export class InvocationAccess<Input, Output, Context extends CallableContext<Inp
       input: context.currentInput,
       resources: this.#resources.view(deps, resourcePhase),
       signal: context.signal,
-      observation: (event: import('@capix/invocation').BusinessEvent) => {
+      observation: (event: import('@weiliang0121/capix-invocation').BusinessEvent) => {
         validate();
         this.invocation.observeBusiness(event);
       },

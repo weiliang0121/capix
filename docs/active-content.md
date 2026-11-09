@@ -1,6 +1,6 @@
 # 活跃材料、准备与维护
 
-这是 P02 的服务侧实现。正式消息由 Transcript 持有，记忆由 Memories 持有；`@capix/observer-content` 中的 ActiveView 组合 `@capix/view` 的通用成员与来源机制，说明这些既有内容中哪些值参与下一次材料准备。ActiveView 的业务策略和保存形状仍由 Observer 解释，不是内核的容量策略或通用上下文平台。
+这是 P02 的服务侧实现。正式消息由 Transcript 持有，记忆由 Memories 持有；`@capix/observer-content` 中的 ActiveView 组合 `@weiliang0121/capix-view` 的通用成员与来源机制，说明这些既有内容中哪些值参与下一次材料准备。ActiveView 的业务策略和保存形状仍由 Observer 解释，不是内核的容量策略或通用上下文平台。
 
 ## 归属与三个时机
 

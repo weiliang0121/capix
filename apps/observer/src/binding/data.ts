@@ -1,5 +1,5 @@
 import type { ClientState } from '@capix/client-runtime';
-import type { ObserverOverview } from '@capix/protocol';
+import type { ObserverOverview } from '@weiliang0121/capix-protocol';
 import { projectConversation } from '../observation/conversation.js';
 import { emptyAppData } from '../state/data.js';
 import type { AppData } from '../state/data.js';

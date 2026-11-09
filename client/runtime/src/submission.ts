@@ -1,4 +1,4 @@
-import type { ConversationRequest, ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionBaseline, ConversationSubmissionUpdate, FileTask } from '@capix/protocol';
+import type { ConversationRequest, ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionBaseline, ConversationSubmissionUpdate, FileTask } from '@weiliang0121/capix-protocol';
 import { isEqual } from 'es-toolkit';
 import { SubmissionUnavailableError, type ConversationTransport } from './transport.js';
 import { acceptConversationRequest } from './request.js';

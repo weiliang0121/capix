@@ -1,10 +1,10 @@
 import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialPreparation } from '@capix/conversation-service';
 import { ConversationRecording } from '@capix/conversation-service/recording';
-import { Memories } from '@capix/memory';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 import { createComparisonAnswer } from './structure.mjs';
 import { createAnalysisGroup, createMergeGroup } from './model.mjs';
 

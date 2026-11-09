@@ -1,8 +1,8 @@
 import { contextWithSource, sourceFor } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript } from '@capix/transcript';
-import { Memory } from '@capix/memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memory } from '@weiliang0121/capix-memory';
 
 import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract } from '@capix/observer-service';
 
@@ -122,7 +122,7 @@ test('explicitly filtering active membership preserves original messages and tra
 
 test('retention stops at incomplete messages and never pulls a pair back out of an archived segment', async () => {
   const { segmentCandidates } = await import('@capix/observer-service');
-  const { TranscriptRangeRef, TranscriptRangeReader } = await import('@capix/transcript');
+  const { TranscriptRangeRef, TranscriptRangeReader } = await import('@weiliang0121/capix-transcript');
   const transcript = new Transcript([
     { role: 'user', content: 'old' },
     { role: 'assistant', content: 'old response' },

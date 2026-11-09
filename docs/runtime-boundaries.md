@@ -122,7 +122,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 ### 调用独立包与装配接缝
 
-2026-10-27：`@capix/invocation` 已作为独立 Workspace 包承载单次执行、直接关系、返回与接纳、故障归属及活动窗口。Runtime 负责把结构和宿主供给接成这种调用。调用包不依赖 Runtime、structure、记录或内容实体；它通过 contracts、resources、changes、checkpoint、protocol 与 diagnostics 的公开出口接入共同机制。
+2026-10-27：`@weiliang0121/capix-invocation` 已作为独立 Workspace 包承载单次执行、直接关系、返回与接纳、故障归属及活动窗口。Runtime 负责把结构和宿主供给接成这种调用。调用包不依赖 Runtime、structure、记录或内容实体；它通过 contracts、resources、changes、checkpoint、protocol 与 diagnostics 的公开出口接入共同机制。
 
 | 实际归属              | 内容                                                                                                 |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -134,7 +134,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 对象按次创建并不自动归属调用包。作者 Work 适配需要理解成员、deps、恢复 uses 与 point；它调用单次机制，但仍是结构向调用的适配。因此 `server/runtime/src/construction/` 与 InvocationCapabilities 留在 Runtime。DriverFact/DriverObserver 描述宿主入口，也留在 Runtime；调用观察会话只按固定对象身份关联，不反向引用观察安装对象的类型。
 
-低层消费者从 `@capix/invocation` 取得单次机制。Runtime 原根入口和 `/construction` 中已有的调用名称精确重导新包的同一对象，不扩大为整个包的通配出口，也不复制错误类。Observer 对 Clock、取消、故障、进展和 CP 端口直接使用新包；结构配置、callableHooks、Runner 和交互装配保持原入口。业务作者仍使用相同的 `run(work)`，没有新增装配步骤。
+低层消费者从 `@weiliang0121/capix-invocation` 取得单次机制。Runtime 原根入口和 `/construction` 中已有的调用名称精确重导新包的同一对象，不扩大为整个包的通配出口，也不复制错误类。Observer 对 Clock、取消、故障、进展和 CP 端口直接使用新包；结构配置、callableHooks、Runner 和交互装配保持原入口。业务作者仍使用相同的 `run(work)`，没有新增装配步骤。
 
 验证入口：
 
@@ -241,12 +241,12 @@ sequenceDiagram
 ### 后续闭环与保留议题
 
 - **退出契约已闭合。** InvocationExecution 统一 `sealOutput → settleAcceptances → Work close`，Runtime 通过 InvocationWork 的可选同步 close 端口返回 OperationOutcome。正文先捕获、接纳排空后认证来源，关闭失败明确归属 control 且不可业务降级。InvocationResources.closeAllResult 耗尽剩余窗口；Invocation 在成功 CP／父交付之前处理关闭结果，最后仅做本地占用释放。原始错误与清理错误均保留，已成立工作／CP 事实不回滚；普通、恢复、低层及微任务边界均有回归。详见 [退出契约](invocation-exit-contract.md)。
-- **交互接线与独立机制。** Interaction/Interactions 已归 `@capix/interaction`，Runtime 保留 Runner 可选参数和资源通道接线；共享 PersistenceError/RuntimeErrorHelper 已归 diagnostics。更完整的外部执行、沙箱和工作区是后续议题，不由本次分包提前定义。
+- **交互接线与独立机制。** Interaction/Interactions 已归 `@weiliang0121/capix-interaction`，Runtime 保留 Runner 可选参数和资源通道接线；共享 PersistenceError/RuntimeErrorHelper 已归 diagnostics。更完整的外部执行、沙箱和工作区是后续议题，不由本次分包提前定义。
 - **记录预设与公开出口。** 记录连接结构观察声明、调用事实与记录资源，有作为组合预设的依据。Initializer 仍只是一次性同步创建辅助；这些暂不新增包。普通入口、低层构造与历史重导继续明确标注，不为了减少导出数另建门面。
 
 ## 稳定调用数据与事实成立
 
-稳定性是调用的数据契约，不取决于是否安装 CP。`@capix/contracts` 的 `stableValue` 负责隔离普通数据，`Stable<T>` 表达递归只读的消费类型；调用、Relation 和 CP 共享同一份已经成立的值。
+稳定性是调用的数据契约，不取决于是否安装 CP。`@weiliang0121/capix-contracts` 的 `stableValue` 负责隔离普通数据，`Stable<T>` 表达递归只读的消费类型；调用、Relation 和 CP 共享同一份已经成立的值。
 
 | 边界                                  | 成立的值                       | 后续行为                                                                       |
 | ------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------ |

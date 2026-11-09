@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import type { ToolResult, ModelRequest, JsonObject } from '@capix/model-provider';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import type { ToolResult, ModelRequest, JsonObject } from '@weiliang0121/capix-model-provider';
 import type { ToolEntry } from './registration.js';
 import { parseToolInput } from './registration.js';
 

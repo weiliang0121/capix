@@ -1,9 +1,9 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, checkpointPoint, childReference } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Scene, Group, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 import { SelectHistory, UnderstandRequest, DefaultConversationDecision, FunctionConversationDecision, CheckFileTask, ProcessDocument, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { FileResources } from '@capix/observer-service/assembly';
 

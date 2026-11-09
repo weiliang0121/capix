@@ -1,5 +1,5 @@
-import type { FileReceipt, GenerationOutput } from '@capix/protocol';
-import type { Group } from '@capix/structure';
+import type { FileReceipt, GenerationOutput } from '@weiliang0121/capix-protocol';
+import type { Group } from '@weiliang0121/capix-structure';
 import type { RequestUnderstandingInput } from '../group/request/input.js';
 import type { FilePreflightInput, FilePreflightOutput } from '../group/preflight/types.js';
 

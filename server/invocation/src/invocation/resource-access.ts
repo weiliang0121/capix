@@ -1,5 +1,5 @@
-import { ResourceAccess, ResourceAccessClosed, captureResourceOwner, ResourceRequest, ResourceSupply, checkResourceRequests, resourceRequests, type ResourceOwner, type ResourceRequirements, type ResourceRefinement, type ResourceSupplyEntry } from '@capix/resources';
-import type { OperationOutcome } from '@capix/contracts';
+import { ResourceAccess, ResourceAccessClosed, captureResourceOwner, ResourceRequest, ResourceSupply, checkResourceRequests, resourceRequests, type ResourceOwner, type ResourceRequirements, type ResourceRefinement, type ResourceSupplyEntry } from '@weiliang0121/capix-resources';
+import type { OperationOutcome } from '@weiliang0121/capix-contracts';
 
 /** Invocation progress belongs to runtime; the resource package sees only fixed window guards. */
 export interface InvocationResourceOwner extends ResourceOwner {

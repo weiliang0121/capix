@@ -1,7 +1,7 @@
-import { RuntimeError } from '@capix/contracts';
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { View } from '@capix/view';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { View } from '@weiliang0121/capix-view';
 
 export const createMemory = (content) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationResources, invocationResourceFailures } from '@capix/invocation';
-import { ResourceAccess, ResourceAccessClosed, ResourceOffer, ResourceSupply, Resource, Resources } from '@capix/resources';
+import { InvocationResources, invocationResourceFailures } from '@weiliang0121/capix-invocation';
+import { ResourceAccess, ResourceAccessClosed, ResourceOffer, ResourceSupply, Resource, Resources } from '@weiliang0121/capix-resources';
 
 function windows(t, failures = new Map()) {
   const closed = [];

@@ -1,5 +1,5 @@
-import { CallableRecord, CompositeRecord, InvocationBoundaryRecord, MemoryRecord, ResourceRecord, TranscriptRecord, type Recorder, type RecordingRootRecord } from '@capix/records';
-import type { ConversationCallDetail, ConversationCallSummary, ConversationInspection } from '@capix/protocol';
+import { CallableRecord, CompositeRecord, InvocationBoundaryRecord, MemoryRecord, ResourceRecord, TranscriptRecord, type Recorder, type RecordingRootRecord } from '@weiliang0121/capix-records';
+import type { ConversationCallDetail, ConversationCallSummary, ConversationInspection } from '@weiliang0121/capix-protocol';
 import type { ConversationViewSource } from '../materials/view.js';
 
 /** HTTP inspection reads real entities; it never determines admission or submission outcomes. */

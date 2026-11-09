@@ -1,4 +1,4 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import assert from 'node:assert/strict';
 import { createSession, createFeedbackReader } from './assembly.mjs';
 import { createControlledProvider } from './transport.mjs';

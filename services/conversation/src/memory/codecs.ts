@@ -1,4 +1,4 @@
-import type { MemoryBasis, MemoryChange } from '@capix/memory';
+import type { MemoryBasis, MemoryChange } from '@weiliang0121/capix-memory';
 import { z } from 'zod';
 import { codec, count, identity, messageSchema } from '../recovery/codecs.js';
 import type { ConversationMemoryContext } from './context.js';

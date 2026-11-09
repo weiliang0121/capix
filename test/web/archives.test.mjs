@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateExecutionRecordSnapshot, validateRecordingArchives } from '@capix/protocol';
+import { validateExecutionRecordSnapshot, validateRecordingArchives } from '@weiliang0121/capix-protocol';
 import { ObservationReplica } from '@capix/client-runtime';
 import { createObservationProjection } from '../../apps/observer/.test-dist/binding/observation.js';
 import { projectDetail } from '../../apps/observer/.test-dist/binding/details.js';

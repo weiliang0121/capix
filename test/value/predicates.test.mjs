@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { isNonBlankString, isNonEmptyArray, hasUniqueItems } from '@capix/server-runtime';
-import { Transcript } from '@capix/transcript';
-import { Memory, Memories } from '@capix/memory';
+import { isNonBlankString, isNonEmptyArray, hasUniqueItems } from '@weiliang0121/capix-runtime';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memory, Memories } from '@weiliang0121/capix-memory';
 
 import { modelTextSchema, modelIndexesSchema } from '@capix/observer-service';
 

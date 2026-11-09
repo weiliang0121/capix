@@ -1,5 +1,5 @@
 {
-  "name": "@capix/records",
+  "name": "@weiliang0121/capix-records",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -18,11 +18,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/contracts": "workspace:*",
-    "@capix/changes": "workspace:*",
-    "@capix/protocol": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0",
-    "@capix/resources": "workspace:*"
+    "@weiliang0121/capix-resources": "workspace:*"
   },
   "description": "Optional recording entities and resource contracts for CAPiX.",
   "license": "MIT",

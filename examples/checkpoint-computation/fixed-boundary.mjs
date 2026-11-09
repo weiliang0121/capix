@@ -4,12 +4,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stableValue } from '@capix/contracts';
-import { Node, Group, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { View } from '@capix/view';
+import { stableValue } from '@weiliang0121/capix-contracts';
+import { Node, Group, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { View } from '@weiliang0121/capix-view';
 import { createConversationScene, createMaterialAnswer, createMaterialPreparation } from '@capix/conversation-service';
 import { createConversationResources } from '@capix/conversation-service/assembly';
 

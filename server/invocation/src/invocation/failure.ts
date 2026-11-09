@@ -1,5 +1,5 @@
-import { stableValue, type Stable, type InvocationFailureFact, type RuntimeErrorValue } from '@capix/contracts';
-import { RuntimeErrorHelper } from '@capix/diagnostics';
+import { stableValue, type Stable, type InvocationFailureFact, type RuntimeErrorValue } from '@weiliang0121/capix-contracts';
+import { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 import type { InvocationExceptionOrigin } from './provenance.js';
 
 /** Delivery classification is independent of whether work already established effects. */

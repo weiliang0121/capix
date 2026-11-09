@@ -1,4 +1,4 @@
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import type { SourceBindings, SyncSourceBindings, ViewSources } from './source.js';
 import type { ViewBasis, ViewIndex, ViewPersistence, ViewReference, ViewSelection, ViewSnapshot, ViewState, ViewSourceChecks } from './types.js';
 import { basis as acceptBasis, members as acceptMembers, memberIndex, sameMembers, state as acceptState } from './membership.js';

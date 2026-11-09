@@ -1,4 +1,4 @@
-import { ChatCompletionsProvider, type ModelProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider, type ModelProvider } from '@weiliang0121/capix-model-provider';
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { createDemoModel } from './demo.js';
 import { createYieldingFetch } from './transport.js';

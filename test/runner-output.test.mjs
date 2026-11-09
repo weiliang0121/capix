@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runner, Resources, Scene, Node, callableHooks } from '@capix/server-runtime';
+import { Runner, Resources, Scene, Node, callableHooks } from '@weiliang0121/capix-runtime';
 
 test('Runner child output uses the exact registered port, preserves final identity and seals its writer', async () => {
   const events = [];

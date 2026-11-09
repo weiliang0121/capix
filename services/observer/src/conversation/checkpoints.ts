@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { isEqual } from 'es-toolkit';
-import { RuntimeError } from '@capix/contracts';
-import { cloneCheckpointValue, type CheckpointStore, type CheckpointHead } from '@capix/checkpoint';
-import type { ModelSettings, TranscriptRangeLocator } from '@capix/protocol';
-import type { Transcript } from '@capix/transcript';
-import type { Memories } from '@capix/memory';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { cloneCheckpointValue, type CheckpointStore, type CheckpointHead } from '@weiliang0121/capix-checkpoint';
+import type { ModelSettings, TranscriptRangeLocator } from '@weiliang0121/capix-protocol';
+import type { Transcript } from '@weiliang0121/capix-transcript';
+import type { Memories } from '@weiliang0121/capix-memory';
 import { validateSettings } from './model/settings.js';
 import { executionProgressSchema, conversationCheckpointOutput, acceptedCheckpointInput } from './checkpoint.js';
 import { memorySchema } from './group/checkpoint.js';

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isNonBlankString, isNonEmptyArray, hasUniqueItems, isObject } from './validation.js';
-import type { MemoryContent } from '@capix/protocol';
-import type { Transcript } from '@capix/transcript';
+import type { MemoryContent } from '@weiliang0121/capix-protocol';
+import type { Transcript } from '@weiliang0121/capix-transcript';
 import { prepareMemoryResultSources } from './source.js';
 import type { MemoryState } from './persistence.js';
 

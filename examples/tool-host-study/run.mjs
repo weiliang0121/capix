@@ -2,7 +2,7 @@ import { mkdir, writeFile, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
-import { Runner } from '@capix/server-runtime';
+import { Runner } from '@weiliang0121/capix-runtime';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent, createConversationHostAssembly } from '@capix/conversation-service/assembly';
 import { ToolStages } from '@capix/conversation-service/tools/hosting';

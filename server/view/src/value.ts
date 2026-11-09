@@ -1,5 +1,5 @@
 import { types } from 'node:util';
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { SourceIdentity, SourceStamp, ViewKey } from './source.js';
 
 export function conflict(message: string): never {

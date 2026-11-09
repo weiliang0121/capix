@@ -1,6 +1,6 @@
-import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
-import { decodeCheckpointDiagnostic, type DecodedCheckpointFrame, type DecodedCheckpointChild } from '@capix/invocation';
-import type { Stable, CheckpointFacts, ChildContract, ChildFact, ChildFacts, ChildReference, ContinuationFact, ReceptionDefinition } from '@capix/contracts';
+import type { CheckpointReferences, CheckpointReference } from '@weiliang0121/capix-checkpoint';
+import { decodeCheckpointDiagnostic, type DecodedCheckpointFrame, type DecodedCheckpointChild } from '@weiliang0121/capix-invocation';
+import type { Stable, CheckpointFacts, ChildContract, ChildFact, ChildFacts, ChildReference, ContinuationFact, ReceptionDefinition } from '@weiliang0121/capix-contracts';
 import type { BoundChildren } from './children/bound.js';
 import { BoundReceptions } from './receptions.js';
 import { checkpointList } from './checkpoint-list.js';

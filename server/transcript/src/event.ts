@@ -1,5 +1,5 @@
-import type { TranscriptEvent } from '@capix/protocol';
-export type { TranscriptEvent } from '@capix/protocol';
+import type { TranscriptEvent } from '@weiliang0121/capix-protocol';
+export type { TranscriptEvent } from '@weiliang0121/capix-protocol';
 
 /** Messages have already been accepted and frozen by Transcript. */
 export function createTranscriptEvent(transcriptId: string, revision: number, change: TranscriptEvent['change'], origin?: { readonly contextId: string }): TranscriptEvent {

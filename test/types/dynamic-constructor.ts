@@ -1,5 +1,5 @@
-import { Dynamic, Node, Group, Scene, type CallableInput, type CallableOutput, type DynamicDecision } from '@capix/structure';
-import { Runner, Resources } from '@capix/server-runtime';
+import { Dynamic, Node, Group, Scene, type CallableInput, type CallableOutput, type DynamicDecision } from '@weiliang0121/capix-structure';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
 
 declare function expectType<Value>(value: Value): void;
 const read = new Node<{ path: string }, { text: string }>();

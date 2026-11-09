@@ -1,7 +1,7 @@
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
-import type { Interactions } from '@capix/interaction';
-import { resourceRequests, checkResourceProviders, ResourceSupply } from '@capix/resources';
-import type { ResourceProvider, ResourceIdentity, ResourceRequirements } from '@capix/resources';
+import type { Interactions } from '@weiliang0121/capix-interaction';
+import { resourceRequests, checkResourceProviders, ResourceSupply } from '@weiliang0121/capix-resources';
+import type { ResourceProvider, ResourceIdentity, ResourceRequirements } from '@weiliang0121/capix-resources';
 import type { ResourcePlan, ResourceCaptureScope } from './resources.js';
 
 interface InstalledScope<Options> {

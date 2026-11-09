@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@capix/diagnostics';
-import { Node } from '@capix/structure';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Node } from '@weiliang0121/capix-structure';
 import { createComparisonExample } from '../examples/parallel-analysis/assembly.mjs';
 import { AnalysisUnavailable } from '../examples/parallel-analysis/structure.mjs';
 

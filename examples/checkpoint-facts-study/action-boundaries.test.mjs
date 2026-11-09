@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { isInvocationCancelled } from '@capix/invocation';
-import { Scene, Node, Resources, Runner } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { isInvocationCancelled } from '@weiliang0121/capix-invocation';
+import { Scene, Node, Resources, Runner } from '@weiliang0121/capix-runtime';
 import { StableValues } from './stable.mjs';
 import { createBoundaryCall } from './action-boundaries.mjs';
 import { lifecycleBinding, lifecycleReception } from './invocation-lifecycle.mjs';

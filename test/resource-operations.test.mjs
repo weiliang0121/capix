@@ -1,12 +1,12 @@
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures } from '@weiliang0121/capix-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { Resources, Runner, Scene, Node, InvocationCancelled, ExceptionContract } from '@capix/server-runtime';
-import { ChangeCaptureError } from '@capix/changes';
-import { Resource, ResourceOffer, ResourceBinding, Resources as ResourceRegistry } from '@capix/resources';
+import { Resources, Runner, Scene, Node, InvocationCancelled, ExceptionContract } from '@weiliang0121/capix-runtime';
+import { ChangeCaptureError } from '@weiliang0121/capix-changes';
+import { Resource, ResourceOffer, ResourceBinding, Resources as ResourceRegistry } from '@weiliang0121/capix-resources';
 
 function binding(offer, origin, overrides = {}) {
   const faults = [];

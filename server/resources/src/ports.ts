@@ -1,4 +1,4 @@
-import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
+import type { TranscriptEvent, MemoryEvent } from '@weiliang0121/capix-protocol';
 import type { ResourceEventConsumer, ResourceObservation } from './facts.js';
 import { synchronous } from './internal/synchronous.js';
 

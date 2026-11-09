@@ -1,5 +1,5 @@
 import { SessionConnectionError, type SessionTransport } from '@capix/client-runtime';
-import type { ConversationSubmissionFrame, ConversationSubmissionRequest, ConversationRecoveryRequest } from '@capix/protocol';
+import type { ConversationSubmissionFrame, ConversationSubmissionRequest, ConversationRecoveryRequest } from '@weiliang0121/capix-protocol';
 import { ConversationHttpTransport } from './conversation.js';
 import { HttpError, HttpTransportError } from './errors.js';
 import { acceptResponse, parseLine } from './responses.js';

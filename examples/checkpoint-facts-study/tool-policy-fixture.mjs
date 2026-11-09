@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { Node } from '@capix/structure';
+import { Node } from '@weiliang0121/capix-structure';
 import { ToolLoop, tool } from '@capix/conversation-service/tools';
-import { ModelExchanges, feedbackDigest } from '@capix/model-exchanges';
-import { requireModelReply } from '@capix/model-provider';
-import { RuntimeErrorHelper } from '@capix/diagnostics';
+import { ModelExchanges, feedbackDigest } from '@weiliang0121/capix-model-exchanges';
+import { requireModelReply } from '@weiliang0121/capix-model-provider';
+import { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 
 const clone = (value) => structuredClone(value);
 const codec = { encode: clone, decode: clone };

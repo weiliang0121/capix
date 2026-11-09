@@ -1,9 +1,9 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, Node, checkpointPoint } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ResourceOffer } from '@capix/resources';
+import { Scene, Group, Node, checkpointPoint } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function assemble(definition, options = {}) {

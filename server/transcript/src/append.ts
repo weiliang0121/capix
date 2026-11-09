@@ -1,4 +1,4 @@
-import type { Message } from '@capix/protocol';
+import type { Message } from '@weiliang0121/capix-protocol';
 
 /** A binding fixes this identity from one real parent/child reception and declared effect position. */
 export interface TranscriptAppendOperation {

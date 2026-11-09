@@ -1,7 +1,7 @@
-import { Driver, Group, Node, defineNode, defineScene, type BuiltCallable, type BuiltOptions } from '@capix/server-runtime';
-import { type CheckpointStore } from '@capix/checkpoint';
+import { Driver, Group, Node, defineNode, defineScene, type BuiltCallable, type BuiltOptions } from '@weiliang0121/capix-runtime';
+import { type CheckpointStore } from '@weiliang0121/capix-checkpoint';
 
-import { createRootInvocation } from '@capix/server-runtime/construction';
+import { createRootInvocation } from '@weiliang0121/capix-runtime/construction';
 
 const node = defineNode<number, number>()({ run: (work) => work.input });
 const driver = new Driver();

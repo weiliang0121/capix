@@ -1,6 +1,6 @@
-import { Node, checkpointPoint } from '@capix/structure';
-import type { ResourcesOf } from '@capix/resources';
-import type { ToolResult } from '@capix/model-provider';
+import { Node, checkpointPoint } from '@weiliang0121/capix-structure';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import type { ToolResult } from '@weiliang0121/capix-model-provider';
 import { codec } from '../../recovery/codecs.js';
 import { assertToolOutputBytes } from '../../tools/budget.js';
 import { tool } from '../../tools/registration.js';

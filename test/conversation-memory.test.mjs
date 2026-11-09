@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeCaptureError } from '@capix/changes';
+import { ChangeCaptureError } from '@weiliang0121/capix-changes';
 import { CompletionResource, ConversationMemoryResource, ConversationViewResource, createConversationScene, createMaterialPreparation, createMemoryMaintenance, createMessageInclusion } from '@capix/conversation-service';
-import { PersistenceError } from '@capix/diagnostics';
-import { Memories, MemoryResource, MemoryViewSource } from '@capix/memory';
-import { Resource, Resources as ResourceRegistry } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group, Node } from '@capix/structure';
-import { Transcript, TranscriptResource, TranscriptViewSource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Memories, MemoryResource, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { Resource, Resources as ResourceRegistry } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group, Node } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const messageRef = (key) => ({ source: 'messages', key });
 const memoryRef = (key) => ({ source: 'memories', key });

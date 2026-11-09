@@ -1,6 +1,6 @@
 import { createCallableInvocation, restoreCallableInvocation } from '../../construction/calls.js';
-import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, OperationOptions, Stable } from '@capix/contracts';
-import { InvocationCancelled, type Invocation, ChildCallFailure, combineOutputReceivers } from '@capix/invocation';
+import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, OperationOptions, Stable } from '@weiliang0121/capix-contracts';
+import { InvocationCancelled, type Invocation, ChildCallFailure, combineOutputReceivers } from '@weiliang0121/capix-invocation';
 import type { BoundChildren } from './bound.js';
 import type { InvocationChildReferences } from './references.js';
 import type { BoundReceptions } from '../receptions.js';
@@ -82,7 +82,7 @@ export class InvocationChildBindings {
     return { succeeded: receiver?.succeeded?.bind(receiver), failed: receiver?.failed?.bind(receiver), contract };
   }
 
-  private async receiveTarget(relation: import('@capix/invocation').InvocationRelation, succeeded?: (value: any) => unknown, failed?: (failure: unknown) => unknown, contract?: import('@capix/invocation').InvocationReceptionBinding): Promise<any> {
+  private async receiveTarget(relation: import('@weiliang0121/capix-invocation').InvocationRelation, succeeded?: (value: any) => unknown, failed?: (failure: unknown) => unknown, contract?: import('@weiliang0121/capix-invocation').InvocationReceptionBinding): Promise<any> {
     const child = relation.invocation;
     try {
       await child.run();

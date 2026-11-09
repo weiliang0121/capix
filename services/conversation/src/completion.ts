@@ -1,7 +1,7 @@
-import { modelReplyText, type ModelProvider, type ModelReply, type ModelRequest } from '@capix/model-provider';
-import { ResourceOffer, type ResourceOperation, type ResourcesOf } from '@capix/resources';
-import { InvocationCancelled } from '@capix/server-runtime';
-import { Node, checkpointPoint, type Group } from '@capix/structure';
+import { modelReplyText, type ModelProvider, type ModelReply, type ModelRequest } from '@weiliang0121/capix-model-provider';
+import { ResourceOffer, type ResourceOperation, type ResourcesOf } from '@weiliang0121/capix-resources';
+import { InvocationCancelled } from '@weiliang0121/capix-runtime';
+import { Node, checkpointPoint, type Group } from '@weiliang0121/capix-structure';
 import { requireString, requireText } from './text.js';
 import { requireCompletionReply } from './model/completion-contract.js';
 import { ModelCompletionIncomplete } from './model/incomplete.js';

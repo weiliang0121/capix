@@ -1,12 +1,12 @@
 import { isPromise } from 'node:util/types';
-import { RuntimeError } from '@capix/contracts';
-import { PersistenceError } from '@capix/diagnostics';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { isNonBlankString } from './value.js';
 import type { InteractionContract, InteractionOptions, InteractionPersistence, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { Interaction } from './interaction.js';
 import { InteractionProgress, unavailableProgressReader, validateProgressLimits } from './progress/buffer.js';
 import { ProgressBudget } from './progress/budget.js';
-import type { ProgressReceiver } from '@capix/changes';
+import type { ProgressReceiver } from '@weiliang0121/capix-changes';
 import { progressObservation } from './observation.js';
 import type { InteractionCursor, InteractionProgressBudgetLimits, InteractionProgressFact, InteractionProgressLimits, InteractionProgressReader, InteractionPublisher } from './progress/types.js';
 

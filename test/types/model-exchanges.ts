@@ -1,7 +1,7 @@
-import { ModelExchanges, ModelExchangeResource, ModelExchangeViewSource, type ExchangeReference, type ExchangeIntakeReceipt, type ExchangeFeedbackReceipt, type ModelExchangeEntry, type ModelExchangesPersistence } from '@capix/model-exchanges';
-import { Resources, Resource } from '@capix/resources';
-import type { ModelReply, ToolResult } from '@capix/model-provider';
-import type { SyncViewSource } from '@capix/view';
+import { ModelExchanges, ModelExchangeResource, ModelExchangeViewSource, type ExchangeReference, type ExchangeIntakeReceipt, type ExchangeFeedbackReceipt, type ModelExchangeEntry, type ModelExchangesPersistence } from '@weiliang0121/capix-model-exchanges';
+import { Resources, Resource } from '@weiliang0121/capix-resources';
+import type { ModelReply, ToolResult } from '@weiliang0121/capix-model-provider';
+import type { SyncViewSource } from '@weiliang0121/capix-view';
 
 declare function expectType<Value>(value: Value): void;
 declare const reply: ModelReply;

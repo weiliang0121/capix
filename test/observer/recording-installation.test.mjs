@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clock } from '@capix/server-runtime';
+import { Clock } from '@weiliang0121/capix-runtime';
 import { ConversationContent } from '@capix/observer-content';
 import { ObserverRecording } from '@capix/observer-service';
 

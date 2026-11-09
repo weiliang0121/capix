@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Interactions } from '@capix/interaction';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
 import { acceptReply } from './protocol.mjs';
 import { finalReply, toolReply } from './fixtures.mjs';
 import { ExchangeResource, ModelExchanges } from './exchanges.mjs';

@@ -1,5 +1,5 @@
-import { RuntimeError } from '@capix/contracts';
-import type { SyncViewSource } from '@capix/view';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import type { SyncViewSource } from '@weiliang0121/capix-view';
 import type { Memories } from './memories.js';
 import type { Memory } from './memory.js';
 import type { MemoryState } from './persistence.js';

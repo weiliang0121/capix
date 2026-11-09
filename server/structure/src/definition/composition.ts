@@ -1,5 +1,5 @@
 import type { ChildCallable } from './children.js';
-import type { Stable, ChildContract, ChildOperationOptions, ChildReceptionOptions, CallableInput, CallableOutput, ReceptionDefinition, OperationResult } from '@capix/contracts';
+import type { Stable, ChildContract, ChildOperationOptions, ChildReceptionOptions, CallableInput, CallableOutput, ReceptionDefinition, OperationResult } from '@weiliang0121/capix-contracts';
 
 export type NamedMembers = Readonly<Record<string, ChildCallable>>;
 type ReservedMemberName = '' | 'invoke' | 'create' | 'open' | 'facts' | 'resume' | '__proto__' | 'prototype' | 'constructor' | 'toString' | 'toLocaleString' | 'valueOf' | 'hasOwnProperty' | 'isPrototypeOf' | 'propertyIsEnumerable' | '__defineGetter__' | '__defineSetter__' | '__lookupGetter__' | '__lookupSetter__';

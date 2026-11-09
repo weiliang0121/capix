@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { ModelCompletionIncomplete, defaultConversationOutputBudget } from '@capix/conversation-service';
 import { createConversationInteractions, createConversationResources, createMaterialConversationScene, loadConversationContent } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';
-import { Runner } from '@capix/server-runtime';
+import { Runner } from '@weiliang0121/capix-runtime';
 
 const reply = (text, finishReason = 'stop') => ({ id: 'budget-fixture', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: finishReason === 'stop' ? 'completed' : 'incomplete', reason: finishReason }, usage: null });
 

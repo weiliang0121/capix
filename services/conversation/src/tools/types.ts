@@ -1,4 +1,4 @@
-import type { ModelRequest } from '@capix/model-provider';
+import type { ModelRequest } from '@weiliang0121/capix-model-provider';
 import type { ToolRegistrations } from './registration.js';
 import type { ToolByteBudgets } from './budget.js';
 export type { ToolByteBudgets } from './budget.js';

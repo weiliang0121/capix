@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { Node, Group, Scene, checkpointPoint, childReference } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ModelExchanges } from '@capix/model-exchanges';
-import { Interactions } from '@capix/interaction';
-import { PersistenceError } from '@capix/diagnostics';
-import { requireModelReply, requireModelRequest } from '@capix/model-provider';
+import { Node, Group, Scene, checkpointPoint, childReference } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { requireModelReply, requireModelRequest } from '@weiliang0121/capix-model-provider';
 import { createToolLoop, createToolAnswer, registerToolLoopResources, tool, toolLoopInputCodec } from '@capix/conversation-service/tools';
 
 const copy = (value) => structuredClone(value);

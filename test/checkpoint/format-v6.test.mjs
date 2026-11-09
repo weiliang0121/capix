@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
-import { cloneCheckpointImage, cloneCheckpointHead, checkpointReference, checkpointReferenceChild, MemoryCheckpointStore } from '@capix/checkpoint';
+import { cloneCheckpointImage, cloneCheckpointHead, checkpointReference, checkpointReferenceChild, MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 function image() {
   const child = { identity: { contextId: 'child', parentContextId: 'parent', kind: 'node' }, target: { position: 0 }, round: 1, order: 0, input: { request: 'initial' }, state: { kind: 'returned', output: 'delivered', progress: { round: 2, currentInput: { request: 'child-second' }, phase: 'receive' }, reception: { kind: 'accepted', output: { selected: true } } } };
@@ -34,7 +34,7 @@ test('production v6 image preserves complete relations, child progress and repea
 });
 
 test('production v6 survives a separate process without memory objects', () => {
-  const child = spawnSync(process.execPath, ['--input-type=module', '-e', "import {readFileSync} from 'node:fs'; import { cloneCheckpointImage } from '@capix/checkpoint'; const value=cloneCheckpointImage(JSON.parse(readFileSync(0,'utf8'))); process.stdout.write(JSON.stringify({version:value.formatVersion,position:value.frame.children[0].target.position,ref:value.references.chosen.contextId}));"], { cwd: process.cwd(), input: JSON.stringify(image()), encoding: 'utf8' });
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', "import {readFileSync} from 'node:fs'; import { cloneCheckpointImage } from '@weiliang0121/capix-checkpoint'; const value=cloneCheckpointImage(JSON.parse(readFileSync(0,'utf8'))); process.stdout.write(JSON.stringify({version:value.formatVersion,position:value.frame.children[0].target.position,ref:value.references.chosen.contextId}));"], { cwd: process.cwd(), input: JSON.stringify(image()), encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
   assert.deepEqual(JSON.parse(child.stdout), { version: 6, position: 0, ref: 'child' });
 });
@@ -176,7 +176,7 @@ test('real Invocation captures in one process and resumes successful no-CP child
 });
 
 test('production codecs decode complete historical IO into stable data with explicit domain wire encoding', async () => {
-  const { decodeCheckpointFrame, checkCheckpointReferences } = await import('@capix/server-runtime/construction');
+  const { decodeCheckpointFrame, checkCheckpointReferences } = await import('@weiliang0121/capix-runtime/construction');
   // Domain behavior stays outside the formal value; the codec returns plain data.
   const render = (value) => `domain:${value.text}`;
   const codec = {
@@ -259,8 +259,8 @@ test('production codecs decode complete historical IO into stable data with expl
       '-e',
       `
     import {readFileSync} from 'node:fs';
-    import { cloneCheckpointImage } from '@capix/checkpoint';
-    import {decodeCheckpointFrame} from '@capix/server-runtime/construction';
+    import { cloneCheckpointImage } from '@weiliang0121/capix-checkpoint';
+    import {decodeCheckpointFrame} from '@weiliang0121/capix-runtime/construction';
     const render = (value) => 'domain:' + value.text;
     const codec = { decode(v) { if (v?.tag !== 'domain' || typeof v.text !== 'string') throw new Error('invalid domain'); return { text: v.text }; } };
     const saved = cloneCheckpointImage(JSON.parse(readFileSync(0, 'utf8')));

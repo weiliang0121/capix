@@ -1,4 +1,4 @@
-import { hasOutput, validateInvocationRecordValue, type RecordEntry } from '@capix/protocol';
+import { hasOutput, validateInvocationRecordValue, type RecordEntry } from '@weiliang0121/capix-protocol';
 import { isPlainObject } from 'es-toolkit/predicate';
 
 type Fields = Record<string, unknown>;

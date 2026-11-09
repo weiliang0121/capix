@@ -1,4 +1,4 @@
-import type { ConversationCallDetail, ConversationInspection, ConversationServiceInfo, ConversationRecoveryRequest, ConversationSubmissionFrame } from '@capix/protocol';
+import type { ConversationCallDetail, ConversationInspection, ConversationServiceInfo, ConversationRecoveryRequest, ConversationSubmissionFrame } from '@weiliang0121/capix-protocol';
 import type { ConversationTransport, TranscriptTransport } from '../transport.js';
 
 /** The single-conversation service needs neither model settings nor a conversation directory. */

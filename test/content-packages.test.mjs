@@ -2,20 +2,20 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { RuntimeError } from '@capix/contracts';
-import { PersistenceError } from '@capix/diagnostics';
-import { ChangeCaptureError, ChangeBuffer } from '@capix/changes';
-import { Resource, Resources, ResourceAccessClosed } from '@capix/resources';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { Memory, Memories, MemoryResource } from '@capix/memory';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { ChangeCaptureError, ChangeBuffer } from '@weiliang0121/capix-changes';
+import { Resource, Resources, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { Memory, Memories, MemoryResource } from '@weiliang0121/capix-memory';
 import { ActiveView, ActiveViewResource, ConversationContent } from '@capix/observer-content';
 
 const packages = [
-  { path: 'server/changes', name: '@capix/changes', exports: ['ChangeBuffer', 'ChangeCaptureError', 'ProgressChannel'] },
-  { path: 'server/transcript', name: '@capix/transcript', exports: ['Transcript', 'MessageRef', 'TranscriptRangeRef', 'TranscriptResource', 'TranscriptViewSource'] },
-  { path: 'server/memory', name: '@capix/memory', exports: ['Memory', 'Memories', 'MemoryResource', 'MemoryViewSource'] },
-  { path: 'server/view', name: '@capix/view', exports: ['View', 'openView', 'openViewManager'] },
-  { path: 'server/measurement', name: '@capix/measurement', exports: ['MessageUsage', 'MessageUsageResource'] },
+  { path: 'server/changes', name: '@weiliang0121/capix-changes', exports: ['ChangeBuffer', 'ChangeCaptureError', 'ProgressChannel'] },
+  { path: 'server/transcript', name: '@weiliang0121/capix-transcript', exports: ['Transcript', 'MessageRef', 'TranscriptRangeRef', 'TranscriptResource', 'TranscriptViewSource'] },
+  { path: 'server/memory', name: '@weiliang0121/capix-memory', exports: ['Memory', 'Memories', 'MemoryResource', 'MemoryViewSource'] },
+  { path: 'server/view', name: '@weiliang0121/capix-view', exports: ['View', 'openView', 'openViewManager'] },
+  { path: 'server/measurement', name: '@weiliang0121/capix-measurement', exports: ['MessageUsage', 'MessageUsageResource'] },
   { path: 'services/observer-content', name: '@capix/observer-content', exports: ['ConversationContent', 'ActiveView', 'ActiveViewResource', 'ChangeConsumer', 'TranscriptFeed'] },
 ];
 
@@ -32,7 +32,7 @@ test('content packages load through public roots without importing callable stru
       if (entry.isDirectory()) await inspect(path);
       else if (entry.name.endsWith('.ts')) {
         const source = await readFile(path, 'utf8');
-        assert.doesNotMatch(source, /@capix\/(?:structure|server-runtime|observer-service)|(?:\.\.\/)+(?:structure|runtime)\//, fileURLToPath(path));
+        assert.doesNotMatch(source, /@weiliang0121\/capix-(?:structure|runtime)|@capix\/observer-service|(?:\.\.\/)+(?:structure|runtime)\//, fileURLToPath(path));
       }
     }
   }
@@ -40,21 +40,21 @@ test('content packages load through public roots without importing callable stru
     const directory = new URL(`../${pkg.path}/`, import.meta.url);
     const manifest = JSON.parse(await readFile(new URL('package.json', directory), 'utf8'));
     assert.equal(manifest.name, pkg.name);
-    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@capix/structure', '@capix/server-runtime', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
+    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@weiliang0121/capix-structure', '@weiliang0121/capix-runtime', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
     await inspect(new URL('src/', directory));
     await inspect(new URL('dist/', directory));
     const exported = await import(pkg.name);
     for (const name of pkg.exports) assert.ok(name in exported, `${pkg.name} must export ${name}`);
     for (const name of ['Runner', 'Invocation', 'Scene', 'Group', 'Node', 'Recorder', 'updateMemory', 'restoreMemory']) assert.equal(name in exported, false, `${pkg.name} must not expose ${name}`);
   }
-  for (const path of ['@capix/memory/memory', '@capix/memory/src/memory.js', '@capix/memory/dist/memory.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+  for (const path of ['@weiliang0121/capix-memory/memory', '@weiliang0121/capix-memory/src/memory.js', '@weiliang0121/capix-memory/dist/memory.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 });
 
 test('generic view has no transcript, memory or Observer active-membership policy', async () => {
-  const exported = await import('@capix/view');
-  for (const name of ['Transcript', 'Memories', 'TranscriptViewSource', 'MemoryViewSource', 'ActiveView', 'ActiveViewResource', 'initialActiveView', 'appendActiveView', 'freezeActiveView']) assert.equal(name in exported, false, `@capix/view must not own ${name}`);
+  const exported = await import('@weiliang0121/capix-view');
+  for (const name of ['Transcript', 'Memories', 'TranscriptViewSource', 'MemoryViewSource', 'ActiveView', 'ActiveViewResource', 'initialActiveView', 'appendActiveView', 'freezeActiveView']) assert.equal(name in exported, false, `@weiliang0121/capix-view must not own ${name}`);
   const manifest = JSON.parse(await readFile(new URL('../server/view/package.json', import.meta.url), 'utf8'));
-  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@capix/contracts', '@capix/diagnostics', '@capix/resources']);
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-resources']);
 });
 
 test('the host content composition uses the package entities and preserves exact source ownership', () => {

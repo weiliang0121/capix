@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [["@capix/changes", "@capix/checkpoint", "@capix/contracts", "@capix/diagnostics", "@capix/interaction", "@capix/invocation", "@capix/measurement", "@capix/memory", "@capix/model-exchanges", "@capix/model-provider", "@capix/protocol", "@capix/records", "@capix/resources", "@capix/server-runtime", "@capix/structure", "@capix/transcript", "@capix/view"]],
+  "fixed": [["@weiliang0121/capix-changes", "@weiliang0121/capix-checkpoint", "@weiliang0121/capix-contracts", "@weiliang0121/capix-diagnostics", "@weiliang0121/capix-interaction", "@weiliang0121/capix-invocation", "@weiliang0121/capix-measurement", "@weiliang0121/capix-memory", "@weiliang0121/capix-model-exchanges", "@weiliang0121/capix-model-provider", "@weiliang0121/capix-protocol", "@weiliang0121/capix-records", "@weiliang0121/capix-resources", "@weiliang0121/capix-runtime", "@weiliang0121/capix-structure", "@weiliang0121/capix-transcript", "@weiliang0121/capix-view"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",

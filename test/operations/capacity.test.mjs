@@ -1,10 +1,10 @@
 import { resourceBindingFor, bindChild } from '../fixtures/observer.mjs';
 import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
-import { readOutput } from '@capix/protocol';
+import { readOutput } from '@weiliang0121/capix-protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript } from '@capix/transcript';
+import { Transcript } from '@weiliang0121/capix-transcript';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 import { GenerateAnswer, estimateCapacity } from '@capix/observer-service';

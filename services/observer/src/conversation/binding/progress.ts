@@ -1,8 +1,8 @@
-import type { InvocationProgress } from '@capix/invocation';
-import type { ProgressChannel, ProgressReceiver } from '@capix/changes';
-import type { InvocationOutputReceiver } from '@capix/structure';
-import type { TranscriptAppendProgress } from '@capix/transcript';
-import type { ConversationTask, GenerationOutput } from '@capix/protocol';
+import type { InvocationProgress } from '@weiliang0121/capix-invocation';
+import type { ProgressChannel, ProgressReceiver } from '@weiliang0121/capix-changes';
+import type { InvocationOutputReceiver } from '@weiliang0121/capix-structure';
+import type { TranscriptAppendProgress } from '@weiliang0121/capix-transcript';
+import type { ConversationTask, GenerationOutput } from '@weiliang0121/capix-protocol';
 import type { FileProgress } from '../../files/index.js';
 import type { ConversationProgress } from '../progress.js';
 import type { AnswerProgress } from '../group/answer/stream.js';

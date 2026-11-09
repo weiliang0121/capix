@@ -1,9 +1,9 @@
 import { InvocationStopped } from '../invocation/stop.js';
 import { ObservationError } from '../observation/error.js';
-import { ChangeCaptureError } from '@capix/changes';
-import { PersistenceError } from '@capix/diagnostics';
-import { ResourceAccessClosed, ResourcePortError } from '@capix/resources';
-import { StableValueError } from '@capix/contracts';
+import { ChangeCaptureError } from '@weiliang0121/capix-changes';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { ResourceAccessClosed, ResourcePortError } from '@weiliang0121/capix-resources';
+import { StableValueError } from '@weiliang0121/capix-contracts';
 
 /** Failure reception is for operation outcomes, never for control or required fact delivery. */
 export function isProtectedOperationFailure(error: unknown): boolean {

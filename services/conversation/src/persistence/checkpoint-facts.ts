@@ -1,9 +1,9 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
-import type { CheckpointCommit, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from '@capix/checkpoint';
-import { cloneCheckpointDelivery, checkpointFinishReceipt } from '@capix/checkpoint';
-import { prepareCheckpointCommit, materializeCheckpointHead, encodeCheckpointRecord, decodeCheckpointRecord, isCheckpointRecord, encodeCheckpointData, type CheckpointStoredHead, type CheckpointStoredChild, type CheckpointStoredValue, type CheckpointRelationCache, type CheckpointRelationRow, type CheckpointStoredSelection, type CheckpointStoredOccurrence, isCheckpointSelectionSlots, checkpointSelectionReferences } from '@capix/checkpoint/storage';
+import type { CheckpointCommit, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from '@weiliang0121/capix-checkpoint';
+import { cloneCheckpointDelivery, checkpointFinishReceipt } from '@weiliang0121/capix-checkpoint';
+import { prepareCheckpointCommit, materializeCheckpointHead, encodeCheckpointRecord, decodeCheckpointRecord, isCheckpointRecord, encodeCheckpointData, type CheckpointStoredHead, type CheckpointStoredChild, type CheckpointStoredValue, type CheckpointRelationCache, type CheckpointRelationRow, type CheckpointStoredSelection, type CheckpointStoredOccurrence, isCheckpointSelectionSlots, checkpointSelectionReferences } from '@weiliang0121/capix-checkpoint/storage';
 import { RecoveryConflict } from './recovery.js';
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { encodeCheckpointStorage, decodeCheckpointStorage, decodeCheckpointDelivery } from './checkpoint-storage.js';
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;

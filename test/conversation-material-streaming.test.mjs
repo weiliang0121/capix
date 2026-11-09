@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CompletionResource, ConversationMemoryResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, createMemoryMaintenance } from '@capix/conversation-service';
-import { PersistenceError } from '@capix/diagnostics';
-import { Memories, MemoryResource } from '@capix/memory';
-import { ChatCompletionsProvider } from '@capix/model-provider';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const reply = (text, finishReason = 'stop') => ({ id: 'completion', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: finishReason === 'stop' ? 'completed' : 'incomplete', reason: finishReason }, usage: null });
 const deltas = (events) => events.filter((event) => event.kind === 'delta').map((event) => event.delta);

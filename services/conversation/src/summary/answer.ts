@@ -1,6 +1,6 @@
-import type { Message } from '@capix/protocol';
-import type { ResourcesOf } from '@capix/resources';
-import { Group, Node } from '@capix/structure';
+import type { Message } from '@weiliang0121/capix-protocol';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Group, Node } from '@weiliang0121/capix-structure';
 import { CompletionResource, requireCompletionText } from '../completion.js';
 import { requireString, requireText } from '../text.js';
 import { createHistoryDecision } from './decision.js';

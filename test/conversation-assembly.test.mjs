@@ -6,8 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { createConversationInteractions, createConversationResources, createMaterialConversationScene, loadConversationContent, restoreConversationContent } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';
-import { PersistenceError } from '@capix/diagnostics';
-import { Runner } from '@capix/server-runtime';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Runner } from '@weiliang0121/capix-runtime';
 
 const messageRef = (key) => ({ source: 'messages', key });
 const memoryRef = (key) => ({ source: 'memories', key });

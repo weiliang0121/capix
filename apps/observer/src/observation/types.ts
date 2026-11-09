@@ -1,5 +1,5 @@
 import type { ObservationStatus } from './status.js';
-import type { ExecutionRecordSnapshot, ProcessRecord, RuntimeErrorValue, InvocationFailureFact, InvocationBoundaryRecord, GenerationOutput } from '@capix/protocol';
+import type { ExecutionRecordSnapshot, ProcessRecord, RuntimeErrorValue, InvocationFailureFact, InvocationBoundaryRecord, GenerationOutput } from '@weiliang0121/capix-protocol';
 export type Purpose = 'selection' | 'answer' | 'memory';
 export type NodeStatus = 'running' | 'passed' | 'failed' | 'unresolved';
 export interface TraceNode {

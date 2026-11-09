@@ -1,7 +1,7 @@
 import { InvocationResources } from '../invocation/resource-access.js';
-import type { CallableKind, Stable } from '@capix/contracts';
+import type { CallableKind, Stable } from '@weiliang0121/capix-contracts';
 import { InvocationContext, type InvocationControls } from './context.js';
-import { type ResourceRequirements } from '@capix/resources';
+import { type ResourceRequirements } from '@weiliang0121/capix-resources';
 import { requireNotCancelled } from '../invocation/cancellation.js';
 
 /** One callable's state and local resource access; no ancestor or source resolver is retained. */

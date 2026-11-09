@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
-import type { InvocationIdentity } from '@capix/contracts';
-import type { Clock } from '@capix/invocation';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
+import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
+import type { Clock } from '@weiliang0121/capix-invocation';
 import type { CallableFeedback } from '../construction/feedback.js';
 import type { EntryChange } from '../entry.js';
 import { RunnerObservationSubscriptions } from './observation.js';

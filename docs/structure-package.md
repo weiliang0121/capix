@@ -1,27 +1,27 @@
 # 结构包：配置、组合与运行端口契约
 
-状态：2026-10-25。`@capix/structure` 位于 `server/structure`，沿用已经确定的 Scene / Group / Node 模型。分包明确结构与执行的归属，保留原对象身份、作者写法和运行语义。
+状态：2026-10-25。`@weiliang0121/capix-structure` 位于 `server/structure`，沿用已经确定的 Scene / Group / Node 模型。分包明确结构与执行的归属，保留原对象身份、作者写法和运行语义。
 
 作者先构造结构、配置处理函数和申请资源，再通过 Runner 完成装配与运行。结构包可以独立用于构造和检查结构；它不会在构造、add 或声明恢复点时执行处理函数。
 
 ## 结构、契约与运行
 
-| 归属                    | 主要内容                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@capix/structure`      | Callable/Scene/Group/Node、成员与名字、配置状态、具体 CallableWork/ResumeWork 组合、point 配置和 Group 预设 |
-| `@capix/contracts`      | I/O/Delta 签名、Work 基础切面、子调用／输出端口、统一操作接收、CP 编码和认证事实                            |
-| `@capix/server-runtime` | 解算接线、构造 Invocation、签发和关闭窗口、落实父子接纳、保存与恢复 CP                                      |
+| 归属                            | 主要内容                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `@weiliang0121/capix-structure` | Callable/Scene/Group/Node、成员与名字、配置状态、具体 CallableWork/ResumeWork 组合、point 配置和 Group 预设 |
+| `@weiliang0121/capix-contracts` | I/O/Delta 签名、Work 基础切面、子调用／输出端口、统一操作接收、CP 编码和认证事实                            |
+| `@weiliang0121/capix-runtime`   | 解算接线、构造 Invocation、签发和关闭窗口、落实父子接纳、保存与恢复 CP                                      |
 
 Work 是业务取得的操作接口。结构根据 kind、资源申请和成员组合准确类型，Runtime 在本次活动中兑现端点；共同契约不依赖任一实现。
 
-结构包只依赖 contracts/resources，不依赖 Runtime 或 protocol。资源申请沿用资源包的单一身份，资源方法与子调用的 result/delta 接收共享 contracts 中的形状；`@capix/resources/operation` 继续提供接收实现和同源类型出口。包依赖、类型晋级和协议维护规则见 [契约与协议](contracts-protocol.md)。
+结构包只依赖 contracts/resources，不依赖 Runtime 或 protocol。资源申请沿用资源包的单一身份，资源方法与子调用的 result/delta 接收共享 contracts 中的形状；`@weiliang0121/capix-resources/operation` 继续提供接收实现和同源类型出口。包依赖、类型晋级和协议维护规则见 [契约与协议](contracts-protocol.md)。
 
 ## 最小例子
 
 ```js
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Scene, Node } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Scene, Node } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 const dictionary = new ResourceOffer({
   methods: {
@@ -41,7 +41,7 @@ const runner = new Runner(scene, resources).build();
 await runner.run('hello');
 ```
 
-Runtime 根入口仍重导相同的 Scene、Group、Node 和作者契约。之前从 `@capix/server-runtime` 导入这些对象的例子仍然成立；新包不建立第二套类、声明树或 Bound 树。可执行例子见 [dictionary.mjs](../examples/dictionary.mjs)。
+Runtime 根入口仍重导相同的 Scene、Group、Node 和作者契约。之前从 `@weiliang0121/capix-runtime` 导入这些对象的例子仍然成立；新包不建立第二套类、声明树或 Bound 树。可执行例子见 [dictionary.mjs](../examples/dictionary.mjs)。
 
 ## 单子委托与输入转换
 
@@ -106,7 +106,7 @@ sequenceDiagram
   Note over Call: 端点、接纳、输出与恢复属于本次活动
 ```
 
-`@capix/structure/construction` 给装配者提供结构检查、配置的 begin/end/lock、父归属、childKinds 和依赖收集。它不负责打开资源、创建调用或提供新 Runner。
+`@weiliang0121/capix-structure/construction` 给装配者提供结构检查、配置的 begin/end/lock、父归属、childKinds 和依赖收集。它不负责打开资源、创建调用或提供新 Runner。
 
 `CallableBuilder` 与 `CallableConstruction` 保留在 Runtime 的 `structure/`。前者组合 Binder、WorkBinding 和 InvocationBuilder；后者保存固定接线并安装到原结构。成功构建后拒绝配置改写、add 和再次构建；业务 receiver 与闭包不被深度冻结，单次状态也不存入结构字段。
 

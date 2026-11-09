@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { performance } from 'node:perf_hooks';
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { createYieldingFetch } from '@capix/conversation-service/assembly';
 import { createCapacitySession, measureStorage } from './assembly.mjs';
 import { startUpstream, expectedAnswer } from './upstream-client.mjs';

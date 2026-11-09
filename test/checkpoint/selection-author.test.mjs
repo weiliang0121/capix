@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Node, checkpointPoint, childReference, childReferences } from '@capix/structure';
-import { Runner, Resources } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { Scene, Node, checkpointPoint, childReference, childReferences } from '@weiliang0121/capix-structure';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 

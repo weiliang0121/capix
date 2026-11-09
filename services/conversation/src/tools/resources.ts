@@ -1,7 +1,7 @@
-import type { InteractionChannel } from '@capix/interaction';
-import type { ModelRequest, ModelReply } from '@capix/model-provider';
-import { ModelExchangeResource, type ModelExchanges } from '@capix/model-exchanges';
-import { Resources } from '@capix/server-runtime';
+import type { InteractionChannel } from '@weiliang0121/capix-interaction';
+import type { ModelRequest, ModelReply } from '@weiliang0121/capix-model-provider';
+import { ModelExchangeResource, type ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+import { Resources } from '@weiliang0121/capix-runtime';
 import { ToolModelResource, type ToolInteractionRecovery } from './model.js';
 import { ToolLoop } from './loop.js';
 import type { ToolRequestInspection } from './budget.js';

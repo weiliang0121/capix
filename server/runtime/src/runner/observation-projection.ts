@@ -1,7 +1,7 @@
-import type { InvocationIdentity } from '@capix/contracts';
-import type { CheckpointChild } from '@capix/checkpoint';
-import { RuntimeErrorHelper } from '@capix/diagnostics';
-import { invocationProgress, type InvocationFact, type InvocationProgress, type ResourceObservation, type BusinessObservation, type CheckpointFact } from '@capix/invocation';
+import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
+import type { CheckpointChild } from '@weiliang0121/capix-checkpoint';
+import { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
+import { invocationProgress, type InvocationFact, type InvocationProgress, type ResourceObservation, type BusinessObservation, type CheckpointFact } from '@weiliang0121/capix-invocation';
 import type { RunnerDiagnostic, RunnerResourceFact, RunnerBusinessFact, RunnerCheckpointChild, RunnerCheckpointFact } from './observation-contract.js';
 
 /** Projection must happen during synchronous observation, while borrowed fields are valid. */

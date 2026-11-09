@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 const occurredAt = '2026-10-20T00:00:00.000Z';
 const call = (id, structureKind, parentId, childIds = []) => ({ id, contextId: `${id}-context`, structureKind, parentId, childIds, status: 'running', value: { input: {}, startedAt: occurredAt, processes: [], relationChanges: [] } });

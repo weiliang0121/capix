@@ -1,5 +1,5 @@
-import type { ResourcesOf } from '@capix/resources';
-import { Node } from '@capix/structure';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Node } from '@weiliang0121/capix-structure';
 import { CompletionResource, requireCompletionText } from '../completion.js';
 import type { HistoryInput } from './input.js';
 

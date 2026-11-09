@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 // 这是“依次生成并发布几份内容”的业务状态，不是通用 Progress 或流程图引擎。
 // 初始化正式登记各操作。调用只处理已有操作，不按文本猜测是不是新的业务。

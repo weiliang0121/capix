@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 function fixedOperation(operation) {
   const value = structuredClone(operation);

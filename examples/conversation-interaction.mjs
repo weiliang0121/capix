@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createConversationScene, createInteractionAnswer, createCompletionReplyNode, HistoryResource, CompletionInteractionResource, CompletionInteraction } from '@capix/conversation-service';
-import { Interactions } from '@capix/interaction';
-import { Resource } from '@capix/resources';
-import { Resources, Runner, Scene } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 // All external work is simulated locally. The host owns the sender and the exchange lifetime.
 const previewed = Promise.withResolvers();

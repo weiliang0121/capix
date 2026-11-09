@@ -1,6 +1,6 @@
 /** Deliberately fails: a standalone point cannot infer its owner from a later use. */
-import type { CheckpointCodec } from '@capix/server-runtime';
-import { checkpointPoint, defineGroup } from '@capix/server-runtime';
+import type { CheckpointCodec } from '@weiliang0121/capix-runtime';
+import { checkpointPoint, defineGroup } from '@weiliang0121/capix-runtime';
 
 declare const stringCodec: CheckpointCodec<string>;
 declare const numberCodec: CheckpointCodec<number>;

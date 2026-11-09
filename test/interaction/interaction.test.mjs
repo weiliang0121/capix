@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { getEventListeners } from 'node:events';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { Interaction } from '@capix/interaction';
-import { PersistenceError } from '@capix/diagnostics';
-import { RuntimeError } from '@capix/contracts';
+import { Interaction } from '@weiliang0121/capix-interaction';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 
 const contract = {
   key: 'test:echo:v1',

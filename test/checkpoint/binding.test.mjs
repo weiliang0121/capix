@@ -1,9 +1,9 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, bindCallSource } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
-import { MemoryCheckpointStore, checkpointSaveReceipt, checkpointFinishReceipt } from '@capix/checkpoint';
+import { Scene, Group, bindCallSource } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { MemoryCheckpointStore, checkpointSaveReceipt, checkpointFinishReceipt } from '@weiliang0121/capix-checkpoint';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 

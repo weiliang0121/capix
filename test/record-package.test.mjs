@@ -3,14 +3,14 @@ import { test } from 'node:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ChangeBuffer } from '@capix/changes';
-import { Resource, Resources as ResourceBindings, ResourceAccessClosed } from '@capix/resources';
-import { BaseRecord, CallableRecord, InvocationBoundaryRecord, RecordBook, Recorder, RecordResource, ResourceRecord } from '@capix/records';
-import { RecordWriterResource } from '@capix/records/construction';
-import { Node, Scene } from '@capix/structure';
-import { Runner, Resources } from '@capix/server-runtime';
-import { bindRecording } from '@capix/server-runtime/recording';
-import { readOutput } from '@capix/protocol';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
+import { Resource, Resources as ResourceBindings, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { BaseRecord, CallableRecord, InvocationBoundaryRecord, RecordBook, Recorder, RecordResource, ResourceRecord } from '@weiliang0121/capix-records';
+import { RecordWriterResource } from '@weiliang0121/capix-records/construction';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
+import { bindRecording } from '@weiliang0121/capix-runtime/recording';
+import { readOutput } from '@weiliang0121/capix-protocol';
 
 function contentAccess(recorder) {
   const resource = new Resource(recorder);
@@ -24,8 +24,8 @@ function writerAccess(recorder) {
 test('record entities have independent public entries and no callable or memory implementation dependency', async () => {
   const directory = fileURLToPath(new URL('../server/records/', import.meta.url));
   const manifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'));
-  const forbidden = ['@capix/server-runtime', '@capix/structure', '@capix/memory', '@capix/observer-service'];
-  assert.equal(manifest.name, '@capix/records');
+  const forbidden = ['@weiliang0121/capix-runtime', '@weiliang0121/capix-structure', '@weiliang0121/capix-memory', '@capix/observer-service'];
+  assert.equal(manifest.name, '@weiliang0121/capix-records');
   assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './construction']);
   for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!forbidden.includes(dependency), `records cannot depend on ${dependency}`);
   async function inspect(path) {
@@ -44,10 +44,10 @@ test('record entities have independent public entries and no callable or memory 
   }
   await inspect(resolve(directory, 'src'));
   await inspect(resolve(directory, 'dist'));
-  const records = await import('@capix/records');
-  const construction = await import('@capix/records/construction');
-  const runtime = await import('@capix/server-runtime');
-  const recording = await import('@capix/server-runtime/recording');
+  const records = await import('@weiliang0121/capix-records');
+  const construction = await import('@weiliang0121/capix-records/construction');
+  const runtime = await import('@weiliang0121/capix-runtime');
+  const recording = await import('@weiliang0121/capix-runtime/recording');
   for (const name of ['Recorder', 'RecordBook', 'RecordTree', 'CallableRecord', 'RecordResource']) {
     assert.ok(name in records);
     assert.equal(name in runtime, false);
@@ -56,7 +56,7 @@ test('record entities have independent public entries and no callable or memory 
   for (const name of ['Runner', 'Invocation', 'Scene', 'Node', 'bindRecording', 'InvocationRecording', 'RecordWriterResource']) assert.equal(name in records, false);
   assert.equal(construction.RecordWriterResource, RecordWriterResource);
   assert.equal(recording.bindRecording, bindRecording);
-  for (const path of ['@capix/records/recorder', '@capix/records/src/record.js', '@capix/records/dist/record.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+  for (const path of ['@weiliang0121/capix-records/recorder', '@weiliang0121/capix-records/src/record.js', '@weiliang0121/capix-records/dist/record.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 });
 
 test('ordinary record resources create custom content and return isolated snapshots within their access window', () => {

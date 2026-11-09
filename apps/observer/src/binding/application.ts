@@ -6,7 +6,7 @@ import { createDataProjection } from './data.js';
 import { errorMessage } from '../lib/errors.js';
 import { submitDraft } from './submit.js';
 import { projectConversationChange } from './conversations.js';
-import type { InteractionObservation } from '@capix/protocol';
+import type { InteractionObservation } from '@weiliang0121/capix-protocol';
 
 export function createApplication(runtime: ClientRuntime) {
   const store = createAppStore();

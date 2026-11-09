@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Invocation, InvocationContext } from '@capix/invocation';
-import { Scene, Resources, Runner, checkpointPoint } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
+import { Scene, Resources, Runner, checkpointPoint } from '@weiliang0121/capix-runtime';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const invalidChecks = [

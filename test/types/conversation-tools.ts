@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Node, Group } from '@capix/structure';
+import { Node, Group } from '@weiliang0121/capix-structure';
 import { tool, createToolLoop, createToolAnswer, type ToolRegistrations } from '@capix/conversation-service/tools';
 const read = new Node<{ path: string }, { text: string }>({ run: (work) => ({ text: work.input.path }) });
 const registration = tool(read, { description: 'Read', input: z.strictObject({ path: z.string() }), result: { succeeded: (value) => ({ status: 'ok', content: [{ kind: 'text', text: value.text }] }) } });

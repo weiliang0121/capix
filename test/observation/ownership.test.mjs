@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, Node, Resources, Runner, defineObservation } from '@capix/server-runtime';
+import { Scene, Group, Node, Resources, Runner, defineObservation } from '@weiliang0121/capix-runtime';
 
 const install = (scene, observations) => new Runner(scene, new Resources(), undefined, { observations }).build();
 const consumer = (declarations, options = {}) => ({ declarations, bindInvocation: () => ({ observe() {} }), ...options });

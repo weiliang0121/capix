@@ -1,5 +1,5 @@
 /** Deliberately fails: child input and registered child contracts stay exact. */
-import { defineNode, defineGroup } from '@capix/server-runtime';
+import { defineNode, defineGroup } from '@weiliang0121/capix-runtime';
 
 const child = defineNode<{ readonly path: string }, string>()({ name: 'child', label: 'Child', source: 'test', run: (work) => work.input.path });
 defineGroup<string, string>()({

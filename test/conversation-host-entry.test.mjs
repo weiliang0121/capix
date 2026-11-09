@@ -3,12 +3,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ChatCompletionsProvider } from '@capix/model-provider';
-import { Runner } from '@capix/server-runtime';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
+import { Runner } from '@weiliang0121/capix-runtime';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent, createConversationHostAssembly } from '@capix/conversation-service/assembly';
 import { CompletionInteraction } from '@capix/conversation-service';
-import { Interaction } from '@capix/interaction';
+import { Interaction } from '@weiliang0121/capix-interaction';
 
 function model(complete) {
   const encoder = new ChatCompletionsProvider({

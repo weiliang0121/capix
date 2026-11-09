@@ -1,6 +1,6 @@
 import { closeSync, fsyncSync, openSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { RecordBook, Recorder } from '@capix/records';
+import { RecordBook, Recorder } from '@weiliang0121/capix-records';
 import { createConversationRecording } from '../recording/index.js';
 
 /** A CLI output file, reserved before accepting input; it is not a recording persistence store. */

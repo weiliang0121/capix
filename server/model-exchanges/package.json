@@ -1,5 +1,5 @@
 {
-  "name": "@capix/model-exchanges",
+  "name": "@weiliang0121/capix-model-exchanges",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -14,12 +14,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/contracts": "workspace:*",
-    "@capix/diagnostics": "workspace:*",
-    "@capix/changes": "workspace:*",
-    "@capix/model-provider": "workspace:*",
-    "@capix/resources": "workspace:*",
-    "@capix/view": "workspace:*"
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-diagnostics": "workspace:*",
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-model-provider": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-view": "workspace:*"
   },
   "description": "Model reply and tool feedback entities for CAPiX.",
   "license": "MIT",

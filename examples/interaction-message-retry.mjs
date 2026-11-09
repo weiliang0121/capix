@@ -1,12 +1,12 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import assert from 'node:assert/strict';
 import { createCompletionReplyNode, CompletionInteractionResource, CompletionInteraction } from '@capix/conversation-service';
-import { PersistenceError } from '@capix/diagnostics';
-import { Interactions } from '@capix/interaction';
-import { Resource } from '@capix/resources';
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 // 本地故障注入：不访问真实模型或数据库。两个存储端口独立提交，没有跨实体事务。
 const savedInteractions = new Map();

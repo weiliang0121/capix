@@ -5,7 +5,7 @@ import { CallableCalls, type CallInstallation, type CallableCallsOptions } from 
 import { bindCallableHooks } from './hooks.js';
 import type { Resources } from '../resource/resources.js';
 import { ResourceInstallation } from '../resource/installation.js';
-import type { Interactions } from '@capix/interaction';
+import type { Interactions } from '@weiliang0121/capix-interaction';
 
 /** Static resolution and call wiring, consumed by the atomic structure installer. */
 export interface CallableBuildPlan<Structure extends AnyCallable, Options> {

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CompletionResource, createConversationScene, createHistoryAnswer, HistoryResource } from '@capix/conversation-service';
-import { Resource } from '@capix/resources';
-import { Resources, Runner, isInvocationCancelled } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner, isInvocationCancelled } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 const earlier = [
   { role: 'user', content: '发布改到周五，周四先完成代码复核。' },

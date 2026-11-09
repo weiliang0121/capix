@@ -1,5 +1,5 @@
-import type { ProgressReceiver } from '@capix/contracts';
-export type { ProgressReceiver } from '@capix/contracts';
+import type { ProgressReceiver } from '@weiliang0121/capix-contracts';
+export type { ProgressReceiver } from '@weiliang0121/capix-contracts';
 
 export interface ProgressFailure {
   readonly error: unknown;

@@ -4,11 +4,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { Interaction } from '@capix/interaction';
+import { Interaction } from '@weiliang0121/capix-interaction';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { CompletionInteraction } from '@capix/conversation-service';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 async function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'capix-model-legacy-'));

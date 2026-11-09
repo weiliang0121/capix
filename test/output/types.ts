@@ -1,6 +1,6 @@
-import { Node, Group, type NodeWork, type GroupWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
-import type { InvocationOutputEvent, InvocationOutputReceiver } from '@capix/structure';
-import { ProgressChannel } from '@capix/changes';
+import { Node, Group, type NodeWork, type GroupWork, type ChildCalls, type OutputDeclaration } from '@weiliang0121/capix-runtime';
+import type { InvocationOutputEvent, InvocationOutputReceiver } from '@weiliang0121/capix-structure';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
 
 // The output port keeps its original generic receiver shape across the package seam.
 declare const receiver: InvocationOutputReceiver<string, number>;

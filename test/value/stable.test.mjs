@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { stableValue, stableValueLimits, StableValueError } from '@capix/contracts';
+import { stableValue, stableValueLimits, StableValueError } from '@weiliang0121/capix-contracts';
 
 const rejects = (value, code = 'UNSUPPORTED_VALUE') =>
   assert.throws(

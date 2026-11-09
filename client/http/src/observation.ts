@@ -1,5 +1,5 @@
 import { ObservationConnectionError, type ObservationTransport } from '@capix/client-runtime';
-import type { ObservationFrame, InteractionObservation } from '@capix/protocol';
+import type { ObservationFrame, InteractionObservation } from '@weiliang0121/capix-protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { HttpTransport } from './transport.js';
 import { HttpError, HttpTransportError } from './errors.js';

@@ -1,4 +1,4 @@
-import type { ResourceRequirements, ResourceRequest } from '@capix/resources';
+import type { ResourceRequirements, ResourceRequest } from '@weiliang0121/capix-resources';
 
 export interface CallableDependencies {
   readonly deps?: ResourceRequirements;

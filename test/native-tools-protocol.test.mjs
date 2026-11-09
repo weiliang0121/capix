@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Node } from '@capix/structure';
+import { Node } from '@weiliang0121/capix-structure';
 import { z } from 'zod';
 import { acceptReply, acceptReplyStream, acceptFeedback, encodeHistory, validateReply } from '../examples/native-tools/protocol.mjs';
 import { createCatalog, validateCatalog, precheck, tool } from '../examples/native-tools/catalog.mjs';

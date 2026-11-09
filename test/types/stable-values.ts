@@ -1,5 +1,5 @@
-import { stableValue } from '@capix/contracts';
-import type { Stable } from '@capix/contracts';
+import { stableValue } from '@weiliang0121/capix-contracts';
+import type { Stable } from '@weiliang0121/capix-contracts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<T extends true> = T;
@@ -47,11 +47,11 @@ const fabricated: { count: number } = stableValue(unknown);
 
 // Stable facts cross public call boundaries, while capability endpoints retain
 // their own operational contracts. These functions are compile-only fixtures.
-import { Node, Scene, Group, Sequence, Dynamic, checkpointPoint, reception, childReference } from '@capix/structure';
-import { Runner, Resources } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
-import type { CheckpointCodec } from '@capix/contracts';
-import type { ModelRequest } from '@capix/model-provider';
+import { Node, Scene, Group, Sequence, Dynamic, checkpointPoint, reception, childReference } from '@weiliang0121/capix-structure';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import type { CheckpointCodec } from '@weiliang0121/capix-contracts';
+import type { ModelRequest } from '@weiliang0121/capix-model-provider';
 
 type Payload = { items: { text: string }[] };
 const payloadCodec: CheckpointCodec<Payload> = {
@@ -128,7 +128,7 @@ const originOffer = new ResourceOffer({
     },
   },
 });
-const resourceConsumer = new Node<void, number, { counter: ReturnType<typeof originOffer.request> extends import('@capix/resources').ResourceRequest<infer Endpoint> ? Endpoint : never }>({
+const resourceConsumer = new Node<void, number, { counter: ReturnType<typeof originOffer.request> extends import('@weiliang0121/capix-resources').ResourceRequest<infer Endpoint> ? Endpoint : never }>({
   deps: { counter: originOffer.request() },
   async run(work) {
     const operation = await work.resources.counter.take();
@@ -157,8 +157,8 @@ async function consumePresets() {
 }
 
 type ReceiptOutcome = { kind: 'kept'; value: Payload } | { kind: 'fallback'; reason: string };
-declare const unionReceipt: import('@capix/contracts').ReceptionDefinition<typeof leaf, ReceiptOutcome>;
-async function consumeUnion(call: import('@capix/contracts').ChildCall<typeof leaf>) {
+declare const unionReceipt: import('@weiliang0121/capix-contracts').ReceptionDefinition<typeof leaf, ReceiptOutcome>;
+async function consumeUnion(call: import('@weiliang0121/capix-contracts').ChildCall<typeof leaf>) {
   const result = await call.invoke({
     reception: unionReceipt,
     result: {

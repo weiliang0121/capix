@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, Scene, Group, bindCallSource } from '@capix/server-runtime';
+import { Sequence, Scene, Group, bindCallSource } from '@weiliang0121/capix-runtime';
 
 const output = { result: (value) => value, delta: (value) => value };
 

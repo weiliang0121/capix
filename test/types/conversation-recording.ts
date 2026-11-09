@@ -1,9 +1,9 @@
 import { createMaterialConversationScene } from '@capix/conversation-service/assembly';
 import { createConversationRecording } from '@capix/conversation-service/recording';
-import { RecordBook, Recorder } from '@capix/records';
-import { Node, Scene, Group } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
-import type { RecordingInstallation } from '@capix/server-runtime/recording';
+import { RecordBook, Recorder } from '@weiliang0121/capix-records';
+import { Node, Scene, Group } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import type { RecordingInstallation } from '@weiliang0121/capix-runtime/recording';
 
 const scene = createMaterialConversationScene();
 const recorder = new Recorder(new RecordBook());

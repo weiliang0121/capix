@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext } from '@capix/invocation';
-import { MemoryCheckpointStore, cloneCheckpointHead } from '@capix/checkpoint';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore, cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
 
 const identity = { encode: (value) => value, decode: (value) => value };
 

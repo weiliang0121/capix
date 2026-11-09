@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@capix/diagnostics';
-import { Resource } from '@capix/resources';
-import { Node, Resources, Runner, Scene } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 // Regression for the persistence classification gap: the entity owns this
 // boundary even when its adapter throws an ordinary Error.

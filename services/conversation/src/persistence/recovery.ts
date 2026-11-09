@@ -1,4 +1,4 @@
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 
 /** A rejected caller transition is known not to have written anything. */
 export class RecoveryConflict extends RuntimeError {

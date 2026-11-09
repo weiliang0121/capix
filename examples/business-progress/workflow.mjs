@@ -1,6 +1,6 @@
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Group, Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Group, Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { publicationOperation } from './progress.mjs';
 
 const progressAccess = new ResourceOffer({

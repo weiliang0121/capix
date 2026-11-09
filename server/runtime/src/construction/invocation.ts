@@ -1,13 +1,13 @@
-import { InvocationResources, requireNotCancelled, restoreCheckpointContinuation, type CheckpointRestoration, prepareCheckpointRestoration, type InvocationProgress, type InvocationFact, type InvocationDescription, attachInvocationResources, InvocationChangeEmitter, Invocation, type InvocationStarted, type InvocationWork, CallableContext, type InvocationControls, type InvocationRelationOptions } from '@capix/invocation';
-import type { CallableKind, InvocationOutputReceiver } from '@capix/contracts';
-import type { ProgressReceiver } from '@capix/changes';
+import { InvocationResources, requireNotCancelled, restoreCheckpointContinuation, type CheckpointRestoration, prepareCheckpointRestoration, type InvocationProgress, type InvocationFact, type InvocationDescription, attachInvocationResources, InvocationChangeEmitter, Invocation, type InvocationStarted, type InvocationWork, CallableContext, type InvocationControls, type InvocationRelationOptions } from '@weiliang0121/capix-invocation';
+import type { CallableKind, InvocationOutputReceiver } from '@weiliang0121/capix-contracts';
+import type { ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { InvocationObservationDeclaration } from '../binding/observation.js';
 import { bindInvocationObservation } from '../binding/observation.js';
-import { type ResourceRequirements, ResourceSupply } from '@capix/resources';
-import type { ResourceRefinement } from '@capix/resources';
+import { type ResourceRequirements, ResourceSupply } from '@weiliang0121/capix-resources';
+import type { ResourceRefinement } from '@weiliang0121/capix-resources';
 import type { InvocationCapabilities } from './capabilities.js';
 import { checkpointFeedback, type CallableFeedbackBinding } from './feedback.js';
-import { stableValue, type Stable } from '@capix/contracts';
+import { stableValue, type Stable } from '@weiliang0121/capix-contracts';
 
 export type CallableInvocationStarted<Input, Output, Resources extends object = object> = InvocationStarted<Input, Output, CallableContext<Input, Output, Resources>>;
 

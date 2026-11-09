@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Group, Node, Scene, withDependencies } from '@capix/structure';
-import { ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Group, Node, Scene, withDependencies } from '@weiliang0121/capix-structure';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 test('common requests are copied before authoring and cannot override local aliases or alter existing nodes', () => {
   const flow = new ResourceOffer({ methods: { read: (origin) => origin.value } });

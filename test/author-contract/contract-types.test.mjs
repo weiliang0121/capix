@@ -6,9 +6,9 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/consumer-contract.ts', import.meta.url));
 const source = `
-import { Node, Group, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
-import type { ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildOptions, ChildReference, CallableContract, CallableInput, CallableOutput, CallableWork, InvocationOutputReceiver, GroupWork } from '@capix/server-runtime';
-import type { ResourceRequest } from '@capix/resources';
+import { Node, Group, defineNode, defineGroup, defineScene } from '@weiliang0121/capix-runtime';
+import type { ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildOptions, ChildReference, CallableContract, CallableInput, CallableOutput, CallableWork, InvocationOutputReceiver, GroupWork } from '@weiliang0121/capix-runtime';
+import type { ResourceRequest } from '@weiliang0121/capix-resources';
 
 declare function expectType<T>(value: T): void;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;

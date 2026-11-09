@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { cloneCheckpointHead, MemoryCheckpointStore } from '@capix/checkpoint';
-import type { CheckpointCodec } from '@capix/contracts';
-import { CallableContext, Invocation, attachInvocationResources, InvocationObservation, ObserverSession, prepareCheckpointRestoration, type InvocationWork, type InvocationObserver } from '@capix/invocation';
+import { cloneCheckpointHead, MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import type { CheckpointCodec } from '@weiliang0121/capix-contracts';
+import { CallableContext, Invocation, attachInvocationResources, InvocationObservation, ObserverSession, prepareCheckpointRestoration, type InvocationWork, type InvocationObserver } from '@weiliang0121/capix-invocation';
 
 // This is a module-boundary probe, not a replacement for Runner or author Work.
 // The host supplies already-fixed behavior; there is no structure, Binder or registry.
@@ -86,4 +86,4 @@ async function unavailable(specifier: string): Promise<boolean> {
   }
 }
 
-process.stdout.write(JSON.stringify({ parentResult, childAccepted, observed: facts.includes('started') && facts.includes('finished'), recoveredResult, checkpointFinished, runtimeUnavailable: await unavailable('@capix/server-runtime'), structureUnavailable: await unavailable('@capix/structure') }));
+process.stdout.write(JSON.stringify({ parentResult, childAccepted, observed: facts.includes('started') && facts.includes('finished'), recoveredResult, checkpointFinished, runtimeUnavailable: await unavailable('@weiliang0121/capix-runtime'), structureUnavailable: await unavailable('@weiliang0121/capix-structure') }));

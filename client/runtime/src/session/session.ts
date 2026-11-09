@@ -1,4 +1,4 @@
-import type { ConversationServiceInfo } from '@capix/protocol';
+import type { ConversationServiceInfo } from '@weiliang0121/capix-protocol';
 import { ClientSubmission, type ClientSubmissionState, type SubmissionReception } from '../submission.js';
 import { TranscriptReceiver, type TranscriptState } from '../transcript.js';
 import { acceptTrackingLocator, type ClientTrackingStore } from '../tracking.js';

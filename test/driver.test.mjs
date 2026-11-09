@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clock, Driver, Resources, checkpointPoint, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { CallableBuilder, createCallableInvocation } from '@capix/server-runtime/construction';
+import { Clock, Driver, Resources, checkpointPoint, defineScene, defineGroup, defineNode } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { CallableBuilder, createCallableInvocation } from '@weiliang0121/capix-runtime/construction';
 
 const source = { capture: () => null };
 const codec = { encode: (value) => value, decode: (value) => value };

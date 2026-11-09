@@ -2,9 +2,9 @@ import { bindResources } from './fixtures/resources.mjs';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, bindChildResources, bindRecording } from '@capix/server-runtime';
-import { Recorder, RecordBook } from '@capix/records';
-import { ResourceAccessClosed, ResourceOffer } from '@capix/resources';
+import { Group, Node, bindChildResources, bindRecording } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
+import { ResourceAccessClosed, ResourceOffer } from '@weiliang0121/capix-resources';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function fixture({ recorded = false, built = true, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {

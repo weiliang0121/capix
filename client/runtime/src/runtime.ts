@@ -1,4 +1,4 @@
-import type { ConversationDescriptor, ConversationListResponse, ConversationSubmissionDiscovery, ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot, InteractionObservation } from '@capix/protocol';
+import type { ConversationDescriptor, ConversationListResponse, ConversationSubmissionDiscovery, ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot, InteractionObservation } from '@weiliang0121/capix-protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReceiver, type ObservationState } from './observation/receiver.js';
@@ -366,7 +366,7 @@ export class ClientRuntime {
   }
 
   /** Load an entity only when needed, then keep its copy current until explicitly stopped. */
-  loadTranscript(id: string): Promise<import('@capix/protocol').TranscriptSnapshot> {
+  loadTranscript(id: string): Promise<import('@weiliang0121/capix-protocol').TranscriptSnapshot> {
     return this.transcripts.watch(id);
   }
 

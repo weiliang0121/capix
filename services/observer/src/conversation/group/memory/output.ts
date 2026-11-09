@@ -1,10 +1,10 @@
 import { pick } from 'es-toolkit/object';
 import { isEqual } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { RuntimeError } from '@capix/contracts';
-import { hasUniqueItems } from '@capix/server-runtime';
-import { type MemoryChange } from '@capix/memory';
-import type { MemoryResultSource } from '@capix/protocol';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { hasUniqueItems } from '@weiliang0121/capix-runtime';
+import { type MemoryChange } from '@weiliang0121/capix-memory';
+import type { MemoryResultSource } from '@weiliang0121/capix-protocol';
 
 import type { ModelOutputContract } from '../../model/contract.js';
 import type { MemoryInput } from './input.js';

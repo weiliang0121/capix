@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { ModelExchanges } from '@capix/model-exchanges';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
 import { FactStore, identity, stableCodec } from './fact-store.mjs';
 import { FactCall } from './fact-call.mjs';
 import { ToolPrefixIndex } from './tool-prefix.mjs';

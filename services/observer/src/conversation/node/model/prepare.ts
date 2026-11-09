@@ -1,11 +1,11 @@
 import { modelRequestCodec } from '../../model/checkpoint.js';
-import type { Stable } from '@capix/contracts';
+import type { Stable } from '@weiliang0121/capix-contracts';
 import { checkLeafResult } from '../../group/checkpoint.js';
 import { ModelSettingsResource } from '../../model/resources.js';
-import type { ResourceRequirements } from '@capix/resources';
+import type { ResourceRequirements } from '@weiliang0121/capix-resources';
 import type { ModelRequestResources } from '../../resources.js';
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import { Node, checkpointPoint, type CheckpointValue } from '@capix/structure';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import { Node, checkpointPoint, type CheckpointValue } from '@weiliang0121/capix-structure';
 
 import type { ModelRequest } from '../../model/types.js';
 import { checkCapacity } from '../../model/capacity.js';

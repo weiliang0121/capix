@@ -1,9 +1,9 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { defineScene, defineGroup, defineNode, checkpointPoint } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ResourceOffer } from '@capix/resources';
+import { defineScene, defineGroup, defineNode, checkpointPoint } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 const metadata = { name: 'test', label: 'Test', source: 'test' };
 const codec = { encode: (value) => value, decode: (value) => value };

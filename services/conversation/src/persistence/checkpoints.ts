@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointHeadCommit, type CheckpointStore, type CheckpointImage, type CheckpointDelivery, type CheckpointHead, type CheckpointSaveReceipt, type CheckpointFinishReceipt, type CheckpointCommit } from '@capix/checkpoint';
-import { isCheckpointRecord, checkpointImageCommit, CheckpointRelationCache } from '@capix/checkpoint/storage';
+import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointHeadCommit, type CheckpointStore, type CheckpointImage, type CheckpointDelivery, type CheckpointHead, type CheckpointSaveReceipt, type CheckpointFinishReceipt, type CheckpointCommit } from '@weiliang0121/capix-checkpoint';
+import { isCheckpointRecord, checkpointImageCommit, CheckpointRelationCache } from '@weiliang0121/capix-checkpoint/storage';
 import { z } from 'zod';
 import { RecoveryConflict, requireIdentity, requireRevision, type RecoveryTransaction } from './recovery.js';
 import { saveCheckpointFacts, readCheckpointFacts, finishCheckpointFacts } from './checkpoint-facts.js';

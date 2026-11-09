@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { test } from 'node:test';
 import { createYieldingFetch } from '@capix/conversation-service/assembly';
-import { ChatCompletionsProvider, ProviderError } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError } from '@weiliang0121/capix-model-provider';
 
 const endpoint = 'https://fixture.invalid/chat/completions';
 const request = { messages: [{ role: 'user', content: 'hello' }] };

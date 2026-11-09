@@ -1,5 +1,5 @@
-import { ResourceOffer } from '@capix/resources';
-import type { Transcript } from '@capix/transcript';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import type { Transcript } from '@weiliang0121/capix-transcript';
 
 /** This service uses the complete prefix ending at its accepted input, without selection or trimming. */
 export const HistoryResource = new ResourceOffer({

@@ -1,5 +1,5 @@
-import type { CallableKind, OutputDeclaration, Stable } from '@capix/contracts';
-import type { ResourceRequirements } from '@capix/resources';
+import type { CallableKind, OutputDeclaration, Stable } from '@weiliang0121/capix-contracts';
+import type { ResourceRequirements } from '@weiliang0121/capix-resources';
 import type { ChildContractsOf } from './children.js';
 import type { InvocationCheckpointDefinition } from './checkpoint.js';
 import type { CallableWork } from './work.js';

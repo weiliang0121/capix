@@ -1,5 +1,5 @@
-import { Initializer } from '@capix/server-runtime';
-import type { ConversationFailure } from '@capix/protocol';
+import { Initializer } from '@weiliang0121/capix-runtime';
+import type { ConversationFailure } from '@weiliang0121/capix-protocol';
 import { isFunction } from 'es-toolkit/predicate';
 import type { ModelInitialization, ModelProvider } from './types.js';
 

@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { writeSync } from 'node:fs';
-import { Node, Scene, checkpointPoint, childReference, reception } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Node, Scene, checkpointPoint, childReference, reception } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 
 // Deliberate process-loss cuts use the real SQLite CheckpointStore. The separate

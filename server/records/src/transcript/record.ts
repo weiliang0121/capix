@@ -1,4 +1,4 @@
-import type { TranscriptChange, TranscriptRecord as RecordData } from '@capix/protocol';
+import type { TranscriptChange, TranscriptRecord as RecordData } from '@weiliang0121/capix-protocol';
 import type { RecordChangeSource } from '../source.js';
 import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';

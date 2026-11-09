@@ -2,10 +2,10 @@ import { bindResources, ResourceBindings } from '../fixtures/resources.mjs';
 import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CallableInvocationBuilder } from '@capix/server-runtime';
-import { Recorder, RecordBook } from '@capix/records';
-import { ChangeBuffer } from '@capix/changes';
-import { ResourceOffer } from '@capix/resources';
+import { CallableInvocationBuilder } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };

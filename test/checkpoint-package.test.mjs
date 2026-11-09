@@ -9,12 +9,12 @@ import ts from 'typescript';
 test('checkpoint values and storage expose independent value and storage-adapter entries without running-host dependencies', async () => {
   const directory = fileURLToPath(new URL('../server/checkpoint/', import.meta.url));
   const manifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'));
-  assert.equal(manifest.name, '@capix/checkpoint');
+  assert.equal(manifest.name, '@weiliang0121/capix-checkpoint');
   assert.deepEqual(Object.keys(manifest.exports), ['.', './storage']);
   const dependencies = Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies });
   assert.deepEqual(
-    dependencies.filter((name) => name.startsWith('@capix/')),
-    ['@capix/contracts'],
+    dependencies.filter((name) => name.startsWith('@capix/') || name.startsWith('@weiliang0121/capix-')),
+    ['@weiliang0121/capix-contracts'],
   );
   async function inspect(path) {
     for (const entry of await readdir(path, { withFileTypes: true })) {
@@ -24,7 +24,7 @@ test('checkpoint values and storage expose independent value and storage-adapter
         const source = await readFile(file, 'utf8');
         for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
           const specifier = match[2];
-          if (specifier.startsWith('@capix/')) assert.equal(specifier, '@capix/contracts', `${file} cannot import ${specifier}`);
+          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.equal(specifier, '@weiliang0121/capix-contracts', `${file} cannot import ${specifier}`);
           if (specifier.startsWith('.')) assert.ok(!relative(directory, resolve(dirname(file), specifier)).startsWith('..'), `${file} crosses its package boundary`);
         }
       }
@@ -32,20 +32,20 @@ test('checkpoint values and storage expose independent value and storage-adapter
   }
   await inspect(resolve(directory, 'src'));
   await inspect(resolve(directory, 'dist'));
-  const checkpoint = await import('@capix/checkpoint');
-  const runtime = await import('@capix/server-runtime');
+  const checkpoint = await import('@weiliang0121/capix-checkpoint');
+  const runtime = await import('@weiliang0121/capix-runtime');
   for (const name of ['MemoryCheckpointStore', 'cloneCheckpointValue', 'cloneCheckpointImage', 'cloneCheckpointHead', 'cloneCheckpointDelivery', 'checkpointReference', 'checkpointReferenceChild', 'CHECKPOINT_MAX_BYTES']) {
     assert.ok(name in checkpoint);
     assert.equal(name in runtime, false);
   }
   for (const name of ['Runner', 'Invocation', 'InvocationCheckpoint', 'Scene', 'Node', 'checkpointPoint', 'Resources', 'Recorder']) assert.equal(name in checkpoint, false);
-  for (const path of ['@capix/checkpoint/store', '@capix/checkpoint/src/store.js', '@capix/checkpoint/dist/store.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+  for (const path of ['@weiliang0121/capix-checkpoint/store', '@weiliang0121/capix-checkpoint/src/store.js', '@weiliang0121/capix-checkpoint/dist/store.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 });
 
 test('a host can use checkpoint storage and shared diagnostics without loading a scene or runtime', () => {
   const script = `
-    import { MemoryCheckpointStore, cloneCheckpointHead } from '@capix/checkpoint';
-    import { RuntimeError } from '@capix/contracts';
+    import { MemoryCheckpointStore, cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
+    import { RuntimeError } from '@weiliang0121/capix-contracts';
     const store = new MemoryCheckpointStore();
     const saved = store.save({
       id: 'snapshot', formatVersion: 6, contract: { key: 'standalone', version: 1 }, point: 'prepared',

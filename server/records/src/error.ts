@@ -1,4 +1,4 @@
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 
 /** Recording failed; repeating work cannot repair its recording. */
 export class RecordingError extends RuntimeError {

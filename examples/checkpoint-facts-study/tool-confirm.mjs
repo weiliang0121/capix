@@ -1,6 +1,6 @@
 import { isDeepStrictEqual as equal } from 'node:util';
-import { feedbackDigest } from '@capix/model-exchanges';
-import { modelReplyText } from '@capix/model-provider';
+import { feedbackDigest } from '@weiliang0121/capix-model-exchanges';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import { assertToolFeedbackBytes, assertToolOutputBytes, assertToolReplyBytes } from '@capix/conversation-service/tools';
 import { ToolRelations } from './tool-relations.mjs';
 

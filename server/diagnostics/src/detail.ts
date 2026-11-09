@@ -1,7 +1,7 @@
 import { isArray, isFinite } from 'es-toolkit/compat';
 import { isNativeError } from 'node:util/types';
 import { isBoolean, isDate, isMap, isNull, isNumber, isSet, isString, isSymbol, isUndefined } from 'es-toolkit/predicate';
-import type { RuntimeErrorDetail } from '@capix/contracts';
+import type { RuntimeErrorDetail } from '@weiliang0121/capix-contracts';
 import { ErrorTraversal, formatLimits } from './traversal.js';
 
 type DetailConverter = (value: unknown) => RuntimeErrorDetail;

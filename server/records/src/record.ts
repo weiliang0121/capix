@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { RecordKind, BaseRecord as RecordData } from '@capix/protocol';
+import type { RecordKind, BaseRecord as RecordData } from '@weiliang0121/capix-protocol';
 import { restoreContent, sealHistorical } from './restoration/access.js';
 
 /** Identity, direct ownership and body. Snapshot policy belongs to concrete records. */

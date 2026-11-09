@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { isPromise } from 'node:util/types';
 import { isEqual } from 'es-toolkit/predicate';
-import { Interaction, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState } from '@capix/interaction';
-import { InvocationCancelled, PersistenceError, isInvocationCancelled } from '@capix/invocation';
-import { RuntimeError } from '@capix/contracts';
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
+import { Interaction, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState } from '@weiliang0121/capix-interaction';
+import { InvocationCancelled, PersistenceError, isInvocationCancelled } from '@weiliang0121/capix-invocation';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import { ModelSource } from './source.js';
 import type { ModelOutput, ModelRequest, ModelTextDelta, Purpose } from './types.js';
 import { ModelTextBuffer } from './stream.js';

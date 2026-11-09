@@ -6,12 +6,12 @@ import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TranscriptResource, Transcript, TranscriptRangeRef } from '@capix/transcript';
-import { Memories, MemoryResource } from '@capix/memory';
-import { MessageUsage, MessageUsageResource } from '@capix/measurement';
-import { ChangeBuffer } from '@capix/changes';
-import { Sequence, defineNode, Scene, Runner, Resources } from '@capix/server-runtime';
-import { ResourceAccessClosed, ResourceOffer, checkResourceRequests } from '@capix/resources';
+import { TranscriptResource, Transcript, TranscriptRangeRef } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { MessageUsage, MessageUsageResource } from '@weiliang0121/capix-measurement';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
+import { Sequence, defineNode, Scene, Runner, Resources } from '@weiliang0121/capix-runtime';
+import { ResourceAccessClosed, ResourceOffer, checkResourceRequests } from '@weiliang0121/capix-resources';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { createConversationStructure, GenerateAnswer } from '@capix/observer-service';
 
@@ -247,7 +247,7 @@ test('fixed-range offer delivers only bounded immutable message access, without 
 });
 
 test('E requests fail before E attachment, recording or work while the parent R records the rejected construction', async () => {
-  const { Recorder, RecordBook } = await import('@capix/records');
+  const { Recorder, RecordBook } = await import('@weiliang0121/capix-records');
   const recorder = new Recorder(new RecordBook());
   const runtime = createBoundRuntime({ recorder });
   class Entry extends ExecutionFixture {
@@ -267,7 +267,7 @@ test('E requests fail before E attachment, recording or work while the parent R 
 });
 
 test('message and memory access preserves entity validation, change publication and fixed snapshots', async () => {
-  const { Recorder, RecordBook } = await import('@capix/records');
+  const { Recorder, RecordBook } = await import('@weiliang0121/capix-records');
   const recorder = new Recorder(new RecordBook());
   const changes = new ChangeBuffer();
   const { transcript, memories, messageUsage } = createEnvironment({ recorder, changes });

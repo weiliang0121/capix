@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, isInvocationCancelled } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { Invocation, InvocationContext, isInvocationCancelled } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { StableValues } from './stable.mjs';
 
 // Real public Invocation paths, with explicit experimental ownership at producer

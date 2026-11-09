@@ -1,10 +1,10 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CompletionInteraction } from '@capix/conversation-service';
 import { createConversationInteractions } from '@capix/conversation-service/assembly';
-import { Interactions } from '@capix/interaction';
-import { ProviderError } from '@capix/model-provider';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { ProviderError } from '@weiliang0121/capix-model-provider';
 import { createSession, createFeedbackReader } from '../examples/shared-provider/assembly.mjs';
 import { createControlledProvider } from '../examples/shared-provider/transport.mjs';
 import { verifySharedCancellation } from '../examples/shared-provider/verify.mjs';

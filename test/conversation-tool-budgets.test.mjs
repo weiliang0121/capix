@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { Node, Scene, checkpointPoint } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Interactions } from '@capix/interaction';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ModelExchanges } from '@capix/model-exchanges';
-import { ChatCompletionsProvider, requireModelReply, requireModelRequest } from '@capix/model-provider';
+import { Node, Scene, checkpointPoint } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+import { ChatCompletionsProvider, requireModelReply, requireModelRequest } from '@weiliang0121/capix-model-provider';
 import { tool, createToolLoop, registerToolLoopResources, resolveToolBudgets, assertToolReplyBytes, assertToolFeedbackBytes, assertToolOutputBytes, assertToolRequestBytes, ToolBudgetError } from '@capix/conversation-service/tools';
 
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));

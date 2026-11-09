@@ -1,4 +1,4 @@
-import type { FileReceipt } from '@capix/protocol';
+import type { FileReceipt } from '@weiliang0121/capix-protocol';
 
 export interface FileCreationOperation {
   readonly contextId: string;

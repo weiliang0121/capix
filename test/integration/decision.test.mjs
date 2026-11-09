@@ -7,12 +7,12 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initializeObserver, ObserverConversations, createConversationStructure, FunctionConversationDecision, WorkspaceFiles } from '@capix/observer-service';
-import { ProgressChannel } from '@capix/changes';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { MessageUsage } from '@capix/measurement';
-import { CallableRecordHelper } from '@capix/records';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
+import { CallableRecordHelper } from '@weiliang0121/capix-records';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '完成的正文。' };

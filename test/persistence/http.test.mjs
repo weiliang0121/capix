@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteObserverStore, ObserverConversations, createObserverServer } from '@capix/observer-service';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 import { submissionSnapshots } from '../fixtures/submissions.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };

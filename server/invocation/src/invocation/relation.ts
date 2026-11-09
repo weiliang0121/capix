@@ -1,9 +1,9 @@
 import type { CheckpointBinding } from '../checkpoint/work.js';
-import { stableValue, type Stable, type InvocationIdentity } from '@capix/contracts';
+import { stableValue, type Stable, type InvocationIdentity } from '@weiliang0121/capix-contracts';
 import type { ChildInvocationView } from './view.js';
-import type { InvocationOutputReceiver, RuntimeErrorValue } from '@capix/contracts';
+import type { InvocationOutputReceiver, RuntimeErrorValue } from '@weiliang0121/capix-contracts';
 import type { InvocationRelationChange } from '../observation/facts.js';
-import { combineFaults } from '@capix/changes';
+import { combineFaults } from '@weiliang0121/capix-changes';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationRelationView, InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';

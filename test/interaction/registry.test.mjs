@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Interaction, Interactions } from '@capix/interaction';
-import { PersistenceError } from '@capix/diagnostics';
+import { Interaction, Interactions } from '@weiliang0121/capix-interaction';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 function contract(key = 'registry.echo.v1') {
   return {

@@ -1,9 +1,9 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Driver, Resources, bindChildResources, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
-import { CallableBuilder, buildCallableFromSource, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
+import { Driver, Resources, bindChildResources, defineScene, defineGroup, defineNode } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { CallableBuilder, buildCallableFromSource, callableConstruction, createRootInvocation } from '@weiliang0121/capix-runtime/construction';
 
 function install(definition, options = {}) {
   return installCallable(definition, { providers: [], source: { capture: () => null }, ...options });

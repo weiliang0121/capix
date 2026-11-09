@@ -1,9 +1,9 @@
-import type { Stable } from '@capix/contracts';
+import type { Stable } from '@weiliang0121/capix-contracts';
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { isDeepStrictEqual as equal } from 'node:util';
-import type { ResourcesOf } from '@capix/resources';
-import { Scene, checkpointPoint, childReference, reception, type ChildCall, type CheckpointFacts, type SceneWork } from '@capix/structure';
-import { TranscriptResource } from '@capix/transcript';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Scene, checkpointPoint, childReference, reception, type ChildCall, type CheckpointFacts, type SceneWork } from '@weiliang0121/capix-structure';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
 import { z } from 'zod';
 import type { ConversationMaterialInput } from '../materials/input.js';
 import type { AcceptedConversationMessage, ConversationAnswer, ConversationMaintenance, ConversationPreparation } from '../scene.js';
@@ -11,7 +11,7 @@ import { requireString, requireText } from '../text.js';
 import { ConversationRecoveryResource, conversationCheckpointKey, recoveryBasisSchema, type ConversationRecoveryBasis } from './basis.js';
 import { acceptedMessageCodec, acceptedMessageSchema, codec, stringCodec } from './codecs.js';
 import { materialInputSchema } from './model-codecs.js';
-import type { JsonObject } from '@capix/model-provider';
+import type { JsonObject } from '@weiliang0121/capix-model-provider';
 
 /** Recovery is a default service policy. Arbitrary custom Scene strategies retain their own contracts. */
 export function createRecoverableConversationScene(answer: ConversationAnswer<ConversationMaterialInput>, prepare: ConversationPreparation<ConversationMaterialInput>, maintain: ConversationMaintenance, outputBudget: ConversationOutputBudget) {

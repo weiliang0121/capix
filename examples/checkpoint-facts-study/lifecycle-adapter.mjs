@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Invocation, InvocationContext, InvocationObservation, ObserverSession, RuntimeErrorHelper, failureFact, prepareCheckpointRestoration } from '@capix/invocation';
-import { cloneCheckpointImage, cloneCheckpointValue } from '@capix/checkpoint';
+import { Invocation, InvocationContext, InvocationObservation, ObserverSession, RuntimeErrorHelper, failureFact, prepareCheckpointRestoration } from '@weiliang0121/capix-invocation';
+import { cloneCheckpointImage, cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 import { FactStore } from './fact-store.mjs';
 import { LifecycleFacts } from './lifecycle-facts.mjs';
 

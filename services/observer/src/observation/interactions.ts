@@ -1,8 +1,8 @@
-import type { CallInteractionLinks, InteractionObservation, InteractionUpdate } from '@capix/protocol';
-import { RuntimeError } from '@capix/contracts';
-import { type InteractionFact, type InteractionRead, type InteractionState } from '@capix/interaction';
-import { RuntimeErrorHelper } from '@capix/invocation';
-import { CompositeRecord, ResourceRecord } from '@capix/records';
+import type { CallInteractionLinks, InteractionObservation, InteractionUpdate } from '@weiliang0121/capix-protocol';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { type InteractionFact, type InteractionRead, type InteractionState } from '@weiliang0121/capix-interaction';
+import { RuntimeErrorHelper } from '@weiliang0121/capix-invocation';
+import { CompositeRecord, ResourceRecord } from '@weiliang0121/capix-records';
 import { isPlainObject } from 'es-toolkit/predicate';
 import type { ObserverEnvironment } from '../assembly/environment.js';
 import type { ModelInteractionRequest } from '../conversation/model/interactions.js';

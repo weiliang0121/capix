@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveDeclaration, BoundChildren, BoundReceptions, decodeCheckpointFrame, savedCheckpointFacts } from '@capix/server-runtime/construction';
+import { resolveDeclaration, BoundChildren, BoundReceptions, decodeCheckpointFrame, savedCheckpointFacts } from '@weiliang0121/capix-runtime/construction';
 import { initializeObserver, WorkspaceFiles } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 1000 };

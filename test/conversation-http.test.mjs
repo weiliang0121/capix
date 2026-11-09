@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import { createConversationWebHost } from '@capix/conversation-service/web';
 import { ClientSubmission, ConversationSession } from '@capix/client-runtime';
 import { SessionHttpTransport } from '@capix/client-http';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 const reply = (text) => ({ id: 'web-offline', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 function modelFixture({ answer, propose } = {}) {

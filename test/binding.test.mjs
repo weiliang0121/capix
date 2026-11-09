@@ -1,12 +1,12 @@
-import { ResourceAccessClosed } from '@capix/resources';
+import { ResourceAccessClosed } from '@weiliang0121/capix-resources';
 import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, Driver, bindCallSource, bindRecording } from '@capix/server-runtime';
-import { Recorder, RecordBook } from '@capix/records';
-import { ResourceOffer } from '@capix/resources';
-import { buildCallableFromSource, callableConstruction } from '@capix/server-runtime/construction';
+import { Group, Node, Driver, bindCallSource, bindRecording } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { buildCallableFromSource, callableConstruction } from '@weiliang0121/capix-runtime/construction';
 
 const resource = new ResourceOffer({ name: 'test.value', expose: (value) => value, timing: 'binding' });
 class Read extends Node {

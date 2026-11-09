@@ -4,7 +4,7 @@ import { Group } from '../group.js';
 import { requireChildCallable } from '../members.js';
 import type { ChildCallable } from '../definition/children.js';
 import type { MemberInput } from './input.js';
-import type { Stable, ChildCalls, CallableDelta, CallableOutput, InvocationOutputWriter, OperationResult, OutputDeclaration } from '@capix/contracts';
+import type { Stable, ChildCalls, CallableDelta, CallableOutput, InvocationOutputWriter, OperationResult, OutputDeclaration } from '@weiliang0121/capix-contracts';
 
 export type SequenceScope<Input, Previous, Delta = never> = { readonly input: Stable<Input>; readonly previous: Stable<Previous> } & ([Delta] extends [never] ? object : { readonly output: InvocationOutputWriter<Delta> });
 

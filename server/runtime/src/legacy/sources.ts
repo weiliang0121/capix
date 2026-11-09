@@ -1,14 +1,14 @@
-import { InvocationResources, type InvocationProgress } from '@capix/invocation';
-import type { ChildCallable } from '@capix/structure';
-import type { InvocationOutputReceiver, CallableInput } from '@capix/contracts';
-import type { ResourceProvider } from '@capix/resources';
-import { ResourceSupply, checkResourceProviders, resourceRequests } from '@capix/resources';
-import type { ProgressReceiver } from '@capix/changes';
+import { InvocationResources, type InvocationProgress } from '@weiliang0121/capix-invocation';
+import type { ChildCallable } from '@weiliang0121/capix-structure';
+import type { InvocationOutputReceiver, CallableInput } from '@weiliang0121/capix-contracts';
+import type { ResourceProvider } from '@weiliang0121/capix-resources';
+import { ResourceSupply, checkResourceProviders, resourceRequests } from '@weiliang0121/capix-resources';
+import type { ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { CallableCallScope, type PreparedCall, type CallInstallation } from '../binding/calls.js';
 import type { CallableFeedback } from '../construction/feedback.js';
-import { stableValue, type Stable } from '@capix/contracts';
+import { stableValue, type Stable } from '@weiliang0121/capix-contracts';
 
 /** Host input establishes one root supply. The callable lifecycle remains independent of this source. */
 export interface CallableCallSource<Input, Options, Source> {

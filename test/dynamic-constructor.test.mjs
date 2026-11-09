@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Dynamic, Node, Group, Scene } from '@capix/structure';
-import { Resources, Runner, callableHooks } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
+import { Dynamic, Node, Group, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner, callableHooks } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 function install(dynamic, resources = new Resources(), capabilities = {}) {
   const scene = new Scene().add({ dynamic });

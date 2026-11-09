@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Node, Scene, Resources, Runner, InvocationCancelled, callableHooks } from '@capix/server-runtime';
+import { Node, Scene, Resources, Runner, InvocationCancelled, callableHooks } from '@weiliang0121/capix-runtime';
 
 function deferred() {
   let resolve;

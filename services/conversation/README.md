@@ -78,7 +78,7 @@ CLI/Web 的真实模型装配使用 `/assembly` 导出的 `createYieldingFetch(f
 完整宿主的核心接线如下（`model` 是宿主持有的 `ModelProvider`）：
 
 ```ts
-import { Runner } from '@capix/server-runtime';
+import { Runner } from '@weiliang0121/capix-runtime';
 import { loadConversationContent, createConversationHostAssembly } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 
@@ -146,9 +146,9 @@ try {
 真实模型通过独立 Provider 接入，`config` 由宿主提供 endpoint、apiKey、model 等配置：
 
 ```js
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { createConversationRunner } from '@capix/conversation-service';
-import { Transcript } from '@capix/transcript';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const model = new ChatCompletionsProvider(config);
 const runner = createConversationRunner(new Transcript(), model);
@@ -186,7 +186,7 @@ const runner = new Runner(scene, resources).build();
 完整服务默认选择独立交互，宿主登记一次发送与最终反馈的契约：
 
 ```js
-import { Interactions } from '@capix/interaction';
+import { Interactions } from '@weiliang0121/capix-interaction';
 import { CompletionInteraction, CompletionInteractionResource, createConversationScene, createInteractionAnswer } from '@capix/conversation-service';
 
 const interactions = new Interactions().register(CompletionInteraction, {
@@ -238,7 +238,7 @@ recording.clear(); // 仅停止后可清空；不改变业务实体或 CP
 记录属于宿主提供的观察能力，在 Runner build 前安装。业务 Scene/Node 不申请 Recorder，也不为记录重写处理逻辑：
 
 ```ts
-import { RecordBook, Recorder } from '@capix/records';
+import { RecordBook, Recorder } from '@weiliang0121/capix-records';
 import { createConversationRecording } from '@capix/conversation-service/recording';
 
 const book = new RecordBook();
@@ -271,9 +271,9 @@ CLI 的 `--records PATH` 使用同一安装，退出等待本地执行和独立�
 
 ```js
 import { CompletionResource, createConversationScene, createHistoryAnswer, HistoryResource } from '@capix/conversation-service';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 const transcript = new Transcript([{ role: 'user', content: '我们已决定周四复核，周五发布。' }]);
 const messages = new Resource(transcript);

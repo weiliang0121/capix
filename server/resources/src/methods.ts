@@ -1,4 +1,4 @@
-import type { OperationOptions, OperationResult } from '@capix/contracts';
+import type { OperationOptions, OperationResult } from '@weiliang0121/capix-contracts';
 import type { ResourceEndpointActivity } from './endpoint.js';
 
 /** A producer endpoint belonging to one resource operation, sealed when that operation returns. */

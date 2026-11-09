@@ -1,5 +1,5 @@
-import type { InteractionContract } from '@capix/interaction';
-import { requireModelRequest, requireModelReply, type ModelReply, type ModelRequest } from '@capix/model-provider';
+import type { InteractionContract } from '@weiliang0121/capix-interaction';
+import { requireModelRequest, requireModelReply, type ModelReply, type ModelRequest } from '@weiliang0121/capix-model-provider';
 import { z } from 'zod';
 import { requireString } from '../text.js';
 

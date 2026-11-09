@@ -1,4 +1,4 @@
-import { Invocation, InvocationContext } from '@capix/invocation';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
 
 // Test assembly only. Action remains the existing call/reception operation;
 // this helper installs no draft lifecycle, snapshot recovery or new state owner.

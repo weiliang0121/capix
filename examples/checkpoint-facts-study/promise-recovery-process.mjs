@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, readFileSync, writeSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { Resource, ResourceOffer, Resources } from '@capix/resources';
+import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
 import { LifecycleAdapter } from './lifecycle-adapter.mjs';
 import { lifecycleCodec, lifecycleReception } from './invocation-lifecycle.mjs';
 import { StableValues } from './stable.mjs';

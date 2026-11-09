@@ -1,4 +1,4 @@
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 
 const encoder = new TextEncoder();
 

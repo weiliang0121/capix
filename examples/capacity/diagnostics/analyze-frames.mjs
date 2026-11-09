@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
-import { CHECKPOINT_MAX_BYTES, cloneCheckpointDelivery } from '@capix/checkpoint';
-import { decodeCheckpointRecord, isCheckpointRecord, materializeCheckpointHead, decodeCheckpointData, isCheckpointSelectionSlots, checkpointSelectionReferences } from '@capix/checkpoint/storage';
+import { CHECKPOINT_MAX_BYTES, cloneCheckpointDelivery } from '@weiliang0121/capix-checkpoint';
+import { decodeCheckpointRecord, isCheckpointRecord, materializeCheckpointHead, decodeCheckpointData, isCheckpointSelectionSlots, checkpointSelectionReferences } from '@weiliang0121/capix-checkpoint/storage';
 
 const maxStoredBytes = Math.ceil((CHECKPOINT_MAX_BYTES + 1024) / 3) * 4 + 1024;
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));

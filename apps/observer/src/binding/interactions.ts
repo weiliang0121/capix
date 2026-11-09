@@ -1,5 +1,5 @@
 import { isPlainObject } from 'es-toolkit/predicate';
-import type { InteractionObservation } from '@capix/protocol';
+import type { InteractionObservation } from '@weiliang0121/capix-protocol';
 import type { CallDetail } from '../state/data.js';
 
 export interface InteractionView {

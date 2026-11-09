@@ -7,12 +7,12 @@ import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createConversationStructure, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
-import { ProgressChannel } from '@capix/changes';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { MessageUsage } from '@capix/measurement';
-import { bindRecording } from '@capix/server-runtime/recording';
-import { Recorder, RecordBook } from '@capix/records';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
+import { bindRecording } from '@weiliang0121/capix-runtime/recording';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const sourceText = 'PRIVATE_SOURCE_MARKER 文档中的资料，不应进入记录正文。';

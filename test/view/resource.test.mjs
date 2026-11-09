@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { Resource, ResourceOffer, Resources, ResourceAccessClosed } from '@capix/resources';
-import { openView, openViewManager } from '@capix/view';
+import { Resource, ResourceOffer, Resources, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { openView, openViewManager } from '@weiliang0121/capix-view';
 import { fixture, deferred, conflict } from './fixtures.mjs';
 
 const failures = { isProtected: () => false, isCancellation: () => false, describe: (error) => ({ message: error.message }) };
@@ -111,8 +111,8 @@ test('a source that closes the window before rejecting cannot leak an unhandled 
   const fixtures = new URL('./fixtures.mjs', import.meta.url).href;
   const source = `
     import assert from 'node:assert/strict';
-    import { Resource, ResourceOffer, Resources, ResourceAccessClosed } from '@capix/resources';
-    import { openView } from '@capix/view';
+    import { Resource, ResourceOffer, Resources, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+    import { openView } from '@weiliang0121/capix-view';
     import { fixture } from ${JSON.stringify(fixtures)};
     const closed = error => error instanceof ResourceAccessClosed || (error instanceof AggregateError && error.errors.length > 0 && error.errors.every(closed));
     for (const method of ['inspect', 'read', 'check']) {

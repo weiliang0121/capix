@@ -1,5 +1,5 @@
-import { Resource, ResourceOffer, Resources, type ResourceFailurePolicy, type ResourceOperation } from '@capix/resources';
-import type { OperationResult } from '@capix/resources/operation';
+import { Resource, ResourceOffer, Resources, type ResourceFailurePolicy, type ResourceOperation } from '@weiliang0121/capix-resources';
+import type { OperationResult } from '@weiliang0121/capix-resources/operation';
 
 declare function expectType<Value>(value: Value): void;
 const origin = new Resource(new Map<string, number>());

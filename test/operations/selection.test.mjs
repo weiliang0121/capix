@@ -2,7 +2,7 @@ import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import { resourceFact } from '../fixtures/observer.mjs';
-import { readOutput } from '@capix/protocol';
+import { readOutput } from '@weiliang0121/capix-protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptConversationInput, observeExecution } from '@capix/observer-service';
@@ -49,8 +49,8 @@ for (const fails of [false, true]) {
 
 test('message counts accumulate independently and never enter model requests', async () => {
   const { createConversationStructure } = await import('@capix/observer-service');
-  const { createBoundRuntime } = await import('@capix/server-runtime');
-  const { Transcript } = await import('@capix/server-runtime');
+  const { createBoundRuntime } = await import('@weiliang0121/capix-runtime');
+  const { Transcript } = await import('@weiliang0121/capix-runtime');
   const entities = createEnvironment({ messages: [{ role: 'user', content: '我在北京' }] });
   const transcript = entities.transcript;
   const original = transcript.get(0);

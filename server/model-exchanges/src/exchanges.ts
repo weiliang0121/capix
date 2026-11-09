@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { RuntimeError } from '@capix/contracts';
-import { PersistenceError } from '@capix/diagnostics';
-import { publishFact, type ChangeCapture, type EventConsumer } from '@capix/changes';
-import { requireModelReply, requireToolFeedback, requireToolResult, type ModelReply, type ToolFeedback, type ToolResult } from '@capix/model-provider';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { publishFact, type ChangeCapture, type EventConsumer } from '@weiliang0121/capix-changes';
+import { requireModelReply, requireToolFeedback, requireToolResult, type ModelReply, type ToolFeedback, type ToolResult } from '@weiliang0121/capix-model-provider';
 import type { ExchangeOperation, ExchangeReference, ModelExchangeChange, ModelExchangeEntry, ModelExchangesCommit, ModelExchangesPersistence, ModelExchangesState } from './types.js';
 import { canonical, capture, captureSnapshotEnvelope, counter, encodedBytes, identity, record, requireExchangeOperation, requireExchangeReference } from './value.js';
 import { defaultModelExchangeLimits, maximumModelExchangeLimits, maximumModelExchangeEntryBytes } from './limits.js';

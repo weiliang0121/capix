@@ -1,12 +1,12 @@
 // pnpm build && node examples/conversation-memory.mjs
 // 固定响应仅验证离线装配和身份传递，不代表模型提取质量；不读取环境或调用真实模型。
 import { CompletionResource, ConversationMemoryResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, createMemoryMaintenance, createMessageInclusion } from '@capix/conversation-service';
-import { Memories, MemoryResource, MemoryViewSource } from '@capix/memory';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group } from '@capix/structure';
-import { Transcript, TranscriptResource, TranscriptViewSource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories, MemoryResource, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 // 1. 宿主持有正式实体。记忆从空集合开始，由后面的普通维护结构提议并写入。
 const transcript = new Transcript();

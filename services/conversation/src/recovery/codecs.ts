@@ -1,5 +1,5 @@
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import type { CheckpointCodec } from '@capix/structure';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import type { CheckpointCodec } from '@weiliang0121/capix-structure';
 import { z } from 'zod';
 
 /** A checkpoint accepts only the declared value, on both sides of storage. */

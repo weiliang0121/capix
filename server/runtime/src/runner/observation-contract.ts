@@ -1,5 +1,5 @@
-import type { InvocationIdentity } from '@capix/contracts';
-import type { InvocationProgress } from '@capix/invocation';
+import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
+import type { InvocationProgress } from '@weiliang0121/capix-invocation';
 
 /** Bounded explanation only; never retains a thrown object or its attached business data. */
 export interface RunnerDiagnostic {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { Resources, Resource, ResourceOffer } from '@capix/resources';
+import { Resources, Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
 const policy = { isProtected: () => false, isCancellation: () => false, describe: () => null };
 
@@ -113,7 +113,7 @@ test('synchronous void host ports may keep ordinary ignored return values', asyn
 test('async host ports are rejected without leaking late rejection or losing the original operation failure', () => {
   const source = `
     import assert from 'node:assert/strict';
-    import { Resources, Resource, ResourceOffer } from '@capix/resources';
+    import { Resources, Resource, ResourceOffer } from '@weiliang0121/capix-resources';
     const all = ['validate', 'error', 'publish', 'nextSequence', 'reception', 'describe', 'hookValidate', 'hookBound', 'hookAvailable', 'transcript', 'memory'];
     for (const mode of all) {
       const original = new Error('operation failed');
@@ -166,7 +166,7 @@ test('async host ports are rejected without leaking late rejection or losing the
 });
 
 test('provenance and required content port failures cannot enter a resource business fallback', async () => {
-  const { ResourcePortError } = await import('@capix/resources');
+  const { ResourcePortError } = await import('@weiliang0121/capix-resources');
   for (const mode of ['reception', 'async-reception', 'transcript', 'memory']) {
     const original = new Error('host port failed');
     const reports = [];
@@ -231,7 +231,7 @@ test('provenance and required content port failures cannot enter a resource busi
 });
 
 test('a required resource provenance failure stays protected across child delivery', async () => {
-  const { Scene, Node, Runner, Resources: RuntimeResources } = await import('@capix/server-runtime');
+  const { Scene, Node, Runner, Resources: RuntimeResources } = await import('@weiliang0121/capix-runtime');
   const offer = new ResourceOffer({
     expose(_source, activity) {
       return {

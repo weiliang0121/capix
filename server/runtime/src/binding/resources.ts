@@ -1,9 +1,9 @@
-import { callableDependencies, type CallableDependencies } from '@capix/structure/construction';
-import { isResourceRefinement, type ResourceRequest, type ResourceRefinement, resourceRequests, type ResourceRequirements } from '@capix/resources';
+import { callableDependencies, type CallableDependencies } from '@weiliang0121/capix-structure/construction';
+import { isResourceRefinement, type ResourceRequest, type ResourceRefinement, resourceRequests, type ResourceRequirements } from '@weiliang0121/capix-resources';
 import type { ObservationDeclaration } from '../definition/observation.js';
-import type { InvocationFact } from '@capix/invocation';
-import type { ChildCallable } from '@capix/structure';
-import type { CallableInput } from '@capix/contracts';
+import type { InvocationFact } from '@weiliang0121/capix-invocation';
+import type { ChildCallable } from '@weiliang0121/capix-structure';
+import type { CallableInput } from '@weiliang0121/capix-contracts';
 
 type RefinableDefinition = ChildCallable;
 

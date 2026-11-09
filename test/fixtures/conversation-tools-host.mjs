@@ -1,11 +1,11 @@
 import { appendFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
-import { Scene, Node, checkpointPoint, childReference } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Runner, Resources } from '@capix/server-runtime';
-import { ChatCompletionsProvider } from '@capix/model-provider';
-import { ModelExchanges } from '@capix/model-exchanges';
+import { Scene, Node, checkpointPoint, childReference } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
 import { CompletionInteraction } from '@capix/conversation-service';
 import { loadConversationContent, createConversationInteractions, createYieldingFetch } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';

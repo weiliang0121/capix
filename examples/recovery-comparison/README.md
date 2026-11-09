@@ -16,7 +16,7 @@
 从仓库根目录运行（真实 Runner 探针需要已构建的工作区包）：
 
 ```sh
-pnpm --filter @capix/server-runtime... build
+pnpm --filter @weiliang0121/capix-runtime... build
 node --test examples/recovery-comparison/*.test.mjs
 node examples/recovery-comparison/study.mjs .capix/recovery-comparison-new
 ```

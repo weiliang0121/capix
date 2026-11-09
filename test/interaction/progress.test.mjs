@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Interactions } from '@capix/interaction';
+import { Interactions } from '@weiliang0121/capix-interaction';
 
 const contract = {
   key: 'progress.test.v1',

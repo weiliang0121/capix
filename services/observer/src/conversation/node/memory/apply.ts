@@ -1,6 +1,6 @@
-import { MemoryResource } from '@capix/memory';
+import { MemoryResource } from '@weiliang0121/capix-memory';
 import type { MemoryWriteResources } from '../../resources.js';
-import { Node, checkpointPoint, type NodeWork } from '@capix/structure';
+import { Node, checkpointPoint, type NodeWork } from '@weiliang0121/capix-structure';
 import { checkpointCodec } from '../../checkpoint.js';
 import { z } from 'zod';
 import { memoryCheckpointOutput } from '../../group/memory/checkpoint.js';

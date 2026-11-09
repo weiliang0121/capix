@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationRunner, createConversationScene, HistoryResource, CompletionResource } from '@capix/conversation-service';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { modelReply, textProvider } from './fixtures/conversation-model.mjs';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 // Keep string-only stubs in tests; the service consumes the complete provider contract.
 const createTextTestRunner = (transcript, model, options) => createConversationRunner(transcript, textProvider(model), options);

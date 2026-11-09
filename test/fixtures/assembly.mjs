@@ -1,5 +1,5 @@
 import { mock } from 'node:test';
-import { CallableBuilder } from '@capix/server-runtime';
+import { CallableBuilder } from '@weiliang0121/capix-runtime';
 import { ConversationGroup, GenerateAnswer } from '@capix/observer-service/conversation';
 
 /** Assign only the requested fields while the host-created structure is still configurable. */

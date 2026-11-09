@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Interactions, InvocationCancelled, Node, Resources, Runner, Scene } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
+import { Interactions, InvocationCancelled, Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 const contract = {
   key: 'runner.echo.v1',

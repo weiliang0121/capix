@@ -1,6 +1,6 @@
-import { Runner, Resources } from '@capix/server-runtime';
-import { Scene } from '@capix/structure';
-import type { InvocationOutputReceiver } from '@capix/contracts';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
+import { Scene } from '@weiliang0121/capix-structure';
+import type { InvocationOutputReceiver } from '@weiliang0121/capix-contracts';
 
 interface Answer {
   readonly text: string;

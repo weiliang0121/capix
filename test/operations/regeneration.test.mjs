@@ -4,12 +4,12 @@ import { ModelInteractions, ModelSource, modelRegenerationInput, modelOutputReje
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationStructure } from '@capix/observer-service';
-import { RuntimeError } from '@capix/contracts';
-import { bindRecording } from '@capix/server-runtime';
-import { CallableRecord, InvocationRecord, Recorder, RecordBook } from '@capix/records';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { MessageUsage } from '@capix/measurement';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { bindRecording } from '@weiliang0121/capix-runtime';
+import { CallableRecord, InvocationRecord, Recorder, RecordBook } from '@weiliang0121/capix-records';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '修正后的回答' };

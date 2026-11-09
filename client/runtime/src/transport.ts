@@ -1,4 +1,4 @@
-import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationAdmission, ConversationSubmissionBaseline, ConversationSubmissionDiscovery, ConversationSubmissionFrame, ConversationSubmissionRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
+import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationAdmission, ConversationSubmissionBaseline, ConversationSubmissionDiscovery, ConversationSubmissionFrame, ConversationSubmissionRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@weiliang0121/capix-protocol';
 
 export interface ConversationTransport {
   config(): Promise<ConfigurationResponse>;
@@ -19,8 +19,8 @@ export class SubmissionUnavailableError extends Error {
 }
 
 export interface ObservationTransport {
-  interactions?(conversationId: string, callId: string, signal?: AbortSignal): Promise<import('@capix/protocol').CallInteractionLinks>;
-  observeInteraction?(conversationId: string, callId: string, id: string, accept: (value: import('@capix/protocol').InteractionObservation) => void, signal: AbortSignal): Promise<void>;
+  interactions?(conversationId: string, callId: string, signal?: AbortSignal): Promise<import('@weiliang0121/capix-protocol').CallInteractionLinks>;
+  observeInteraction?(conversationId: string, callId: string, id: string, accept: (value: import('@weiliang0121/capix-protocol').InteractionObservation) => void, signal: AbortSignal): Promise<void>;
   overview(conversationId: string): Promise<ObserverOverview>;
   memory(conversationId: string): Promise<MemoryObservation>;
   source(path: string, signal?: AbortSignal): Promise<SourceResponse>;

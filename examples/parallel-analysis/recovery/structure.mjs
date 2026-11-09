@@ -1,7 +1,7 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
-import { Scene, Node, checkpointPoint, childReference, reception } from '@capix/structure';
+import { Scene, Node, checkpointPoint, childReference, reception } from '@weiliang0121/capix-structure';
 import { CompletionResource, CompletionInteraction, createInteractionCompletion } from '@capix/conversation-service';
 import { AnalysisUnavailable, text, delta } from '../structure.mjs';
 

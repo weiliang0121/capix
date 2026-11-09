@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ModelExchanges, maximumModelExchangeLimits } from '@capix/model-exchanges';
+import { ModelExchanges, maximumModelExchangeLimits } from '@weiliang0121/capix-model-exchanges';
 
 const reply = () => ({ formatVersion: 1, id: 'reply', model: 'offline', output: [{ kind: 'text', text: 'retained' }], termination: { kind: 'completed', reason: 'stop' }, usage: null, native: { format: 'chat-completions', version: 1 } });
 function snapshot() {

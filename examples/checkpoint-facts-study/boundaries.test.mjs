@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext } from '@capix/invocation';
-import { Resources as ResourceRegistry, Resource, ResourceOffer, ResourceAccessClosed } from '@capix/resources';
-import { Scene, Runner, Resources } from '@capix/server-runtime';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
+import { Resources as ResourceRegistry, Resource, ResourceOffer, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { Scene, Runner, Resources } from '@weiliang0121/capix-runtime';
 import { FixedData } from './model.mjs';
 
 // Host-side experimental ownership, not an installed kernel policy.

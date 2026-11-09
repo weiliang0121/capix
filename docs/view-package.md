@@ -1,6 +1,6 @@
 # View：来源目录、成员与固定读取
 
-`@capix/view` 提供通用 View。它保存来源身份与当前成员，按来源契约取得目录和固定值；不持有消息、记忆或模型，也不决定材料应怎样选择。
+`@weiliang0121/capix-view` 提供通用 View。它保存来源身份与当前成员，按来源契约取得目录和固定值；不持有消息、记忆或模型，也不决定材料应怎样选择。
 
 包依赖 contracts、resources 与 diagnostics；diagnostics 仅提供必要持久端口的统一错误身份，不引入调用、Runtime 或业务实体依赖。
 
@@ -104,9 +104,9 @@ const selectedMessages = new TranscriptViewSource(transcript, [4, 1]);
 ## 从成员到材料
 
 ```ts
-import { View } from '@capix/view';
-import { TranscriptViewSource } from '@capix/transcript';
-import { MemoryViewSource } from '@capix/memory';
+import { View } from '@weiliang0121/capix-view';
+import { TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { MemoryViewSource } from '@weiliang0121/capix-memory';
 
 const sources = {
   messages: new TranscriptViewSource(transcript),
@@ -171,7 +171,7 @@ view.applySync(sources, { basis: index.basis, members: [latest] }, persistence);
 
 三种变更均整批处理，一次有变化的操作只产生一个修订和一次 commit。先校验、构造下一状态，再让宿主同步提交，成功后才安装；不逐项安装部分结果。无变化不增加 revision，也不调用 commit。变更期间拒绝重入变更；提交失败不修改当前成员，返回 Promise 或其他非 undefined 值不算同步成功。
 
-View 在实际 commit 及其同步返回检查处使用 `@capix/diagnostics` 的唯一 `PersistenceError` 标记失败，operation 为 `view.commit`，已有该类错误保持原身份。父层或资源 `result.failed` 不能将必要持久错误接收为业务备用成功；前置的成员／来源／依据拒绝保持普通操作异常，不被此包装扩大。持久端口内部的 CAS 拒绝同样按必要端口错误处理，不从错误文字推断可恢复性。此分类不证明存储未提交；确认丢失时保持本地未安装、外部需核验、不自动重试。
+View 在实际 commit 及其同步返回检查处使用 `@weiliang0121/capix-diagnostics` 的唯一 `PersistenceError` 标记失败，operation 为 `view.commit`，已有该类错误保持原身份。父层或资源 `result.failed` 不能将必要持久错误接收为业务备用成功；前置的成员／来源／依据拒绝保持普通操作异常，不被此包装扩大。持久端口内部的 CAS 拒绝同样按必要端口错误处理，不从错误文字推断可恢复性。此分类不证明存储未提交；确认丢失时保持本地未安装、外部需核验、不自动重试。
 
 ### 持久提交的核验依据
 
@@ -204,8 +204,8 @@ ViewSource 可以来自资源端点。资源适配层在本次 ResourceActivity 
 辅助函数固定本次 sources 槽位与方法入口，受 `ResourceEndpointActivity` 约束。它不登记资源、不查找兄弟资源，也不把按次端点写回 View。
 
 ```ts
-import { ResourceOffer } from '@capix/resources';
-import { openView } from '@capix/view';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { openView } from '@weiliang0121/capix-view';
 
 // sources 与 view 来自上面的宿主构造。
 type Materials = { readonly view: View<typeof sources>; readonly sources: typeof sources };

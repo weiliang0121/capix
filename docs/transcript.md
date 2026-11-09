@@ -28,12 +28,12 @@ Transcript 的 append/appendFrom/startSegment 在审查与落实后通知必要�
 
 ## 可选的消息算法
 
-`@capix/transcript/presets` 提供 `groupAdjacentPairs`。输入是同一个 Transcript 内按绝对索引升序排列的 `{ index, message }` 值，可以来自固定范围或视图快照；不接受重复、倒序或非法索引。相邻的 user/assistant 两项组成一组，其余项各自保留。原文索引存在缺口时不配对；不隐式排序，不丢弃任何输入项，不推断提交或业务因果。输出只创建冻结的分组容器，消息沿用传入的引用，因此通常应传入实体或视图已接纳的不可变消息值。
+`@weiliang0121/capix-transcript/presets` 提供 `groupAdjacentPairs`。输入是同一个 Transcript 内按绝对索引升序排列的 `{ index, message }` 值，可以来自固定范围或视图快照；不接受重复、倒序或非法索引。相邻的 user/assistant 两项组成一组，其余项各自保留。原文索引存在缺口时不配对；不隐式排序，不丢弃任何输入项，不推断提交或业务因果。输出只创建冻结的分组容器，消息沿用传入的引用，因此通常应传入实体或视图已接纳的不可变消息值。
 
 ```ts
-import { groupAdjacentPairs } from '@capix/transcript/presets';
-import { TranscriptResource } from '@capix/transcript';
-import { Node } from '@capix/structure';
+import { groupAdjacentPairs } from '@weiliang0121/capix-transcript/presets';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
+import { Node } from '@weiliang0121/capix-structure';
 
 // 普通策略节点：读取已授权范围，返回分组建议。
 const grouping = new Node({

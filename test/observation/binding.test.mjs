@@ -1,10 +1,10 @@
 import { ResourceBindings, bindResources } from '../fixtures/resources.mjs';
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures } from '@weiliang0121/capix-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationChangeEmitter, bindInvocationObservation, defineObservation, Driver, defineNode } from '@capix/server-runtime';
-import { Transcript } from '@capix/transcript';
-import { ResourceAccessClosed, ResourceOffer } from '@capix/resources';
+import { Invocation, InvocationContext, InvocationChangeEmitter, bindInvocationObservation, defineObservation, Driver, defineNode } from '@weiliang0121/capix-runtime';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { ResourceAccessClosed, ResourceOffer } from '@weiliang0121/capix-resources';
 
 function call({ observe, failure, work, parent, declarations, resources, capture, installations = [] } = {}) {
   const context = new InvocationContext({ value: [] });

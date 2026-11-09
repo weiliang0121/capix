@@ -1,9 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import { ModelExchanges, maximumModelExchangeLimits, maximumModelExchangeEntryBytes, requireModelExchangeEntry, type ModelExchangeEntry, type ExchangeOperation, type ModelExchangesCommit, type ModelExchangesPersistence, type ModelExchangesState } from '@capix/model-exchanges';
+import { ModelExchanges, maximumModelExchangeLimits, maximumModelExchangeEntryBytes, requireModelExchangeEntry, type ModelExchangeEntry, type ExchangeOperation, type ModelExchangesCommit, type ModelExchangesPersistence, type ModelExchangesState } from '@weiliang0121/capix-model-exchanges';
 import { z } from 'zod';
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import type { JsonObject } from '@capix/model-provider';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import type { JsonObject } from '@weiliang0121/capix-model-provider';
 import { RecoveryConflict, requireIdentity, requireRevision, type RecoveryTransaction } from './recovery.js';
 
 export interface ExchangeArchiveMetadata {

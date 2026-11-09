@@ -1,8 +1,8 @@
 import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, ExceptionContract } from '@capix/invocation';
-import { Recorder, RecordBook } from '@capix/records';
+import { Invocation, InvocationContext, ExceptionContract } from '@weiliang0121/capix-invocation';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const signal = () => new AbortController().signal;

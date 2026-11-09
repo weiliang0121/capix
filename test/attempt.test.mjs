@@ -1,18 +1,18 @@
 import { AttemptFixture, OperationFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { ChildCallFailure } from '@capix/server-runtime';
-import { ExecutionRecordHelper } from '@capix/records';
+import { ChildCallFailure } from '@weiliang0121/capix-runtime';
+import { ExecutionRecordHelper } from '@weiliang0121/capix-records';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CallableContext, ExceptionContract } from '@capix/server-runtime';
-import { Recorder, RecordBook } from '@capix/records';
+import { CallableContext, ExceptionContract } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook } from '@weiliang0121/capix-records';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
 import { TestAttempt } from './fixtures/attempt.mjs';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 function recordedRuntime() {
   return createBoundRuntime({ recorder: new Recorder(new RecordBook()) });

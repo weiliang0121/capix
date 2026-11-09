@@ -4,10 +4,10 @@ import { test } from 'node:test';
 import { mkdtemp, rm, unlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Scene, Group, checkpointPoint, childReference } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Transcript } from '@capix/transcript';
-import { Memories, MemoryResource } from '@capix/memory';
+import { Scene, Group, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
 import { ExtractMemory, SaveResult, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { WorkspaceFiles, FileResources } from '@capix/observer-service/assembly';
 

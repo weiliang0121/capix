@@ -1,5 +1,5 @@
-import { Scene, Group, Node, defineNode, checkpointPoint, childReference, reception, type CheckpointCodec, type ChildReference, type CallableInput, type CallableOutput, type InvocationOutputReceiver, type BusinessEvent } from '@capix/structure';
-import { ResourceOffer, type ResourceOperation } from '@capix/resources';
+import { Scene, Group, Node, defineNode, checkpointPoint, childReference, reception, type CheckpointCodec, type ChildReference, type CallableInput, type CallableOutput, type InvocationOutputReceiver, type BusinessEvent } from '@weiliang0121/capix-structure';
+import { ResourceOffer, type ResourceOperation } from '@weiliang0121/capix-resources';
 
 declare function expectType<Value>(value: Value): void;
 declare const textCodec: CheckpointCodec<string>;

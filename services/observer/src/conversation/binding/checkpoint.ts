@@ -1,8 +1,8 @@
 import { isEqual } from 'es-toolkit';
-import { RuntimeError } from '@capix/contracts';
-import { type CheckpointStore } from '@capix/checkpoint';
-import type { Transcript } from '@capix/transcript';
-import type { Memories } from '@capix/memory';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { type CheckpointStore } from '@weiliang0121/capix-checkpoint';
+import type { Transcript } from '@weiliang0121/capix-transcript';
+import type { Memories } from '@weiliang0121/capix-memory';
 import type { WorkspaceFiles } from '../../files/index.js';
 import type { ConversationScene } from '../scene.js';
 import { validateConversationCheckpointContent, validateConversationCheckpointDeliveryContent, validateConversationCheckpointReceipt, validateConversationCheckpointHeads, type ConversationCheckpointRun } from '../checkpoints.js';

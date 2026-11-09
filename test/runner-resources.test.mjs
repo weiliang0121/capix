@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, Node, Resources, Runner, checkpointPoint, childReference, ExceptionContract } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ResourceOffer } from '@capix/resources';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Scene, Group, Node, Resources, Runner, checkpointPoint, childReference, ExceptionContract } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 const codec = { encode: structuredClone, decode: structuredClone };
 

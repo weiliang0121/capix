@@ -1,11 +1,11 @@
 import { bindResources } from './resources.mjs';
-import { CallableContext, buildCallableFromSource, callableConstruction } from '@capix/server-runtime';
-import { Transcript, TranscriptRangeRef, TranscriptResource } from '@capix/transcript';
-import { Memories, MemoryResource } from '@capix/memory';
-import { MessageUsage, MessageUsageResource } from '@capix/measurement';
+import { CallableContext, buildCallableFromSource, callableConstruction } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptRangeRef, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { MessageUsage, MessageUsageResource } from '@weiliang0121/capix-measurement';
 
 import { fixtureState } from './runtime.mjs';
-import { resolveDeclaration } from '@capix/server-runtime/construction';
+import { resolveDeclaration } from '@weiliang0121/capix-runtime/construction';
 import assert from 'node:assert/strict';
 
 import { createConversationStructure, acceptConversationInput, initializeObserver, observeExecution, ConversationTaskResource, ModelSettingsResource, ModelResource, ConversationMaterialUsageResource, ModelSource, ModelInteractions } from '@capix/observer-service';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, Node, Resources, Runner, Scene, reception } from '@capix/server-runtime';
-import { inspectChildCallFailure } from '@capix/invocation';
+import { ExceptionContract, Node, Resources, Runner, Scene, reception } from '@weiliang0121/capix-runtime';
+import { inspectChildCallFailure } from '@weiliang0121/capix-invocation';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const checkpoint = (contracts) => ({ key: 'test.work-adapter', version: 1, input: codec, output: codec, points: [], receptions: contracts });

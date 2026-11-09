@@ -1,4 +1,4 @@
-import type { Message } from '@capix/protocol';
+import type { Message } from '@weiliang0121/capix-protocol';
 
 /** A stable first-input label; naming a conversation never invokes a model. */
 export function conversationTitle(messages: readonly Pick<Message, 'role' | 'content'>[]): string {

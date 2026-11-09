@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ResourceOffer } from '@capix/resources';
-import { Node, checkpointPoint } from '@capix/structure';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Node, checkpointPoint } from '@weiliang0121/capix-structure';
 import { createCatalog, tool } from './catalog.mjs';
 import { fixed } from './value.mjs';
 

@@ -1,4 +1,4 @@
-import type { FileReceipt, FileTask } from '@capix/protocol';
+import type { FileReceipt, FileTask } from '@weiliang0121/capix-protocol';
 
 /** The text is the actual bounded UTF-8 read. Its descriptor identifies those bytes only. */
 export interface TextDocument extends FileReceipt {

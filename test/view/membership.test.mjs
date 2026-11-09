@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@capix/diagnostics';
-import { Resource, ResourceOffer, Resources, ResourceAccessClosed } from '@capix/resources';
-import { View, openView, openViewManager } from '@capix/view';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Resource, ResourceOffer, Resources, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { View, openView, openViewManager } from '@weiliang0121/capix-view';
 
 function sourceFor(id, entries, scope = 'whole') {
   const values = new Map(entries);

@@ -1,5 +1,5 @@
-import type { Message } from '@capix/protocol';
-import { Group } from '@capix/structure';
+import type { Message } from '@weiliang0121/capix-protocol';
+import { Group } from '@weiliang0121/capix-structure';
 import { requireCompletionText } from '../completion.js';
 import { requireString, requireText } from '../text.js';
 import { createInteractionCompletion } from './completion.js';

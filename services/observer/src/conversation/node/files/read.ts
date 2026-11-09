@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { checkpointCodec } from '../../checkpoint.js';
 import { checkLeafResult, textDocumentCodec } from '../../group/checkpoint.js';
-import { Node, checkpointPoint, type NodeWork } from '@capix/structure';
+import { Node, checkpointPoint, type NodeWork } from '@weiliang0121/capix-structure';
 import { FileResources, type FileReader, type TextDocument } from '../../../files/index.js';
 
 export class ReadText extends Node<{ readonly path: string }, TextDocument, { readonly reader: FileReader }> {

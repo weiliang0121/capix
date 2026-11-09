@@ -1,6 +1,6 @@
-import { checkpointPoint, defineNode } from '@capix/server-runtime';
-import type { CheckpointCodec, NodeWork, ResumeWork } from '@capix/server-runtime';
-import type { ResourceRequest } from '@capix/resources';
+import { checkpointPoint, defineNode } from '@weiliang0121/capix-runtime';
+import type { CheckpointCodec, NodeWork, ResumeWork } from '@weiliang0121/capix-runtime';
+import type { ResourceRequest } from '@weiliang0121/capix-resources';
 interface Reader {
   read(input: string): string;
 }

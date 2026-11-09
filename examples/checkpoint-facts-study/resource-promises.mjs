@@ -1,7 +1,7 @@
-import { Invocation, InvocationContext, invocationResourceFailures } from '@capix/invocation';
-import { Memories, MemoryResource } from '@capix/memory';
-import { Resource, Resources } from '@capix/resources';
-import { Transcript } from '@capix/transcript';
+import { Invocation, InvocationContext, invocationResourceFailures } from '@weiliang0121/capix-invocation';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { Resource, Resources } from '@weiliang0121/capix-resources';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 // Isolated probes of existing public contracts. No action abstraction, checkpoint
 // installation, draft persistence, resource capability grades, or generic retry.

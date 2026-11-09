@@ -9,11 +9,11 @@ import ts from 'typescript';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const invocationDirectory = resolve(root, 'server/invocation');
-const dependencies = ['@capix/diagnostics', '@capix/checkpoint', '@capix/changes', '@capix/contracts', '@capix/protocol', '@capix/resources', 'es-toolkit'];
+const dependencies = ['@weiliang0121/capix-diagnostics', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-changes', '@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', 'es-toolkit'];
 
 test('invocation package exposes its call mechanism with only lower dependencies', async () => {
   const manifest = JSON.parse(await readFile(resolve(invocationDirectory, 'package.json'), 'utf8'));
-  assert.equal(manifest.name, '@capix/invocation');
+  assert.equal(manifest.name, '@weiliang0121/capix-invocation');
   assert.deepEqual(Object.keys(manifest.exports), ['.']);
   assert.deepEqual(Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).sort(), [...dependencies].sort());
   async function inspect(directory) {
@@ -24,7 +24,7 @@ test('invocation package exposes its call mechanism with only lower dependencies
         const source = await readFile(file, 'utf8');
         for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
           const specifier = match[2];
-          if (specifier.startsWith('@capix/')) assert.ok(dependencies.includes(specifier), `${file} cannot import ${specifier}`);
+          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.ok(dependencies.includes(specifier), `${file} cannot import ${specifier}`);
           if (specifier.startsWith('.')) assert.ok(!relative(invocationDirectory, resolve(dirname(file), specifier)).startsWith('..'), `${file} crosses its package boundary`);
         }
       }
@@ -32,17 +32,17 @@ test('invocation package exposes its call mechanism with only lower dependencies
   }
   await inspect(resolve(invocationDirectory, 'src'));
   await inspect(resolve(invocationDirectory, 'dist'));
-  const invocation = await import('@capix/invocation');
+  const invocation = await import('@weiliang0121/capix-invocation');
   for (const name of ['Invocation', 'InvocationContext', 'CallableContext', 'InvocationResources', 'InvocationObservation', 'ObserverSession', 'prepareCheckpointRestoration']) assert.equal(typeof invocation[name], 'function');
   for (const name of ['Runner', 'Driver', 'Scene', 'Group', 'Node', 'CallableBinder', 'CallableBuilder', 'CallableInvocationBuilder', 'Resources', 'Interactions', 'Recorder', 'MemoryCheckpointStore']) assert.equal(name in invocation, false, `${name} does not belong to the invocation package`);
-  for (const specifier of ['@capix/invocation/context', '@capix/invocation/src/invocation/invocation.js', '@capix/invocation/dist/invocation/invocation.js']) await assert.rejects(import(specifier), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+  for (const specifier of ['@weiliang0121/capix-invocation/context', '@weiliang0121/capix-invocation/src/invocation/invocation.js', '@weiliang0121/capix-invocation/dist/invocation/invocation.js']) await assert.rejects(import(specifier), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 });
 
 test('Runtime compatibility exports preserve invocation and error identities', async () => {
-  const invocation = await import('@capix/invocation');
-  const runtime = await import('@capix/server-runtime');
-  const construction = await import('@capix/server-runtime/construction');
-  const contracts = await import('@capix/contracts');
+  const invocation = await import('@weiliang0121/capix-invocation');
+  const runtime = await import('@weiliang0121/capix-runtime');
+  const construction = await import('@weiliang0121/capix-runtime/construction');
+  const contracts = await import('@weiliang0121/capix-contracts');
   for (const name of ['Invocation', 'InvocationContext', 'CallableContext', 'InvocationResources', 'invocationResourceFailures', 'inspectChildCallFailure']) {
     assert.ok(name in invocation);
     assert.equal(runtime[name], invocation[name], name);
@@ -65,7 +65,7 @@ test('public invocation types and execution stay independent of Runtime and Stru
     // Consume the real package export and declarations, never copied source files.
     await mkdir(resolve(directory, 'src'));
     await writeFile(resolve(directory, 'package.json'), JSON.stringify({ name: 'capix-invocation-consumer', private: true, type: 'module' }));
-    for (const dependency of ['@capix/invocation', '@capix/contracts', '@capix/checkpoint', '@types/node']) {
+    for (const dependency of ['@weiliang0121/capix-invocation', '@weiliang0121/capix-contracts', '@weiliang0121/capix-checkpoint', '@types/node']) {
       const destination = resolve(directory, 'node_modules', dependency);
       await mkdir(dirname(destination), { recursive: true });
       await symlink(resolve(root, 'node_modules', dependency), destination, 'dir');
@@ -108,7 +108,7 @@ test('public invocation types and execution stay independent of Runtime and Stru
     // Neither package is installed for the consumer; importing the new package
     // must not require either of them through its declarations or runtime graph.
     const forbidden = resolve(directory, 'src/forbidden.ts');
-    await writeFile(forbidden, "import { Runner } from '@capix/server-runtime';\nimport { Scene } from '@capix/structure';\nvoid Runner; void Scene;\n");
+    await writeFile(forbidden, "import { Runner } from '@weiliang0121/capix-runtime';\nimport { Scene } from '@weiliang0121/capix-structure';\nvoid Runner; void Scene;\n");
     const rejected = ts.getPreEmitDiagnostics(ts.createProgram([forbidden], { ...options, noEmit: true }));
     assert.equal(rejected.filter((diagnostic) => diagnostic.code === 2307).length, 2, rejected.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')).join('\n'));
 

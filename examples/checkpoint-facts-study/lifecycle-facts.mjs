@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt } from '@capix/checkpoint';
+import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt } from '@weiliang0121/capix-checkpoint';
 import { FactCall } from './fact-call.mjs';
 import { identity as carrierIdentity, stableCodec } from './fact-store.mjs';
 import { StableValues } from './stable.mjs';

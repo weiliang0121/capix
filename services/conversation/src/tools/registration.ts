@@ -1,8 +1,8 @@
 import { isDeepStrictEqual, types } from 'node:util';
 import { z } from 'zod';
-import type { CallableInput, CallableOutput } from '@capix/contracts';
-import type { ChildCallable } from '@capix/structure';
-import type { ToolResult } from '@capix/model-provider';
+import type { CallableInput, CallableOutput } from '@weiliang0121/capix-contracts';
+import type { ChildCallable } from '@weiliang0121/capix-structure';
+import type { ToolResult } from '@weiliang0121/capix-model-provider';
 
 const toolRegistration = Symbol('ToolRegistration');
 

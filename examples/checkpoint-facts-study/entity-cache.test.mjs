@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { View } from '@capix/view';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { View } from '@weiliang0121/capix-view';
 import { StableValues } from './stable.mjs';
 import { TranscriptSnapshots, MemorySnapshots, ViewSnapshots, measureGrowingPrefixes } from './entity-cache.mjs';
 

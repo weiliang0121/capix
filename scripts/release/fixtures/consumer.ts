@@ -1,13 +1,13 @@
 // Compile with TypeScript in strict NodeNext mode against the installed tarballs.
-import { stableValue, type Stable, type CallableInput, type CallableOutput, type CheckpointCodec } from '@capix/contracts';
-import { Resource, ResourceOffer, type ResourceOperation } from '@capix/resources';
-import { receiveOperation, type OperationOptions } from '@capix/resources/operation';
-import { Scene, Group, defineNode, checkpointPoint } from '@capix/structure';
-import { assertStructureConfigurable } from '@capix/structure/construction';
-import { Runner, Resources, type RunnerOutputEvent } from '@capix/server-runtime';
-import { CallableBuilder, type InvocationCapabilities } from '@capix/server-runtime/construction';
-import { invocationRecording } from '@capix/server-runtime/recording';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { stableValue, type Stable, type CallableInput, type CallableOutput, type CheckpointCodec } from '@weiliang0121/capix-contracts';
+import { Resource, ResourceOffer, type ResourceOperation } from '@weiliang0121/capix-resources';
+import { receiveOperation, type OperationOptions } from '@weiliang0121/capix-resources/operation';
+import { Scene, Group, defineNode, checkpointPoint } from '@weiliang0121/capix-structure';
+import { assertStructureConfigurable } from '@weiliang0121/capix-structure/construction';
+import { Runner, Resources, type RunnerOutputEvent } from '@weiliang0121/capix-runtime';
+import { CallableBuilder, type InvocationCapabilities } from '@weiliang0121/capix-runtime/construction';
+import { invocationRecording } from '@weiliang0121/capix-runtime/recording';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 const dictionary = new ResourceOffer({
   methods: {

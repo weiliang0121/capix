@@ -2,10 +2,10 @@ import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, Group, Node, bindCallSource, bindRecording, checkpointPoint } from '@capix/server-runtime';
-import { Recorder, RecordBook, CallableRecordHelper } from '@capix/records';
-import { ResourceOffer } from '@capix/resources';
-import { validateExecutionRecordSnapshot, readOutput } from '@capix/protocol';
+import { ExceptionContract, Group, Node, bindCallSource, bindRecording, checkpointPoint } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook, CallableRecordHelper } from '@weiliang0121/capix-records';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { validateExecutionRecordSnapshot, readOutput } from '@weiliang0121/capix-protocol';
 
 const rejected = new ExceptionContract('test.rejected');
 const codec = { encode: (value) => value, decode: (value) => value };

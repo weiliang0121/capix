@@ -1,6 +1,6 @@
-import type { Stable } from '@capix/contracts';
-import { Group, defineGroup } from '@capix/server-runtime';
-import type { Node, SceneWork, GroupWork, NodeWork, ResumeWork, CallableRun, InvocationCheckpointPoint, ChildReference, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
+import type { Stable } from '@weiliang0121/capix-contracts';
+import { Group, defineGroup } from '@weiliang0121/capix-runtime';
+import type { Node, SceneWork, GroupWork, NodeWork, ResumeWork, CallableRun, InvocationCheckpointPoint, ChildReference, ChildrenOf, CallableInput, CallableOutput } from '@weiliang0121/capix-runtime';
 declare const operation: Group<string, number>;
 declare const node: Node<string, number>;
 declare function expectType<T>(value: T): void;

@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
-import { ResourceOffer } from '@capix/resources';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 import { validateReply, acceptFeedback } from './protocol.mjs';
 import { canonical, collectionLimit, fixed } from './value.mjs';
 

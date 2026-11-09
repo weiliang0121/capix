@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Resource, ResourceOffer, Resources } from '@capix/resources';
+import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
 import { FactCall } from './fact-call.mjs';
 import { FactStore, identity, stableCodec } from './fact-store.mjs';
 import { LocalProgress } from './local-progress.mjs';

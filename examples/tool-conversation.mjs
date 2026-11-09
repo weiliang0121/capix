@@ -1,14 +1,14 @@
 // pnpm build && node examples/tool-conversation.mjs
 // 使用生产包的离线装配。固定 HTTP 样本只验证工具协议，不评价模型质量。
 import { z } from 'zod';
-import { Node } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Runner } from '@capix/server-runtime';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { View } from '@capix/view';
-import { ModelExchanges } from '@capix/model-exchanges';
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { Node } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Runner } from '@weiliang0121/capix-runtime';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { View } from '@weiliang0121/capix-view';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { CompletionInteraction, createConversationScene, createMaterialPreparation } from '@capix/conversation-service';
 import { createConversationInteractions, createConversationResources } from '@capix/conversation-service/assembly';
 import { tool, createToolLoop, createToolAnswer, registerToolLoopResources } from '@capix/conversation-service/tools';

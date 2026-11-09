@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isEqual } from 'es-toolkit';
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { CheckpointCommit, CheckpointValueBlock, CheckpointValueReference, CheckpointChildRecord, CheckpointChild, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointDelivery, CheckpointReferences, CheckpointPublication, CheckpointSelectionChange, CheckpointSelectionSnapshot } from './contract.js';
 import { cloneCheckpointValue, cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from './value.js';
 import { checkpointMetrics, checkpointEncodingOverhead, encodeCheckpointData, decodeCheckpointData, type CheckpointValueMetrics } from './encoding.js';

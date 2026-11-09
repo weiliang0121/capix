@@ -1,4 +1,4 @@
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 
 /** The source has already changed. Retrying the work would repeat that change. */
 export class ChangeCaptureError<Event = unknown> extends RuntimeError {

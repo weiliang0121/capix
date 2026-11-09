@@ -1,5 +1,5 @@
 {
-  "name": "@capix/checkpoint",
+  "name": "@weiliang0121/capix-checkpoint",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -18,7 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/contracts": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
     "es-toolkit": "1.52.0"
   },
   "description": "Stable checkpoint facts, incremental storage, and recovery validation for CAPiX.",

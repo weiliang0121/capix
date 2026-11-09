@@ -1,8 +1,8 @@
 import type { ModelInteractions, ModelInteractionCreator, ModelInteractionRef, ModelInteractionResult, ModelInteractionExpectation } from './interactions.js';
-import { type ProgressReceiver } from '@capix/changes';
-import { ResourceOffer, type ResourceEndpointActivity } from '@capix/resources';
-import { type OperationOptions, type OperationResult } from '@capix/resources/operation';
-import type { ModelSettings } from '@capix/protocol';
+import { type ProgressReceiver } from '@weiliang0121/capix-changes';
+import { ResourceOffer, type ResourceEndpointActivity } from '@weiliang0121/capix-resources';
+import { type OperationOptions, type OperationResult } from '@weiliang0121/capix-resources/operation';
+import type { ModelSettings } from '@weiliang0121/capix-protocol';
 import type { ModelOutput, ModelTextDelta } from './types.js';
 
 type WaitOptions = OperationOptions<ModelInteractionResult, unknown, unknown> & { readonly signal?: AbortSignal; readonly waitMs: number };

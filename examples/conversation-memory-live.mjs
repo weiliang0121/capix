@@ -1,15 +1,15 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 // 显式真实模型小样本；不读取 .env、不重试、不改动 Observer 内容。
 import { closeSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { CompletionResource, ConversationMemoryResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, createMemoryMaintenance, createMessageInclusion } from '@capix/conversation-service';
-import { Memories, MemoryResource } from '@capix/memory';
-import { ChatCompletionsProvider, ProviderError } from '@capix/model-provider';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group } from '@capix/structure';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { ChatCompletionsProvider, ProviderError } from '@weiliang0121/capix-model-provider';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const { values } = parseArgs({ options: { live: { type: 'boolean', default: false }, out: { type: 'string' }, 'after-first': { type: 'string' }, help: { type: 'boolean' } } });
 if (values.help || !values.live) {

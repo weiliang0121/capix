@@ -2,10 +2,10 @@ import { types } from 'node:util';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { BoundChildren } from '../binding/children/bound.js';
 import { InvocationWorkBinding } from '../binding/work.js';
-import type { CallableContext } from '@capix/invocation';
-import { Callable } from '@capix/structure';
+import type { CallableContext } from '@weiliang0121/capix-invocation';
+import { Callable } from '@weiliang0121/capix-structure';
 import { CallableInvocationBuilder } from '../construction/invocation.js';
-import { assertStructureConfigurable, beginStructureBuild, endStructureBuild, lockStructureConfiguration, structureParent } from '@capix/structure/construction';
+import { assertStructureConfigurable, beginStructureBuild, endStructureBuild, lockStructureConfiguration, structureParent } from '@weiliang0121/capix-structure/construction';
 import { installCallableConstruction, type BuiltCallable, type CallableConstruction } from './construction.js';
 
 import type { CallableBuildPlan } from '../binding/callable.js';

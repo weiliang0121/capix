@@ -1,10 +1,10 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindRecording, invocationRecording } from '@capix/server-runtime/recording';
-import { CallableRecord, CallableRecordHelper, Recorder, RecordBook, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord } from '@capix/records';
-import { defineScene, defineGroup, defineNode } from '@capix/server-runtime';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { bindRecording, invocationRecording } from '@weiliang0121/capix-runtime/recording';
+import { CallableRecord, CallableRecordHelper, Recorder, RecordBook, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord } from '@weiliang0121/capix-records';
+import { defineScene, defineGroup, defineNode } from '@weiliang0121/capix-runtime';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 const startedAt = '2026-10-20T00:00:00.000Z';
 const create = (parentId, kind, contextId, role) => new CallableRecord({ parentId, contextId, structureKind: kind, ...(role ? { role } : {}) }, { input: {}, startedAt });

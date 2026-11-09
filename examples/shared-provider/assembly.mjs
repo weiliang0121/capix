@@ -1,11 +1,11 @@
 import { CompletionInteraction, CompletionInteractionResource, CompletionResource, ConversationViewResource, createCompletionNode, createCompletionStartNode, createCompletionReplyNode, createConversationScene, createMaterialAnswer, createMaterialPreparation, createMessageInclusion } from '@capix/conversation-service';
 import { createConversationInteractions } from '@capix/conversation-service/assembly';
-import { Memories } from '@capix/memory';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group, Scene } from '@capix/structure';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group, Scene } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 // This experiment retains formally returned references in a private host resource.
 // It is deliberately in memory: sending and retaining a reference are not atomic,

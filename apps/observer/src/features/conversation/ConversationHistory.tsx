@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ConversationDescriptor } from '@capix/protocol';
+import type { ConversationDescriptor } from '@weiliang0121/capix-protocol';
 import { useAppCommands, useAppStore } from '../../state/react.js';
 import { Button } from '../../components/ui/button.js';
 import { Badge } from '../../components/ui/badge.js';

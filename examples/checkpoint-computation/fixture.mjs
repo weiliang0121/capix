@@ -1,9 +1,9 @@
 import { existsSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { performance } from 'node:perf_hooks';
-import { Group, Node, Scene, checkpointPoint, childReference, childReferences, reception } from '@capix/structure';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Group, Node, Scene, checkpointPoint, childReference, childReferences, reception } from '@weiliang0121/capix-structure';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { Measurement } from './measurement.mjs';
 

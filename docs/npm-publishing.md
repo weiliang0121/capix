@@ -4,9 +4,13 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-当前公开范围只有 `contracts`、`protocol` 和 `server/*`，共 17 个包。根包、`services/*`、`client/*` 和 `apps/*` 保持 `private: true`。所有公开包属于同一个 Changesets fixed 组，任何包的发布变更都会推进整个组到相同版本；依赖仍用 `workspace:*`，打包时转换成准确发布版本。
+首发公开范围为 `contracts`、`protocol` 和全部 15 个 `server/*` 包，共 17 个包。品牌为 **CAPiX**，npm scope 为用户已持有的 **`@weiliang0121`**。根包及六个 `services/*`、`client/*`、`apps/*` workspace 保持 `private: true`，本轮保留其现有 `@capix/*` 工作区身份。所有公开包属于同一个 Changesets fixed 组，任何包的发布变更都会推进整个组到相同版本；依赖仍用 `workspace:*`，打包时转换成准确发布版本。
 
-已确认 `@capix` scope 无法注册；当前包名仅是仓库内占位，不能据此正式发布。用户正在选择全新品牌，名称和可用 scope 尚未确定，本轮未执行改名。确定后须统一修改包名、import、workspace 依赖、Changesets fixed 名单、消费者示例和发布脚本中的名称，并重新验证。首次发布还必须取得该 scope 的维护权限。不要从其他项目取得 npm 凭证。
+公开包统一使用 `@weiliang0121/capix-<职责>`：`contracts`、`protocol` 对应 `capix-contracts`、`capix-protocol`，`server/<目录>` 对应同名后缀，其中 `server/runtime` 为 `@weiliang0121/capix-runtime`。完整包名见根 [README](../README.md#包与公开入口)。私有 workspace 的 `@capix/*` 仅用于仓库内解析，不是本次 npm 发布目标。不要从其他项目取得 npm 凭证。
+
+后续包名仍按可复用职责确定，必要限定词放在主体之前；不把 `server`、`services`、`apps` 等源码目录自动映射成发布名称。预设、集成与 UI 只有在职责和公开边界确定后才单独命名，参考装配不直接变成产品包。
+
+仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用后续可按边界拆到独立仓库。本轮只准备发布与统一公开包名，不迁移目录或仓库；当前首发名单不代表仓库今后的全部可复用能力范围。
 
 ## 本地验证
 
@@ -28,7 +32,7 @@ pnpm release:check
 
 新包不能仅凭 GitHub OIDC 创建完整信任关系：先手动发布一次，才能在 npm 包设置中登记 trusted publisher。官方 Changesets 指南也采用这种 bootstrap 方式，参见 [首次发布](https://changesets.dev/guide/versioning-and-publishing#publishing-for-the-first-time)。
 
-1. 确定可用的新品牌与 scope，完成统一改名，并确认 npm 账户或组织具有该 scope 下全部 17 个包的发布权限。当前占位的 `@capix` 无法注册，尚不能进入正式首发。
+1. 使用已确定的 CAPiX 品牌与 `@weiliang0121` scope。维护者使用持有该 scope 的 npm 账户，确认本次 17 个准确包名和版本；本地验证不能证明远端名称占用或发布权限。
 2. 在干净的、已审阅提交上完成上述验证。当前初始版本是 `0.1.0`；bootstrap 可直接发布这批真实包，不创建占位包，也不先运行 `release:version` 把版本推进一轮。
 3. 由维护者在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天。
 4. 执行 `pnpm release:publish` 发布当前尚未存在的版本。此命令会写入 npm，只有决定正式首发时才执行；多包发布不是原子事务，失败后先核对 registry 中每个准确版本，再对同一已验证提交补齐未发布包。
@@ -50,4 +54,4 @@ pnpm release:check
 - 发布 job 只有 `contents: read` 与 `id-token: write`，使用 GitHub 托管 `ubuntu-24.04` 和 `npm` 环境，通过 OIDC 发布。无需 `NPM_TOKEN`、`NODE_AUTH_TOKEN` 或 `registry-url` 的 token 配置。发布构建不复用依赖缓存。
 - Changesets 可能创建本地版本 tags；当前工作流不推送 tag、不创建 GitHub Release。npm 每个准确版本只能发布一次；若部分包已经成功，重跑前核对版本和日志，保持同一已审阅提交及产物。
 
-目前仅提供配置和本地验证流程；scope、npm 维护权限、首发、每包 trusted publisher、GitHub 环境保护和真实 OIDC 发布需要维护者在相应服务落实，不能由离线检查证明。
+品牌、scope 和包名已确定；本轮仅完成发布准备与本地验证，不执行 npm 发布。npm 登录与 2FA、首次发布、每包 trusted publisher、GitHub 环境保护和真实 OIDC 发布仍需维护者在相应服务落实，不能由离线检查证明。

@@ -1,5 +1,5 @@
-import { openView, openViewManager, type View, type SyncViewSource, type ViewSource, type ViewCommit, type SourceStamp } from '@capix/view';
-import type { ResourceEndpointActivity } from '@capix/resources';
+import { openView, openViewManager, type View, type SyncViewSource, type ViewSource, type ViewCommit, type SourceStamp } from '@weiliang0121/capix-view';
+import type { ResourceEndpointActivity } from '@weiliang0121/capix-resources';
 
 declare function expectType<Value>(value: Value): void;
 declare const sources: {

@@ -1,16 +1,16 @@
 import { isEqual } from 'es-toolkit';
-import type { CheckpointChild, CheckpointHead, InvocationCheckpointFrame } from '@capix/checkpoint';
-import { cloneCheckpointHead, cloneCheckpointValue } from '@capix/checkpoint';
+import type { CheckpointChild, CheckpointHead, InvocationCheckpointFrame } from '@weiliang0121/capix-checkpoint';
+import { cloneCheckpointHead, cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 import { checkpointTarget } from './target.js';
 import type { CheckpointBinding } from './work.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationChildren, InvocationChildBaseline } from '../invocation/children.js';
 import type { InvocationRelation, InvocationTarget } from '../invocation/relation.js';
 import type { InvocationReceptionBinding } from '../invocation/reception.js';
-import { RuntimeErrorHelper } from '@capix/diagnostics';
+import { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 import { checkpointReceptionBinding, decodeCheckpointDiagnostic, decodeCheckpointReception, decodeCheckpointHandledReception } from './facts.js';
 import { failureFact } from '../invocation/failure.js';
-import type { CheckpointCodec } from '@capix/contracts';
+import type { CheckpointCodec } from '@weiliang0121/capix-contracts';
 import { checkpointDataEqual, encodeCheckpointData } from './data.js';
 import { InvocationCancelled } from '../invocation/cancellation.js';
 
@@ -53,7 +53,7 @@ export function captureCheckpointChildren(context: InvocationContext, relations:
   return { nextChildOrder: relations.nextOrder, children: relations.values().map((relation) => captureCheckpointChild(context, relation, savedChildren.get(relation.invocation.context.id))) };
 }
 
-export function captureCheckpointChild(context: InvocationContext, relation: InvocationRelation, saved?: CheckpointChild, encode: (role: string, value: unknown, codec?: CheckpointCodec<any>) => import('@capix/contracts').CheckpointValue = (_role, value, codec) => (codec ? cloneCheckpointValue(codec.encode(value)) : encodeCheckpointData(value))): CheckpointChild {
+export function captureCheckpointChild(context: InvocationContext, relation: InvocationRelation, saved?: CheckpointChild, encode: (role: string, value: unknown, codec?: CheckpointCodec<any>) => import('@weiliang0121/capix-contracts').CheckpointValue = (_role, value, codec) => (codec ? cloneCheckpointValue(codec.encode(value)) : encodeCheckpointData(value))): CheckpointChild {
   const target = relation.invocation;
   const binding = target.checkpointBinding;
   const identity = target.identity;
@@ -94,7 +94,7 @@ export function captureCheckpointChild(context: InvocationContext, relation: Inv
   return { ...base, state: { kind: 'returned', output, progress: captureChildProgress(target, encode), reception: reception.status === 'accepted' ? { kind: 'accepted', ...receptionContract, ...(reception.contract ? { output: encode('reception', reception.output, reception.contract.codec) } : reception.output !== undefined ? { output: encode('reception', reception.output) } : {}) } : { kind: reception.status, ...receptionContract } } };
 }
 
-function captureChildProgress(target: InvocationTarget, encode: (role: string, value: unknown, codec?: CheckpointCodec<any>) => import('@capix/contracts').CheckpointValue) {
+function captureChildProgress(target: InvocationTarget, encode: (role: string, value: unknown, codec?: CheckpointCodec<any>) => import('@weiliang0121/capix-contracts').CheckpointValue) {
   const context = target.context;
   const currentInput = encode('currentInput', context.currentInput, target.checkpointBinding?.input);
   return { round: context.progress.round, phase: context.progress.phase, currentInput };

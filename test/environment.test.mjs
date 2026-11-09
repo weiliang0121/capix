@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptConversationInput, observeExecution } from '@capix/observer-service';
 
-import { Transcript } from '@capix/transcript';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const settings = { model: 'one', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const groups = (snapshot) => snapshot.calls.filter((call) => call.structureKind === 'group' && call.id !== snapshot.execution.id);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { defineObservation, isInvocationCancelled } from '@capix/server-runtime';
+import { defineObservation, isInvocationCancelled } from '@weiliang0121/capix-runtime';
 import { initializeObserver, ModelInteractions, ModelSource } from '@capix/observer-service';
 import { observeModelPending } from '../fixtures/model-observation.mjs';
 

@@ -1,4 +1,4 @@
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt, CheckpointCommit } from './contract.js';
 import { cloneCheckpointImage, cloneCheckpointDelivery } from './value.js';
 import { checkpointSaveReceipt, checkpointFinishReceipt } from './receipt.js';

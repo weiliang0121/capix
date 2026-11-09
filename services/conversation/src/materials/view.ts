@@ -1,7 +1,7 @@
-import { MemoryViewSource, type Memories } from '@capix/memory';
-import { ResourceOffer } from '@capix/resources';
-import { TranscriptViewSource, type Transcript } from '@capix/transcript';
-import { openView, openViewManager, type View, type ViewPersistence } from '@capix/view';
+import { MemoryViewSource, type Memories } from '@weiliang0121/capix-memory';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { TranscriptViewSource, type Transcript } from '@weiliang0121/capix-transcript';
+import { openView, openViewManager, type View, type ViewPersistence } from '@weiliang0121/capix-view';
 
 /** These two source slots are a service choice, not a universal context contract. */
 export type ConversationMaterialSources = {

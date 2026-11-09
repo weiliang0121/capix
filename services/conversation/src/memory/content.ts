@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { Group, checkpointPoint, childReference, type GroupWork, type CheckpointFacts } from '@capix/structure';
+import { Group, checkpointPoint, childReference, type GroupWork, type CheckpointFacts } from '@weiliang0121/capix-structure';
 import type { AcceptedConversationMessage } from '../scene.js';
 import { createMessageInclusion } from '../materials/maintenance.js';
 import { createInteractionCompletion } from '../model/completion.js';

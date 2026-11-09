@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeBuffer, ProgressChannel } from '@capix/changes';
-import { PersistenceError } from '@capix/diagnostics';
-import { Memories } from '@capix/memory';
-import { Transcript } from '@capix/transcript';
+import { ChangeBuffer, ProgressChannel } from '@weiliang0121/capix-changes';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const message = (content, role = 'user') => ({ role, content });
 const create = (content, indexes = [0]) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: indexes, result: { topic: 'topic', content, sourceIndexes: indexes } });

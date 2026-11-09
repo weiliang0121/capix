@@ -1,7 +1,7 @@
 import { createConversationScene, HistoryResource, CompletionResource } from '@capix/conversation-service';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 // 宿主提供实体；本地替身实现完整 ModelProvider，换成 ChatCompletionsProvider 无需额外适配。
 const transcript = new Transcript();

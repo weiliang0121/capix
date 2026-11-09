@@ -1,9 +1,9 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Scene, Group } from '@capix/server-runtime';
-import { ExceptionContract } from '@capix/invocation';
-import { ResourceOffer } from '@capix/resources';
+import { Scene, Group } from '@weiliang0121/capix-runtime';
+import { ExceptionContract } from '@weiliang0121/capix-invocation';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 class TestExecutionDefinition extends Group {
   constructor(execute) {

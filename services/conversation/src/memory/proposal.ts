@@ -1,7 +1,7 @@
-import type { MemoryChange } from '@capix/memory';
-import type { ModelRequest } from '@capix/model-provider';
+import type { MemoryChange } from '@weiliang0121/capix-memory';
+import type { ModelRequest } from '@weiliang0121/capix-model-provider';
 import { isDeepStrictEqual } from 'node:util';
-import { Group, checkpointPoint, childReference } from '@capix/structure';
+import { Group, checkpointPoint, childReference } from '@weiliang0121/capix-structure';
 import { z } from 'zod';
 import { createCompletionNode, requireCompletionText, type ConversationCompletion } from '../completion.js';
 import { defaultConversationOutputBudget, requireOutputTokens } from '../model/budget.js';

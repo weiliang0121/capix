@@ -1,11 +1,11 @@
-import { InvocationResources, RuntimeErrorHelper, failureFact, type InvocationFact, type ResourceObservation, type InvocationObserver } from '@capix/invocation';
+import { InvocationResources, RuntimeErrorHelper, failureFact, type InvocationFact, type ResourceObservation, type InvocationObserver } from '@weiliang0121/capix-invocation';
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick } from 'es-toolkit/object';
-import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedRelationChange, InvocationOrigin } from '@capix/protocol';
+import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedRelationChange, InvocationOrigin } from '@weiliang0121/capix-protocol';
 import type { InvocationObservationSetup } from '../../binding/observation.js';
-import { ResourceSupply, resourceRequests } from '@capix/resources';
-import { CallableRecord, InvocationRecordHelper, ResourceRecord, type RecordChangeSource } from '@capix/records';
-import type { RecordWriter } from '@capix/records/construction';
+import { ResourceSupply, resourceRequests } from '@weiliang0121/capix-resources';
+import { CallableRecord, InvocationRecordHelper, ResourceRecord, type RecordChangeSource } from '@weiliang0121/capix-records';
+import type { RecordWriter } from '@weiliang0121/capix-records/construction';
 import { InvocationRecordAccess, type InvocationRecordDescription, type InvocationRecordWriter } from './declaration.js';
 import type { RecordingInstallation } from './installation.js';
 import { memoryRecord, recordedResult, transcriptRecord } from './mapping.js';

@@ -1,4 +1,4 @@
-import type { ConversationTask, FileTask } from '@capix/protocol';
+import type { ConversationTask, FileTask } from '@weiliang0121/capix-protocol';
 import { isEqual } from 'es-toolkit';
 import { isPlainObject } from 'es-toolkit/predicate';
 import { acceptFileTask } from './files.js';

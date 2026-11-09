@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, ChildCallFailure, Scene, Group, Node, Runner, Resources } from '@capix/server-runtime';
-import { inspectChildCallFailure } from '@capix/server-runtime/construction';
+import { ExceptionContract, ChildCallFailure, Scene, Group, Node, Runner, Resources } from '@weiliang0121/capix-runtime';
+import { inspectChildCallFailure } from '@weiliang0121/capix-runtime/construction';
 
 const rejected = new ExceptionContract('AUTHOR_REJECTION');
 const runtime = (operation) => new Runner(new Scene({ run: (work) => work.children.invoke(operation, work.input) }).add(operation), new Resources()).build();

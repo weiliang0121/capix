@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Memories } from '@capix/memory';
-import { Transcript } from '@capix/transcript';
-import { bindRecording } from '@capix/server-runtime';
-import { Recorder, RecordBook, MemoryRecord, observeMemory } from '@capix/records';
-import { ChangeBuffer } from '@capix/changes';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { bindRecording } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook, MemoryRecord, observeMemory } from '@weiliang0121/capix-records';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
 
 const create = (text) => ({ action: 'create', memoryId: null, change: 'create', sourceIndexes: [0], result: { topic: 'topic', content: text, sourceIndexes: [0] } });
 const update = (memory, text) => ({ ...create(text), action: 'update', memoryId: memory.id });

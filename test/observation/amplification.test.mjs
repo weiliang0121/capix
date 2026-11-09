@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { RecordBook, Recorder, CallableRecord, OperationRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper, observeMemory } from '@capix/records';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { RecordBook, Recorder, CallableRecord, OperationRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper, observeMemory } from '@weiliang0121/capix-records';
 import { initializeObserver, observeOverview } from '@capix/observer-service';
 import { createRecordScope } from '../fixtures/runtime.mjs';
 

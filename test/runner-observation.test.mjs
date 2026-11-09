@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { callableHooks, Node, Resources, Runner, Scene } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { callableHooks, Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 
 const output = { result: (value) => value, delta: (value) => value };
 const codec = { encode: structuredClone, decode: structuredClone };

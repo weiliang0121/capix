@@ -1,6 +1,6 @@
-import { Resources } from '@capix/server-runtime';
-import { Resource, ResourceOffer, type ResourceOperation, type ResourcesOf } from '@capix/resources';
-import { type OperationOptions } from '@capix/resources/operation';
+import { Resources } from '@weiliang0121/capix-runtime';
+import { Resource, ResourceOffer, type ResourceOperation, type ResourcesOf } from '@weiliang0121/capix-resources';
+import { type OperationOptions } from '@weiliang0121/capix-resources/operation';
 
 // @ts-expect-error resource declarations use a configuration object, not positional arguments
 new ResourceOffer('legacy', (source: { text: string }) => source.text);

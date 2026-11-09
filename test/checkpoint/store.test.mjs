@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore, cloneCheckpointImage, cloneCheckpointDelivery } from '@capix/checkpoint';
+import { MemoryCheckpointStore, cloneCheckpointImage, cloneCheckpointDelivery } from '@weiliang0121/capix-checkpoint';
 
 function image(id = 'cp-1', contextId = 'scope-1') {
   return { id, formatVersion: 6, contract: { key: 'fixture', version: 1 }, point: 'accepted', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { content: 'input' }, currentInput: { content: 'input' }, nextChildOrder: 0, children: [] }, state: { content: 'saved' }, references: {} };

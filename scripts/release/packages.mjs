@@ -25,7 +25,8 @@ export async function packages() {
   const versions = new Set(result.map((entry) => entry.manifest.version));
   assert.equal(versions.size, 1, 'The fixed release group must have one version');
   const license = await readFile(join(root, 'LICENSE'), 'utf8');
-  for (const { path, manifest } of result) {
+  for (const { directory, path, manifest } of result) {
+    assert.equal(manifest.name, `@weiliang0121/capix-${directory.split('/').at(-1)}`, `${directory}: unexpected release package name`);
     assert.equal(manifest.private, false, `${manifest.name}: release package is not public`);
     assert.equal(manifest.license, 'MIT');
     assert.equal(await readFile(join(path, 'LICENSE'), 'utf8'), license, `${manifest.name}: inconsistent license`);

@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
-import type { ModelProvider, ModelRequestInspection } from '@capix/model-provider';
-import type { InteractionChannel } from '@capix/interaction';
-import type { ModelRequest, ModelReply } from '@capix/model-provider';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import type { ModelProvider, ModelRequestInspection } from '@weiliang0121/capix-model-provider';
+import type { InteractionChannel } from '@weiliang0121/capix-interaction';
+import type { ModelRequest, ModelReply } from '@weiliang0121/capix-model-provider';
 import { createToolLoop, tool } from '@capix/conversation-service/tools';
 import { createArchivedToolAnswer, registerArchivedToolResources, type ToolHostOptions, type ToolExchangeUse } from '@capix/conversation-service/tools/hosting';
 import type { ConversationMaterialInput } from '@capix/conversation-service';

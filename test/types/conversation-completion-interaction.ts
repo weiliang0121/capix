@@ -1,9 +1,9 @@
 import { CompletionInteraction, CompletionInteractionResource, createCompletionNode, createCompletionStartNode, createCompletionReplyNode, createInteractionCompletion, createMaterialAnswer, createConversationScene, createMaterialPreparation } from '@capix/conversation-service';
-import { Interactions, type InteractionReference } from '@capix/interaction';
-import type { ModelReply, ModelRequest } from '@capix/model-provider';
-import type { ResourcesOf } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group, Node, Scene } from '@capix/structure';
+import { Interactions, type InteractionReference } from '@weiliang0121/capix-interaction';
+import type { ModelReply, ModelRequest } from '@weiliang0121/capix-model-provider';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group, Node, Scene } from '@weiliang0121/capix-structure';
 
 const request: ModelRequest = { messages: [{ role: 'system', content: 'instruction' }], stream: true, responseFormat: 'json_object', maxTokens: 100, temperature: 0 };
 const reply: ModelReply = { id: 'completion', model: 'model', formatVersion: 1, output: [{ kind: 'text', text: 'answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };

@@ -1,4 +1,4 @@
-import { readOutput, validateExecutionRecordSnapshot, type InvocationSummary, type ObserverOverview, type ExecutionRecordSnapshot } from '@capix/protocol';
+import { readOutput, validateExecutionRecordSnapshot, type InvocationSummary, type ObserverOverview, type ExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { executionResources } from './resources.js';
 import { isArray } from 'es-toolkit/compat';

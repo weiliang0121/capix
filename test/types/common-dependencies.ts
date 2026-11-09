@@ -1,5 +1,5 @@
-import { ResourceOffer } from '@capix/resources';
-import { withDependencies, checkpointPoint, Node, type CallableInput, type CallableOutput, type CallableDelta } from '@capix/structure';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { withDependencies, checkpointPoint, Node, type CallableInput, type CallableOutput, type CallableDelta } from '@weiliang0121/capix-structure';
 
 declare function expectType<Value>(value: Value): void;
 const flow = new ResourceOffer({

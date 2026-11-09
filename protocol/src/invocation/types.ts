@@ -1,4 +1,4 @@
-export { callableKinds, type CallableKind } from '@capix/contracts';
+export { callableKinds, type CallableKind } from '@weiliang0121/capix-contracts';
 /** Read-only vocabulary of historical REOA records. */
 export type LegacyInvocationLevel = 'runtime' | 'execution' | 'operation' | 'attempt';
 export const invocationProcessStages = ['execute', 'receive', 'handling', 'control'] as const;

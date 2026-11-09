@@ -1,4 +1,4 @@
-import type { ModelSettings } from '@capix/protocol';
+import type { ModelSettings } from '@weiliang0121/capix-protocol';
 import type { ModelRequest } from './types.js';
 
 export function loadRequest(input: unknown, task: string, schema: unknown, settings: ModelSettings): ModelRequest {

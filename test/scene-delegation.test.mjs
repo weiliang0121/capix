@@ -3,10 +3,10 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Scene, Group, Node, Sequence, Dynamic, checkpointPoint } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner, callableHooks, defineObservation } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { Scene, Group, Node, Sequence, Dynamic, checkpointPoint } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner, callableHooks, defineObservation } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 const build = (scene, resources = new Resources(), capabilities = {}) => new Runner(scene, resources, undefined, capabilities).build();
 const codec = { encode: (value) => value, decode: (value) => value };

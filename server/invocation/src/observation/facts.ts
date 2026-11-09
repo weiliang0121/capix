@@ -1,13 +1,13 @@
-import type { InvocationRelationIdentity } from '@capix/protocol';
-import type { BusinessEvent } from '@capix/contracts';
-import type { InvocationIdentity } from '@capix/contracts';
+import type { InvocationRelationIdentity } from '@weiliang0121/capix-protocol';
+import type { BusinessEvent } from '@weiliang0121/capix-contracts';
+import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 import type { ContextState } from '../context/context.js';
 import type { InvocationProcess } from '../invocation/work.js';
 import type { InvocationResult } from '../invocation/result.js';
 import type { InvocationFailure } from '../invocation/failure.js';
 
-export type { InvocationRelationIdentity } from '@capix/protocol';
-export type { InvocationIdentity } from '@capix/contracts';
+export type { InvocationRelationIdentity } from '@weiliang0121/capix-protocol';
+export type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 
 export interface InvocationDescription {
   /** Host-only description; never grants execution, membership or recovery authority. */
@@ -33,9 +33,9 @@ export type InvocationFact = InvocationChange & {
   readonly monotonicTime: number;
 };
 
-export type { ResourceObservation } from '@capix/resources';
+export type { ResourceObservation } from '@weiliang0121/capix-resources';
 
-export type { BusinessEvent } from '@capix/contracts';
+export type { BusinessEvent } from '@weiliang0121/capix-contracts';
 
 export interface BusinessObservation {
   readonly identity: InvocationIdentity;

@@ -4,10 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { Interaction } from '@capix/interaction';
-import { PersistenceError } from '@capix/diagnostics';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { Interaction } from '@weiliang0121/capix-interaction';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { SqliteObserverStore, initializeObserver } from '@capix/observer-service';
 
 const contract = {

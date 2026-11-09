@@ -1,6 +1,6 @@
-import type { Transcript } from '@capix/transcript';
-import type { TranscriptEvent, TranscriptFrame, TranscriptSnapshot } from '@capix/protocol';
-import type { ObservationInstallation, CheckpointInstallation } from '@capix/server-runtime';
+import type { Transcript } from '@weiliang0121/capix-transcript';
+import type { TranscriptEvent, TranscriptFrame, TranscriptSnapshot } from '@weiliang0121/capix-protocol';
+import type { ObservationInstallation, CheckpointInstallation } from '@weiliang0121/capix-runtime';
 
 /** The host's message source. It consumes actual entity events, independently of recording. */
 export class ConversationEvents {

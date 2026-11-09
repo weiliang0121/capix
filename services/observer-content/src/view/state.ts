@@ -1,5 +1,5 @@
-import type { MemoryState } from '@capix/memory';
-import type { Message } from '@capix/protocol';
+import type { MemoryState } from '@weiliang0121/capix-memory';
+import type { Message } from '@weiliang0121/capix-protocol';
 
 /** Current membership belongs to the conversation's content; it has no independent identity. */
 export interface ActiveViewState {

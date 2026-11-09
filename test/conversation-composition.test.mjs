@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationScene, HistoryResource } from '@capix/conversation-service';
-import { Resource } from '@capix/resources';
-import { Group, Node, Resources, Runner } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Group, Node, Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 function build(scene, transcript) {
   const entity = new Resource(transcript);

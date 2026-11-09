@@ -1,6 +1,6 @@
 import { isArray } from 'es-toolkit/compat';
-import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, ExecutionRecordSnapshot, CallableRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord } from '@capix/protocol';
-import { validateExecutionRecordSnapshot, validateRecordingArchives, validateRecordingArchiveOrigin } from '@capix/protocol';
+import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, ExecutionRecordSnapshot, CallableRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord } from '@weiliang0121/capix-protocol';
+import { validateExecutionRecordSnapshot, validateRecordingArchives, validateRecordingArchiveOrigin } from '@weiliang0121/capix-protocol';
 
 export class ObservationSequenceError extends Error {}
 /** Reconnecting cannot repair a foreign identity or contradictory formal fact. */

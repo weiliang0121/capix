@@ -1,5 +1,5 @@
 import { isEqual } from 'es-toolkit';
-import { callableKinds, invocationProcessStages, type ConversationActivities, type ConversationActivity, type ConversationActivityChange } from '@capix/protocol';
+import { callableKinds, invocationProcessStages, type ConversationActivities, type ConversationActivity, type ConversationActivityChange } from '@weiliang0121/capix-protocol';
 
 const indexes = new WeakMap<ConversationActivities, ReadonlyMap<string, number>>();
 

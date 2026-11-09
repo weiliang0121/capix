@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { Resources, Runner, Scene, Node } from '@capix/server-runtime';
-import { ChangeCaptureError } from '@capix/changes';
-import { Resource, ResourceOffer } from '@capix/resources';
+import { Resources, Runner, Scene, Node } from '@weiliang0121/capix-runtime';
+import { ChangeCaptureError } from '@weiliang0121/capix-changes';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
 test('parent failure reception cannot turn a child necessary capture fault into a handled business outcome', async () => {
   const failure = new ChangeCaptureError({ kind: 'already-committed' }, new Error('capture failed'));
@@ -34,7 +34,7 @@ test('parent failure reception cannot turn a child necessary capture fault into 
 
 test('invoke isolates an async delta consumer while its explicit output observer stays connected', () => {
   const script = `
-    import { Runner, Scene, Node, Resources } from '@capix/server-runtime';
+    import { Runner, Scene, Node, Resources } from '@weiliang0121/capix-runtime';
     const unhandled = []; process.on('unhandledRejection', error => unhandled.push(String(error)));
     let deltas = 0; const events = [];
     const node = new Node({ output: { result: value => value, delta: value => value }, async run(work) { work.output.emit('a'); await Promise.resolve(); work.output.emit('b'); return 'ab'; } });

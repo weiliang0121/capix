@@ -1,6 +1,6 @@
-import { RuntimeError, type InvocationIdentity } from '@capix/contracts';
-import { RuntimeErrorHelper, type CheckpointInstallation, type CheckpointFact } from '@capix/invocation';
-import { type CheckpointChild, type InvocationCheckpointFrame } from '@capix/checkpoint';
+import { RuntimeError, type InvocationIdentity } from '@weiliang0121/capix-contracts';
+import { RuntimeErrorHelper, type CheckpointInstallation, type CheckpointFact } from '@weiliang0121/capix-invocation';
+import { type CheckpointChild, type InvocationCheckpointFrame } from '@weiliang0121/capix-checkpoint';
 import type { ConversationCheckpointRuns } from '../conversation/checkpoints.js';
 
 /** Install the service projection and an optional additional synchronous consumer. */

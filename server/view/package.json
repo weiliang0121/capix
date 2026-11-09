@@ -1,5 +1,5 @@
 {
-  "name": "@capix/view",
+  "name": "@weiliang0121/capix-view",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -14,9 +14,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/contracts": "workspace:*",
-    "@capix/diagnostics": "workspace:*",
-    "@capix/resources": "workspace:*"
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-diagnostics": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*"
   },
   "description": "Versioned views over independently owned content for CAPiX.",
   "license": "MIT",

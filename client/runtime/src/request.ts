@@ -1,4 +1,4 @@
-import type { ConversationRequest } from '@capix/protocol';
+import type { ConversationRequest } from '@weiliang0121/capix-protocol';
 import { acceptFileTask } from './files.js';
 import { isPlainObject } from 'es-toolkit/predicate';
 

@@ -1,7 +1,7 @@
-import type { Message } from '@capix/protocol';
-import type { ResourcesOf } from '@capix/resources';
-import { Scene, Node, type Group } from '@capix/structure';
-import { TranscriptResource } from '@capix/transcript';
+import type { Message } from '@weiliang0121/capix-protocol';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Scene, Node, type Group } from '@weiliang0121/capix-structure';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
 import { HistoryResource } from './history.js';
 import { createAnswerNode } from './answer.js';
 import { requireString, requireText } from './text.js';

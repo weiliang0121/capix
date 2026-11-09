@@ -1,5 +1,5 @@
-import { stableValue, type CheckpointValue } from '@capix/contracts';
-import { cloneCheckpointValue } from '@capix/checkpoint';
+import { stableValue, type CheckpointValue } from '@weiliang0121/capix-contracts';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 
 /** Default codec for uncontracted data facts. Explicit codecs keep their own wire shape. */
 export function encodeCheckpointData(value: unknown): CheckpointValue {

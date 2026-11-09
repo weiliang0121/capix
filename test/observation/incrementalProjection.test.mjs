@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ObservationReplica, ObservationSequenceError } from '@capix/client-runtime';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 import { baseline, entriesOf, snapshot } from '../client/fixtures.mjs';
 import { observationFixture } from '../performance/observation.mjs';
 

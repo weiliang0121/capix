@@ -1,4 +1,4 @@
-import type { InvocationIdentity, InvocationFailureFact, CheckpointValue, CheckpointContract } from '@capix/contracts';
+import type { InvocationIdentity, InvocationFailureFact, CheckpointValue, CheckpointContract } from '@weiliang0121/capix-contracts';
 
 /** Persistent association is scoped by the owning checkpoint contract/version. */
 export interface CheckpointReference {

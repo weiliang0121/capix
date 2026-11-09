@@ -30,22 +30,22 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/protocol": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0",
-    "@capix/server-runtime": "workspace:*",
+    "@weiliang0121/capix-runtime": "workspace:*",
     "zod": "4.6.5",
-    "@capix/resources": "workspace:*",
-    "@capix/structure": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-structure": "workspace:*",
     "@capix/observer-content": "workspace:*",
-    "@capix/contracts": "workspace:*",
-    "@capix/changes": "workspace:*",
-    "@capix/memory": "workspace:*",
-    "@capix/transcript": "workspace:*",
-    "@capix/view": "workspace:*",
-    "@capix/measurement": "workspace:*",
-    "@capix/records": "workspace:*",
-    "@capix/checkpoint": "workspace:*",
-    "@capix/invocation": "workspace:*",
-    "@capix/interaction": "workspace:*"
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-memory": "workspace:*",
+    "@weiliang0121/capix-transcript": "workspace:*",
+    "@weiliang0121/capix-view": "workspace:*",
+    "@weiliang0121/capix-measurement": "workspace:*",
+    "@weiliang0121/capix-records": "workspace:*",
+    "@weiliang0121/capix-checkpoint": "workspace:*",
+    "@weiliang0121/capix-invocation": "workspace:*",
+    "@weiliang0121/capix-interaction": "workspace:*"
   }
 }

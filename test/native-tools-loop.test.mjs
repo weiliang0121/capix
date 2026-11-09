@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { Group, checkpointPoint, childReference } from '@capix/structure';
-import { PersistenceError } from '@capix/diagnostics';
+import { Group, checkpointPoint, childReference } from '@weiliang0121/capix-structure';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { createFileTools } from '../examples/native-tools/tools.mjs';
 import { createCatalog, tool } from '../examples/native-tools/catalog.mjs';
 import { createHarness, defaultCatalog } from '../examples/native-tools/assembly.mjs';

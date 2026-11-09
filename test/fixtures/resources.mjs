@@ -1,5 +1,5 @@
-import { InvocationResources } from '@capix/server-runtime/construction';
-import { ResourceSupply, checkResourceProviders, resourceRequests } from '@capix/resources';
+import { InvocationResources } from '@weiliang0121/capix-runtime/construction';
+import { ResourceSupply, checkResourceProviders, resourceRequests } from '@weiliang0121/capix-resources';
 
 // Historical setup vocabulary remains only in test fixtures. Production uses explicit binding/access.
 export { InvocationResources as ResourceBindings };

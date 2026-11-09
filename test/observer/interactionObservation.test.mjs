@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { defineObservation } from '@capix/server-runtime';
+import { defineObservation } from '@weiliang0121/capix-runtime';
 import { ObserverConversations, SqliteObserverStore, createObserverServer } from '@capix/observer-service';
 import { ObservationHttpTransport } from '@capix/client-http';
 import { observeModelPending } from '../fixtures/model-observation.mjs';

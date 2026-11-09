@@ -1,5 +1,5 @@
-import type { TranscriptState, TranscriptPersistence } from '@capix/transcript';
-import type { MemoriesState, MemoriesPersistence } from '@capix/memory';
+import type { TranscriptState, TranscriptPersistence } from '@weiliang0121/capix-transcript';
+import type { MemoriesState, MemoriesPersistence } from '@weiliang0121/capix-memory';
 import type { ActiveViewState, ActiveViewPersistence } from './view/state.js';
 
 /** Stored content is independent of optional recording and of the current service process. */

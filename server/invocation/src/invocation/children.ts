@@ -1,4 +1,4 @@
-import type { Stable } from '@capix/contracts';
+import type { Stable } from '@weiliang0121/capix-contracts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { InvocationRelationChange, InvocationRelationIdentity } from '../observation/facts.js';
 import type { InvocationFailure } from './failure.js';

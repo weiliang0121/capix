@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationCancelled } from '@capix/invocation';
+import { InvocationCancelled } from '@weiliang0121/capix-invocation';
 import { LifecycleAdapter } from './lifecycle-adapter.mjs';
 import { lifecycleBinding, lifecycleReception } from './invocation-lifecycle.mjs';
 

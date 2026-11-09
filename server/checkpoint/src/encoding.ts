@@ -1,4 +1,4 @@
-import type { CheckpointValue } from '@capix/contracts';
+import type { CheckpointValue } from '@weiliang0121/capix-contracts';
 
 export interface CheckpointValueMetrics {
   readonly bytes: number;

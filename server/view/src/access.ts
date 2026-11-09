@@ -1,4 +1,4 @@
-import type { ResourceEndpointActivity } from '@capix/resources';
+import type { ResourceEndpointActivity } from '@weiliang0121/capix-resources';
 import type { SourceBindings, SyncSourceBindings, ViewSources } from './source.js';
 import type { ViewIndex, ViewPersistence, ViewReference, ViewSelection, ViewSnapshot, ViewState } from './types.js';
 import type { View } from './view.js';

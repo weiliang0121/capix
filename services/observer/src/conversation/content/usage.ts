@@ -1,6 +1,6 @@
-import { ResourceOffer } from '@capix/resources';
-import type { MessageUsage } from '@capix/measurement';
-import type { Transcript } from '@capix/transcript';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import type { MessageUsage } from '@weiliang0121/capix-measurement';
+import type { Transcript } from '@weiliang0121/capix-transcript';
 import type { ActiveViewSnapshot } from '@capix/observer-content';
 
 /** Resolve immutable material positions for counters, without turning current content into request input. */

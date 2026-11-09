@@ -1,5 +1,5 @@
-import { ResourceOffer } from '@capix/resources';
-import type { ModelReply, ToolResult } from '@capix/model-provider';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import type { ModelReply, ToolResult } from '@weiliang0121/capix-model-provider';
 import type { ModelExchanges } from './exchanges.js';
 import type { ExchangeFeedbackReceipt, ExchangeIntakeReceipt, ExchangeReference } from './types.js';
 import { feedbackDigest, identity, requireExchangeOperation } from './value.js';

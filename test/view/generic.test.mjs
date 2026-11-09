@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@capix/diagnostics';
-import { TranscriptViewSource } from '@capix/transcript';
-import { MemoryViewSource } from '@capix/memory';
-import { View } from '@capix/view';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { MemoryViewSource } from '@weiliang0121/capix-memory';
+import { View } from '@weiliang0121/capix-view';
 import { fixture, deferred, conflict, createMemory } from './fixtures.mjs';
 
 test('a three-source view indexes summaries before reading selected immutable values', async () => {

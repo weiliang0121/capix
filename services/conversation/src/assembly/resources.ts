@@ -1,9 +1,9 @@
-import { MemoryResource } from '@capix/memory';
-import type { ModelProvider } from '@capix/model-provider';
-import { Resource } from '@capix/resources';
-import { Resources } from '@capix/server-runtime';
-import { TranscriptResource } from '@capix/transcript';
-import type { ViewPersistence } from '@capix/view';
+import { MemoryResource } from '@weiliang0121/capix-memory';
+import type { ModelProvider } from '@weiliang0121/capix-model-provider';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources } from '@weiliang0121/capix-runtime';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
+import type { ViewPersistence } from '@weiliang0121/capix-view';
 import { CompletionResource } from '../completion.js';
 import { ConversationViewResource, type ConversationMaterialSources, type ConversationViewSource } from '../materials/view.js';
 import { ConversationMemoryResource } from '../memory/context.js';

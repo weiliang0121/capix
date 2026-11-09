@@ -1,6 +1,6 @@
-import type { InvocationIdentity } from '@capix/contracts';
-import type { ProgressReceiver } from '@capix/changes';
-import type { CheckpointChild, CheckpointDelivery, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointReference, CheckpointStore, InvocationCheckpointFrame } from '@capix/checkpoint';
+import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
+import type { ProgressReceiver } from '@weiliang0121/capix-changes';
+import type { CheckpointChild, CheckpointDelivery, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointReference, CheckpointStore, InvocationCheckpointFrame } from '@weiliang0121/capix-checkpoint';
 
 export type CheckpointFact = Readonly<
   {
@@ -10,7 +10,7 @@ export type CheckpointFact = Readonly<
     recovering: boolean;
     sequence: number;
     occurredAt: string;
-  } & ({ kind: 'captured' | 'saved'; checkpointId: string; point: string } | { kind: 'checking' | 'continued'; checkpointId: string; point: string } | { kind: 'installed'; checkpointId: string; point: string; frame: InvocationCheckpointFrame } | { kind: 'child-restored'; child: CheckpointChild; mode: 'continuation' | 'delivery' } | { kind: 'activity'; fact: import('../observation/facts.js').InvocationFact } | { kind: 'resource'; fact: import('../observation/facts.js').ResourceObservation } | { kind: 'transcript'; fact: import('@capix/protocol').TranscriptEvent } | { kind: 'memory'; fact: import('@capix/protocol').MemoryEvent } | { kind: 'failed'; stage: 'capture' | 'save' | 'restore' | 'finish'; error: unknown; childContextId?: string } | { kind: 'finishing' | 'finished'; status: CheckpointDelivery['status'] })
+  } & ({ kind: 'captured' | 'saved'; checkpointId: string; point: string } | { kind: 'checking' | 'continued'; checkpointId: string; point: string } | { kind: 'installed'; checkpointId: string; point: string; frame: InvocationCheckpointFrame } | { kind: 'child-restored'; child: CheckpointChild; mode: 'continuation' | 'delivery' } | { kind: 'activity'; fact: import('../observation/facts.js').InvocationFact } | { kind: 'resource'; fact: import('../observation/facts.js').ResourceObservation } | { kind: 'transcript'; fact: import('@weiliang0121/capix-protocol').TranscriptEvent } | { kind: 'memory'; fact: import('@weiliang0121/capix-protocol').MemoryEvent } | { kind: 'failed'; stage: 'capture' | 'save' | 'restore' | 'finish'; error: unknown; childContextId?: string } | { kind: 'finishing' | 'finished'; status: CheckpointDelivery['status'] })
 >;
 
 export interface CheckpointInstallation {

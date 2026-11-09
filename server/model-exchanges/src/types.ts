@@ -1,4 +1,4 @@
-import type { ModelReply, ToolFeedback } from '@capix/model-provider';
+import type { ModelReply, ToolFeedback } from '@weiliang0121/capix-model-provider';
 
 /** A business grouping, not an authorization credential or an invocation owner. */
 export type ExchangeScope = string;

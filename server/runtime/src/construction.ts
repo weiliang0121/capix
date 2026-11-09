@@ -14,17 +14,17 @@ export { buildCallableFromSource, type CallableBindingOptions } from './legacy/b
 export * from './binding/contract.js';
 export * from './binding/declarations.js';
 export * from './binding/work.js';
-export { InvocationContext, CallableContext, Invocation } from '@capix/invocation';
-export type { InvocationControls, ContextState, InvocationStarted, InvocationOptions } from '@capix/invocation';
+export { InvocationContext, CallableContext, Invocation } from '@weiliang0121/capix-invocation';
+export type { InvocationControls, ContextState, InvocationStarted, InvocationOptions } from '@weiliang0121/capix-invocation';
 export * from './construction/invocation.js';
-export { InvocationChildren, InvocationRelation } from '@capix/invocation';
-export type { ParentInvocation, InvocationChildBaseline, InvocationRelationOptions, InvocationTarget, InvocationRelationReception, InvocationRelationBaseline, InvocationRelationOwner, InvocationRelationSetup, InvocationReceptionBinding } from '@capix/invocation';
+export { InvocationChildren, InvocationRelation } from '@weiliang0121/capix-invocation';
+export type { ParentInvocation, InvocationChildBaseline, InvocationRelationOptions, InvocationTarget, InvocationRelationReception, InvocationRelationBaseline, InvocationRelationOwner, InvocationRelationSetup, InvocationReceptionBinding } from '@weiliang0121/capix-invocation';
 export type { InvocationCapabilities } from './construction/capabilities.js';
-export { invocationResourceFailures } from '@capix/invocation';
+export { invocationResourceFailures } from '@weiliang0121/capix-invocation';
 
-export type { CheckpointChildBinding, CheckpointReferenceSlot, InvocationCheckpointWork, CheckpointBinding, DecodedCheckpointReception, DecodedCheckpointHandledReception, DecodedCheckpointChild, DecodedCheckpointFrame, CheckpointContinuationFact } from '@capix/invocation';
-export { checkpointChildBinding, checkpointReceptionBinding, decodeCheckpointReception, decodeCheckpointHandledReception, checkCheckpointReferences, decodeCheckpointFrame, decodeCheckpointDiagnostic, captureCheckpointContinuation, restoreCheckpointContinuation, inspectChildCallFailure } from '@capix/invocation';
+export type { CheckpointChildBinding, CheckpointReferenceSlot, InvocationCheckpointWork, CheckpointBinding, DecodedCheckpointReception, DecodedCheckpointHandledReception, DecodedCheckpointChild, DecodedCheckpointFrame, CheckpointContinuationFact } from '@weiliang0121/capix-invocation';
+export { checkpointChildBinding, checkpointReceptionBinding, decodeCheckpointReception, decodeCheckpointHandledReception, checkCheckpointReferences, decodeCheckpointFrame, decodeCheckpointDiagnostic, captureCheckpointContinuation, restoreCheckpointContinuation, inspectChildCallFailure } from '@weiliang0121/capix-invocation';
 
 export { savedCheckpointFacts } from './binding/checkpoint.js';
 
-export { InvocationResources, type InvocationResourceOwner } from '@capix/invocation';
+export { InvocationResources, type InvocationResourceOwner } from '@weiliang0121/capix-invocation';

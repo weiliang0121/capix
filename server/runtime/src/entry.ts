@@ -1,9 +1,9 @@
-import { RuntimeError, type CallableInput, type CallableOutput, type Stable } from '@capix/contracts';
-import { requireNotCancelled, type InvocationControls } from '@capix/invocation';
+import { RuntimeError, type CallableInput, type CallableOutput, type Stable } from '@weiliang0121/capix-contracts';
+import { requireNotCancelled, type InvocationControls } from '@weiliang0121/capix-invocation';
 import type { AnyBuiltCallable, BuiltCallable, BuiltOptions } from './structure/construction.js';
 import type { AnyCallable } from './binding/declarations.js';
 import { createRootInvocation, restoreRootInvocation, type RootInvocationOptions } from './construction/calls.js';
-import { ProgressChannel } from '@capix/changes';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
 
 /** Occupancy belongs to its host; this operation does not create another runtime owner. */
 export interface EntryState {

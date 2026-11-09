@@ -1,5 +1,5 @@
-import type { CheckpointInstallation, CheckpointFact, InvocationFact, ResourceObservation, BusinessObservation } from '@capix/invocation';
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
+import type { CheckpointInstallation, CheckpointFact, InvocationFact, ResourceObservation, BusinessObservation } from '@weiliang0121/capix-invocation';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { ObservationInstallation } from '../binding/observation.js';
 
 /** Passive receivers cannot replace installed stores, required observations or resource supply. */

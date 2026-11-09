@@ -1,9 +1,9 @@
 import { Transcript } from './transcript.js';
-import type { Message, TranscriptRangeLocator } from '@capix/protocol';
-import { ResourceOffer } from '@capix/resources';
-import type { ResourceEndpointActivity } from '@capix/resources';
+import type { Message, TranscriptRangeLocator } from '@weiliang0121/capix-protocol';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import type { ResourceEndpointActivity } from '@weiliang0121/capix-resources';
 import { TranscriptRangeRef } from './ref.js';
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { TranscriptAppendProgress } from './progress.js';
 
 /** Binding-local commit receiver; business only receives the append endpoint. */

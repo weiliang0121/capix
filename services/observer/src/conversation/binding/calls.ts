@@ -1,4 +1,4 @@
-import { callableHooks } from '@capix/server-runtime';
+import { callableHooks } from '@weiliang0121/capix-runtime';
 import type { ConversationStructure } from '../structure.js';
 import type { ConversationCallCapture } from './capture.js';
 import type { ConversationRunOptions } from './contract.js';

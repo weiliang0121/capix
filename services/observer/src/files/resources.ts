@@ -1,7 +1,7 @@
-import type { FileReceipt, FileTask } from '@capix/protocol';
-import { type ProgressChannel } from '@capix/changes';
-import { ResourceOffer, type ResourceEndpointActivity, type ResourceOperation, type ResourceRequest } from '@capix/resources';
-import { type OperationOptions, type OperationResult } from '@capix/resources/operation';
+import type { FileReceipt, FileTask } from '@weiliang0121/capix-protocol';
+import { type ProgressChannel } from '@weiliang0121/capix-changes';
+import { ResourceOffer, type ResourceEndpointActivity, type ResourceOperation, type ResourceRequest } from '@weiliang0121/capix-resources';
+import { type OperationOptions, type OperationResult } from '@weiliang0121/capix-resources/operation';
 import type { WorkspaceFiles } from './workspace.js';
 import type { FileProgress, FileTaskInspection, TextDocument } from './types.js';
 import { isRelativeFilePath } from './path.js';

@@ -1,7 +1,7 @@
 // Local content only: exercises the actual runtime, binding, dialogs and React lifecycle.
 import { createRoot } from 'react-dom/client';
 import { ClientRuntime, type ConversationTransport, type TranscriptTransport, type ObservationTransport } from '@capix/client-runtime';
-import type { ConversationDescriptor, TranscriptSnapshot, Message, ObserverOverview } from '@capix/protocol';
+import type { ConversationDescriptor, TranscriptSnapshot, Message, ObserverOverview } from '@weiliang0121/capix-protocol';
 import { createApplication } from '../src/binding/application';
 import { AppProvider } from '../src/state/react';
 import { ConversationPanel } from '../src/features/conversation/ConversationPanel';

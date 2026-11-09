@@ -1,8 +1,8 @@
-import type { AuthorCheckpointWriter, CallableContract, CallableInput, CallableOutput, CheckpointCodec, CheckpointPointOwner, ChildCalls, ChildFacts, ChildReference, ChildReferenceSlot, OperationResult, ReceptionDefinition, Work } from '@capix/contracts';
-import type { CallableContract as StructureContract, ChildReference as StructureReference, CheckpointCodec as StructureCodec } from '@capix/structure';
-import type { OperationResult as ResourceOperationResult } from '@capix/resources/operation';
-import type { InvocationFailureFact as WireFailure } from '@capix/protocol';
-import type { InvocationFailureFact } from '@capix/contracts';
+import type { AuthorCheckpointWriter, CallableContract, CallableInput, CallableOutput, CheckpointCodec, CheckpointPointOwner, ChildCalls, ChildFacts, ChildReference, ChildReferenceSlot, OperationResult, ReceptionDefinition, Work } from '@weiliang0121/capix-contracts';
+import type { CallableContract as StructureContract, ChildReference as StructureReference, CheckpointCodec as StructureCodec } from '@weiliang0121/capix-structure';
+import type { OperationResult as ResourceOperationResult } from '@weiliang0121/capix-resources/operation';
+import type { InvocationFailureFact as WireFailure } from '@weiliang0121/capix-protocol';
+import type { InvocationFailureFact } from '@weiliang0121/capix-contracts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<Value extends true> = Value;

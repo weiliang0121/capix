@@ -2,11 +2,11 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { createConversationHostAssembly, loadConversationContent } from '@capix/conversation-service/assembly';
 import { ToolStages } from '@capix/conversation-service/tools/hosting';
-import { ChatCompletionsProvider } from '@capix/model-provider';
-import { PersistenceError } from '@capix/diagnostics';
-import { MemoryViewSource } from '@capix/memory';
-import { TranscriptViewSource } from '@capix/transcript';
-import { Runner } from '@capix/server-runtime';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { MemoryViewSource } from '@weiliang0121/capix-memory';
+import { TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { Runner } from '@weiliang0121/capix-runtime';
 
 const [mode, database, boundary = 'none'] = process.argv.slice(2);
 const store = ConversationStore.open(database);

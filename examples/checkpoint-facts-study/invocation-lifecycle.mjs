@@ -1,5 +1,5 @@
-import { Invocation, InvocationContext, InvocationObservation, ObserverSession } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { Invocation, InvocationContext, InvocationObservation, ObserverSession } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 // Measurement only: this module does not install StableValues, replace production
 // codecs, or infer a Frame from observer events. A Store wrapper records the real

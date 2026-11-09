@@ -1,4 +1,4 @@
-import type { CallInteractionLinks, InteractionObservation } from '@capix/protocol';
+import type { CallInteractionLinks, InteractionObservation } from '@weiliang0121/capix-protocol';
 import type { ObservationTransport } from '../transport.js';
 
 /** On-demand entity observation has its own connection lifetime and follows the selected conversation. */

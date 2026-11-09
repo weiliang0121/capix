@@ -1,6 +1,6 @@
 import type { BaseRecord } from './record.js';
 import { removeRegistration } from './tree/access.js';
-import type { RecordEntry } from '@capix/protocol';
+import type { RecordEntry } from '@weiliang0121/capix-protocol';
 import { isPlainObject } from 'es-toolkit/predicate';
 import { snapshotValue } from './value/snapshot.js';
 import { restoreEntry } from './restoration/entry.js';

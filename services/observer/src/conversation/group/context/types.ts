@@ -1,5 +1,5 @@
-import type { ModelSettings } from '@capix/protocol';
-import type { Group } from '@capix/structure';
+import type { ModelSettings } from '@weiliang0121/capix-protocol';
+import type { Group } from '@weiliang0121/capix-structure';
 import type { ActiveViewSelection, ActiveViewSnapshot } from '@capix/observer-content';
 import type { AnswerMessageContext } from '../../node/context/assemble.js';
 

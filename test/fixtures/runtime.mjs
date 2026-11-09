@@ -1,8 +1,8 @@
 import { ResourceBindings } from './resources.mjs';
 import { installCallable } from './driver.mjs';
 import { randomUUID } from 'node:crypto';
-import { defineScene, CallableInvocationBuilder, bindRecording, invocationRecording } from '@capix/server-runtime';
-import { RecordingRootHelper, RuntimeCallRecord, CallableRecord, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, ResourceRecord, TranscriptRecord, MemoryRecord } from '@capix/records';
+import { defineScene, CallableInvocationBuilder, bindRecording, invocationRecording } from '@weiliang0121/capix-runtime';
+import { RecordingRootHelper, RuntimeCallRecord, CallableRecord, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, ResourceRecord, TranscriptRecord, MemoryRecord } from '@weiliang0121/capix-records';
 
 import { rememberCall } from './calls.mjs';
 

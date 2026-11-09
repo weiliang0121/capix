@@ -1,6 +1,6 @@
-import { ProgressChannel } from '@capix/changes';
-import { RuntimeError, stableValue } from '@capix/contracts';
-import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration, Stable } from '@capix/contracts';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { RuntimeError, stableValue } from '@weiliang0121/capix-contracts';
+import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration, Stable } from '@weiliang0121/capix-contracts';
 
 /** One producer-owned segment. Delivery is passive and never controls its lifetime. */
 export class InvocationOutputSection<Result> {

@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import { type CheckpointCodec, type CheckpointValue } from '@capix/structure';
-import type { Stable } from '@capix/contracts';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import { type CheckpointCodec, type CheckpointValue } from '@weiliang0121/capix-structure';
+import type { Stable } from '@weiliang0121/capix-contracts';
 import { answerOutputContract } from './group/answer/output.js';
-import type { GenerationOutput } from '@capix/protocol';
+import type { GenerationOutput } from '@weiliang0121/capix-protocol';
 import { preparedConversationContextSchema } from './group/context/schema.js';
 
 /** Service data contracts, shared by the actual R/E continuation declarations. */

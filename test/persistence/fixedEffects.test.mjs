@@ -5,8 +5,8 @@ import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { SqliteObserverStore } from '@capix/observer-service';
 import { WorkspaceFiles } from '@capix/observer-service/assembly';
 

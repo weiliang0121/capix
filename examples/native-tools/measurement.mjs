@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { collectionLimit, fixed, valueLimit } from './value.mjs';
 
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));

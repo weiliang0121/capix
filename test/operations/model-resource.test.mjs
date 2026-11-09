@@ -1,8 +1,8 @@
 import { bindResources } from '../fixtures/resources.mjs';
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures } from '@weiliang0121/capix-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationCancelled, isInvocationCancelled, PersistenceError } from '@capix/server-runtime';
+import { InvocationCancelled, isInvocationCancelled, PersistenceError } from '@weiliang0121/capix-runtime';
 
 import { ModelResource, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 

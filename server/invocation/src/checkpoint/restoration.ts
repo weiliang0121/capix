@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { CheckpointFact, CheckpointInstallation, CheckpointRestoration } from './contract.js';
-import type { CheckpointContract } from '@capix/contracts';
-import type { InvocationIdentity } from '@capix/contracts';
-import { cloneCheckpointHead } from '@capix/checkpoint';
+import type { CheckpointContract } from '@weiliang0121/capix-contracts';
+import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
+import { cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
 import { ObserverSession } from '../observation/session.js';
-import { ProgressChannel } from '@capix/changes';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
 
 /** Read, validate and optionally construct within one observed restoration-preparation boundary. */
 export function prepareCheckpointRestoration<Value = never>(installation: CheckpointInstallation | undefined, contract: CheckpointContract | undefined, contextId: string, owner: Omit<InvocationIdentity, 'contextId'>, construct?: (restoration: CheckpointRestoration) => Value): Value | CheckpointRestoration {

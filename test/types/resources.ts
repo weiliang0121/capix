@@ -1,6 +1,6 @@
-import { TranscriptResource } from '@capix/transcript';
-import { type NodeWork, type GroupWork, type SceneWork } from '@capix/server-runtime';
-import { Resource, ResourceOffer, Resources as ResourceRegistry, type ResourceRequirements } from '@capix/resources';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
+import { type NodeWork, type GroupWork, type SceneWork } from '@weiliang0121/capix-runtime';
+import { Resource, ResourceOffer, Resources as ResourceRegistry, type ResourceRequirements } from '@weiliang0121/capix-resources';
 
 type Resources = { settings: { timeoutMs: number } };
 const settings = new ResourceOffer({ name: 'settings', expose: (source: { timeout: number }) => Object.freeze({ timeoutMs: source.timeout }) });

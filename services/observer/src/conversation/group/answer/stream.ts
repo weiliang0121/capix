@@ -1,5 +1,5 @@
-import type { GenerationOutput, MessageLocator } from '@capix/protocol';
-import type { InvocationOutputEvent, OutputDeclaration } from '@capix/structure';
+import type { GenerationOutput, MessageLocator } from '@weiliang0121/capix-protocol';
+import type { InvocationOutputEvent, OutputDeclaration } from '@weiliang0121/capix-structure';
 import { answerOutputContract } from './output.js';
 
 export interface AnswerTextDelta {

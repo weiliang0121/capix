@@ -1,5 +1,5 @@
 {
-  "name": "@capix/changes",
+  "name": "@weiliang0121/capix-changes",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -14,8 +14,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/contracts": "workspace:*",
-    "@capix/protocol": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0"
   },
   "description": "Change capture and delivery for CAPiX entities.",

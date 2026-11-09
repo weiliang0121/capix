@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation } from '@capix/conversation-service';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { Resource } from '@capix/resources';
-import { Resources, Runner, isInvocationCancelled } from '@capix/server-runtime';
-import { Node, Scene } from '@capix/structure';
-import { Transcript, TranscriptResource, TranscriptViewSource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner, isInvocationCancelled } from '@weiliang0121/capix-runtime';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const earlier = [
   { role: 'user', content: '请使用简短的中文。' },

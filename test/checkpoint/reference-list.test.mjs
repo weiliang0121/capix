@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Node } from '@capix/structure';
-import { BoundChildren, savedCheckpointFacts } from '@capix/server-runtime/construction';
+import { Node } from '@weiliang0121/capix-structure';
+import { BoundChildren, savedCheckpointFacts } from '@weiliang0121/capix-runtime/construction';
 
 function queryFixture(size = 8) {
   const node = new Node({ run: (work) => work.input });

@@ -1,4 +1,4 @@
-import { defineObservation } from '@capix/server-runtime';
+import { defineObservation } from '@weiliang0121/capix-runtime';
 import { RequestModel } from '@capix/observer-service/conversation';
 
 /** Host selection of a real model-request structure; no consumer is stored on the business node. */

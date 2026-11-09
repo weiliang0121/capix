@@ -1,4 +1,4 @@
-import type { MemoryResultSource } from '@capix/protocol';
+import type { MemoryResultSource } from '@weiliang0121/capix-protocol';
 
 export function MemoryResultSources({ sources, label = '操作依据' }: { sources?: readonly MemoryResultSource[]; label?: string }) {
   if (!sources?.length) return null;

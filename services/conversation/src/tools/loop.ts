@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import { modelReplyText, requireModelRequest, type ModelReply, type ModelToolCall } from '@capix/model-provider';
-import { ModelExchangeResource, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference } from '@capix/model-exchanges';
-import type { ResourcesOf } from '@capix/resources';
-import { Group, checkpointPoint, childReferences, reception, type ChildCallable, type ChildReference, type ChildCall, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildReferenceSlot, type CheckpointSelection } from '@capix/structure';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import { modelReplyText, requireModelRequest, type ModelReply, type ModelToolCall } from '@weiliang0121/capix-model-provider';
+import { ModelExchangeResource, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference } from '@weiliang0121/capix-model-exchanges';
+import type { ResourcesOf } from '@weiliang0121/capix-resources';
+import { Group, checkpointPoint, childReferences, reception, type ChildCallable, type ChildReference, type ChildCall, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildReferenceSlot, type CheckpointSelection } from '@weiliang0121/capix-structure';
 import { codec, stringCodec } from '../recovery/codecs.js';
 import { createToolCompletion, ToolModelResource } from './model.js';
 import { createToolCatalog, selectTool, type ToolCatalog, type ToolSelection } from './catalog.js';

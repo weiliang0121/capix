@@ -1,5 +1,5 @@
 import type { ClientRuntime } from '@capix/client-runtime';
-import type { FileTask, Message } from '@capix/protocol';
+import type { FileTask, Message } from '@weiliang0121/capix-protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import type { AppStore } from '../state/store.js';

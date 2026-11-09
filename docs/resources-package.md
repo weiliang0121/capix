@@ -1,6 +1,6 @@
 # 资源包与调用装配边界
 
-`@capix/resources` 独立提供资源定义、登记、固定接线和本次访问。Runtime 使用资源包打开端点，再把端点交给 Work；阶段选择、恢复和调用退出属于 Runtime。
+`@weiliang0121/capix-resources` 独立提供资源定义、登记、固定接线和本次访问。Runtime 使用资源包打开端点，再把端点交给 Work；阶段选择、恢复和调用退出属于 Runtime。
 
 ```text
 Resource + ResourceOffer
@@ -45,7 +45,7 @@ Resource + ResourceOffer
 ## 独立使用
 
 ```js
-import { Resource, ResourceOffer, Resources } from '@capix/resources';
+import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
 
 const lookup = new ResourceOffer({
   methods: {
@@ -100,11 +100,11 @@ ResourceOffer 有独立 UUID `id`；`name` 用于解释和既有资源观测，�
 
 ## Runtime 接入
 
-场景宿主仍从 `@capix/server-runtime` 取得 Resources 和 Runner。这个 Resources 负责结构范围的组合登记，并使用资源包的 Provider、Supply、Binding 与 Access；业务结构不接触这些装配对象。
+场景宿主仍从 `@weiliang0121/capix-runtime` 取得 Resources 和 Runner。这个 Resources 负责结构范围的组合登记，并使用资源包的 Provider、Supply、Binding 与 Access；业务结构不接触这些装配对象。
 
 ```js
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Scene, Node, Resources, Runner } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Scene, Node, Resources, Runner } from '@weiliang0121/capix-runtime';
 
 const dictionary = new ResourceOffer({
   methods: {
@@ -131,7 +131,7 @@ await runner.run('hello');
 
 调用侧 `closeAllResult()` 同步耗尽所有窗口并返回 OperationOutcome，供 Invocation 退出使用；`closeAll()` 保持原有抛错接口。单错误保持身份，多错误聚合，失败值允许 undefined。两个入口都不等待未 await 的普通资源 Promise。完整时序见 [调用退出契约](invocation-exit-contract.md)。
 
-`@capix/resources/operation` 提供 OperationOutcome、Reception、OperationOptions、OperationResult 和 receiveOperation。子调用共用这组正常／异常接收契约，实际子接纳、关系归属和 CP 留在 Runtime。
+`@weiliang0121/capix-resources/operation` 提供 OperationOutcome、Reception、OperationOptions、OperationResult 和 receiveOperation。子调用共用这组正常／异常接收契约，实际子接纳、关系归属和 CP 留在 Runtime。
 
 ## 宿主故障接缝
 

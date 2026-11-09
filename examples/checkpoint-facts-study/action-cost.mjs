@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Resource, ResourceOffer, Resources } from '@capix/resources';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
 import { StableValues } from './stable.mjs';
 import { createBoundaryCall } from './action-boundaries.mjs';
 import { lifecycleBinding } from './invocation-lifecycle.mjs';

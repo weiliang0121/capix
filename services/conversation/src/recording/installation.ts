@@ -1,6 +1,6 @@
-import type { Recorder } from '@capix/records';
-import { bindRecording, type RecordingOptions, type InvocationRecordDescription } from '@capix/server-runtime/recording';
-import type { CallableStructure, Composite } from '@capix/structure';
+import type { Recorder } from '@weiliang0121/capix-records';
+import { bindRecording, type RecordingOptions, type InvocationRecordDescription } from '@weiliang0121/capix-runtime/recording';
+import type { CallableStructure, Composite } from '@weiliang0121/capix-structure';
 import { describeConversationValue } from './description.js';
 
 /** Optional host installation. Business members retain their own deps/run/output and identity. */

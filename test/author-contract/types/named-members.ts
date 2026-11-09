@@ -1,5 +1,5 @@
-import { Group, Node, Scene } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
+import { Group, Node, Scene } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 const primary = new Node<number, string>({ run: (w) => String(w.input) });
 const backup = new Node<string, number>({ run: (w) => w.input.length });
 const group = new Group<number, string>().add({ primary, backup });

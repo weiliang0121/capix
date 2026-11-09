@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 import { ConversationSubmission, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { MessageUsage } from '@capix/measurement';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
 import { ClientSubmission } from '@capix/client-runtime';
 
 const tick = () => new Promise((resolve) => queueMicrotask(resolve));

@@ -38,7 +38,7 @@ Context / Relation 固定事实
 
 固定候选不等于成功：输出检查、取消、资源关闭、子调用退出及 CP finish 仍可阻止成功。父接纳、资源效果和 CP 仍分别成立；回执丢失不等于未提交。数据固定不恢复草稿，不承诺外部副作用幂等，也不改变取消后的接纳收尾规则。
 
-共同纯值实现位于 `@capix/contracts`。普通记录、null 原型记录、稠密数组、undefined/null/boolean/string/有限 number 可作为正式数据；保留缺失字段、undefined 和 -0 的区别。Date、Map、Error、函数、类实例、循环和 accessor 不静默转换，业务显式形成数据表示。Proxy 元操作可能执行，不将它宣称为沙箱。
+共同纯值实现位于 `@weiliang0121/capix-contracts`。普通记录、null 原型记录、稠密数组、undefined/null/boolean/string/有限 number 可作为正式数据；保留缺失字段、undefined 和 -0 的区别。Date、Map、Error、函数、类实例、循环和 accessor 不静默转换，业务显式形成数据表示。Proxy 元操作可能执行，不将它宣称为沙箱。
 
 固定操作复制未知来源，不冻结调用者草稿。私有证据只授予本实现产生的副本；单次记忆表避免 DAG 重复复制，逐节点展开计量防止共享子图绕过预算。可信根与可信子图可直接复用，`Object.freeze` 和类型断言不授予信任。证据不跨进程，也不证明任意 codec 纯度。
 

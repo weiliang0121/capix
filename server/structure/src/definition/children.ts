@@ -1,4 +1,4 @@
-import type { CallableKind, ChildContract } from '@capix/contracts';
+import type { CallableKind, ChildContract } from '@weiliang0121/capix-contracts';
 import type { CallableStructure } from '../callable.js';
 import type { Composite } from './composition.js';
 import type { ChildKind } from './kind.js';

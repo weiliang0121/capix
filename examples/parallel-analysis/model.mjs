@@ -1,6 +1,6 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import { createCompletionNode, ModelCompletionIncomplete } from '@capix/conversation-service';
-import { Group } from '@capix/structure';
+import { Group } from '@weiliang0121/capix-structure';
 import { delta, text } from './structure.mjs';
 
 // Each branch has its own structure and invocation. All three may use the same

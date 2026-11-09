@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Runner, Resources, Group, Node, Scene } from '@capix/server-runtime';
+import { Runner, Resources, Group, Node, Scene } from '@weiliang0121/capix-runtime';
 
 const entry = fileURLToPath(new URL('./types/structures.ts', import.meta.url));
 const source = readFileSync(entry, 'utf8');

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, Resources, Runner, Scene, checkpointPoint, childReference, reception } from '@capix/server-runtime';
-import { resolveDeclaration } from '@capix/server-runtime/construction';
-import { Resource, ResourceOffer } from '@capix/resources';
+import { Group, Node, Resources, Runner, Scene, checkpointPoint, childReference, reception } from '@weiliang0121/capix-runtime';
+import { resolveDeclaration } from '@weiliang0121/capix-runtime/construction';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
 const codec = { encode: structuredClone, decode: structuredClone };
 

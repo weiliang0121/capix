@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, Dynamic, Scene, Group, Node } from '@capix/structure';
-import { Runner, Resources, defineObservation, callableHooks } from '@capix/server-runtime';
-import { Resource, ResourceOffer } from '@capix/resources';
+import { Sequence, Dynamic, Scene, Group, Node } from '@weiliang0121/capix-structure';
+import { Runner, Resources, defineObservation, callableHooks } from '@weiliang0121/capix-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
 function install(preset, resources = new Resources(), options = {}) {
   const scene = new Scene().add({ preset });

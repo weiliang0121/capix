@@ -1,5 +1,5 @@
-import { defineGroup } from '@capix/server-runtime';
-import type { Node, Scene, Group, SceneWork, GroupWork, NodeWork, ResumeWork, CallableWork, InvocationCheckpointPoint, ChildReference } from '@capix/server-runtime';
+import { defineGroup } from '@weiliang0121/capix-runtime';
+import type { Node, Scene, Group, SceneWork, GroupWork, NodeWork, ResumeWork, CallableWork, InvocationCheckpointPoint, ChildReference } from '@weiliang0121/capix-runtime';
 declare const scene: Scene<string, number>;
 declare const operation: Group<string, number>;
 declare const node: Node<string, number>;

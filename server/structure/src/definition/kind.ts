@@ -1,4 +1,4 @@
-import type { CallableKind } from '@capix/contracts';
+import type { CallableKind } from '@weiliang0121/capix-contracts';
 
 /** Structural membership only; execution and resource lifecycles do not dispatch on kind. */
 export const childKinds = {

@@ -4,17 +4,17 @@
 
 ## 对象与包
 
-| 对象或能力                           | 公开入口                  | 负责什么                                                   | 不承担什么                                      |
-| ------------------------------------ | ------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
-| `Message`                            | `@capix/protocol/content` | 正式消息的 `role/content` 协议值                           | 不是独立可变实体，没有单独消息生命周期          |
-| `Transcript`                         | `@capix/transcript`       | 正式消息集合、稳定索引、分段、修订与固定追加凭据           | 不执行模型或管理调用                            |
-| `Memory` / `Memories`                | `@capix/memory`           | 单项记忆身份与内容；集合统一接纳批次、来源、顺序及固定写入 | 不决定应提取什么记忆                            |
-| `View`                               | `@capix/view`             | 来源契约、成员状态、目录与固定读取、依据核验               | 不拥有正文，不决定业务保留策略                  |
-| `ActiveView`                         | `@capix/observer-content` | Observer 消息/记忆活跃策略、旧快照形状及持久适配           | 不拥有第二份正文，不扩展 CP 恢复承诺            |
-| `MessageUsage`                       | `@capix/measurement`      | 按准确消息对象累计本环境的材料使用次数                     | 不持久化，不进入模型输入，不决定选择策略        |
-| `Recorder` / `RecordBook` / 记录载体 | `@capix/records`          | 正式登记、记录树、正文快照、历史读取与普通资源访问         | 不持有调用，不决定内容或业务结果，不恢复执行    |
-| `ConversationContent`                | `@capix/observer-content` | Observer 内容组合、内容同步、可借用的观察安装和关闭        | 不持有 Runner、Provider、模型交互或 SQLite 实现 |
-| 事实捕获与被动通知                   | `@capix/changes`          | 捕获、缓冲、转交、发布、进度消费者故障隔离                 | 不拥有实体，不解释业务事实，不自动重做工作      |
+| 对象或能力                           | 公开入口                               | 负责什么                                                   | 不承担什么                                      |
+| ------------------------------------ | -------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
+| `Message`                            | `@weiliang0121/capix-protocol/content` | 正式消息的 `role/content` 协议值                           | 不是独立可变实体，没有单独消息生命周期          |
+| `Transcript`                         | `@weiliang0121/capix-transcript`       | 正式消息集合、稳定索引、分段、修订与固定追加凭据           | 不执行模型或管理调用                            |
+| `Memory` / `Memories`                | `@weiliang0121/capix-memory`           | 单项记忆身份与内容；集合统一接纳批次、来源、顺序及固定写入 | 不决定应提取什么记忆                            |
+| `View`                               | `@weiliang0121/capix-view`             | 来源契约、成员状态、目录与固定读取、依据核验               | 不拥有正文，不决定业务保留策略                  |
+| `ActiveView`                         | `@capix/observer-content`              | Observer 消息/记忆活跃策略、旧快照形状及持久适配           | 不拥有第二份正文，不扩展 CP 恢复承诺            |
+| `MessageUsage`                       | `@weiliang0121/capix-measurement`      | 按准确消息对象累计本环境的材料使用次数                     | 不持久化，不进入模型输入，不决定选择策略        |
+| `Recorder` / `RecordBook` / 记录载体 | `@weiliang0121/capix-records`          | 正式登记、记录树、正文快照、历史读取与普通资源访问         | 不持有调用，不决定内容或业务结果，不恢复执行    |
+| `ConversationContent`                | `@capix/observer-content`              | Observer 内容组合、内容同步、可借用的观察安装和关闭        | 不持有 Runner、Provider、模型交互或 SQLite 实现 |
+| 事实捕获与被动通知                   | `@weiliang0121/capix-changes`          | 捕获、缓冲、转交、发布、进度消费者故障隔离                 | 不拥有实体，不解释业务事实，不自动重做工作      |
 
 `@capix/observer-content` 是包名，对象仍叫 `ConversationContent`。`Memory` 与 `Memories` 放在同一包：集合是正式写入口，单项的更新与恢复方法保留为包内实现。`ActiveView` 是 Observer 的组合策略，使用通用 View，仍没有独立 UID，生命周期由 ConversationContent 确定。
 
@@ -46,7 +46,7 @@ flowchart TD
   Selection[measurement] --> Resources
 ```
 
-图只展开内容和记录协作关系；各包还按需依赖 `protocol` 的纯数据、`contracts` 的共同契约和诊断。Runtime 安装资源端点与可选记录预设，实体包不调用 Runtime。`observeMemory` 由 `@capix/records` 提供，通过 `transcript.id` 与 `values()` 的只读结构契约组合协议值和记忆记录，不依赖 `@capix/memory`。
+图只展开内容和记录协作关系；各包还按需依赖 `protocol` 的纯数据、`contracts` 的共同契约和诊断。Runtime 安装资源端点与可选记录预设，实体包不调用 Runtime。`observeMemory` 由 `@weiliang0121/capix-records` 提供，通过 `transcript.id` 与 `values()` 的只读结构契约组合协议值和记忆记录，不依赖 `@weiliang0121/capix-memory`。
 
 ## 包内组织与公开出口
 
@@ -62,13 +62,13 @@ flowchart TD
 | `services/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步；`view/active.ts`：ActiveView 来源同步与正式操作；`view/state.ts`：状态契约与校验；`view/default-policy.ts`：默认纳入预设；`view/resource.ts`：read/manage Offer |
 | `server/changes`            | `capture.ts/buffer.ts`：必要捕获与批次转交；`publish.ts/consumer.ts`：发布端口；`error.ts`：捕获错误及故障合并；`progress.ts`：被动进度通知                                                                                                                                                                                                           |
 
-实体包通过显式根出口提供实体、访问和持久契约；消息包另以 `@capix/transcript/presets` 提供可选算法。内部校验、消息事件构造、单项记忆写入不因文件独立就成为公开 API。内容状态和持久端口归对应实体包；它们不会仅因可序列化就全部搬入跨端协议。
+实体包通过显式根出口提供实体、访问和持久契约；消息包另以 `@weiliang0121/capix-transcript/presets` 提供可选算法。内部校验、消息事件构造、单项记忆写入不因文件独立就成为公开 API。内容状态和持久端口归对应实体包；它们不会仅因可序列化就全部搬入跨端协议。
 
-`@capix/records` 根出口提供记录实体与 Helper、snapshotValue、observeMemory、RecordResource。普通 `RecordResource.read` 的 get/snapshot 只返回纯数据快照；`RecordResource.write.create` 只接收 custom 内容，实体生成身份后返回快照。`@capix/records/construction` 单独提供 RecordWriterResource 的 root/add/update/boundary，准确活对象只在宿主观察窗口中使用。Recorder 的 RecordClock 仅要求 now/tick；默认时间源属于记录包，宿主可注入兼容 Runtime Clock，包本身不依赖 Runtime。
+`@weiliang0121/capix-records` 根出口提供记录实体与 Helper、snapshotValue、observeMemory、RecordResource。普通 `RecordResource.read` 的 get/snapshot 只返回纯数据快照；`RecordResource.write.create` 只接收 custom 内容，实体生成身份后返回快照。`@weiliang0121/capix-records/construction` 单独提供 RecordWriterResource 的 root/add/update/boundary，准确活对象只在宿主观察窗口中使用。Recorder 的 RecordClock 仅要求 now/tick；默认时间源属于记录包，宿主可注入兼容 Runtime Clock，包本身不依赖 Runtime。
 
 Runtime `/recording` 只保留自动观测预设，实体与历史恢复目录已迁出。安装内部通过资源包 Resources.bind 固定记录写口，每个事实打开无 owner 的独立窗口并关闭，使真实终态写入独立于业务 Work 的取消与退出。内部写口不回送自身资源观察链；Recorder 的变化出口、isolate/propagate 及来源失效仍按原规则工作。具体约束见 [记录机制](recording.md)。
 
-`RuntimeError` 的唯一实现归 `@capix/contracts`，Runtime 重导同一类。`ChangeCaptureError` 的唯一实现归 `@capix/changes`。这两个对象的身份保持一致：宿主错误交付和资源失败分类继续识别它们，不能在迁移时复制同名类。
+`RuntimeError` 的唯一实现归 `@weiliang0121/capix-contracts`，Runtime 重导同一类。`ChangeCaptureError` 的唯一实现归 `@weiliang0121/capix-changes`。这两个对象的身份保持一致：宿主错误交付和资源失败分类继续识别它们，不能在迁移时复制同名类。
 
 ## 实体、预设与策略节点
 
@@ -119,9 +119,9 @@ sequenceDiagram
 最小接入仍使用已有模型：
 
 ```ts
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { Resource } from '@capix/resources';
-import { Resources } from '@capix/server-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources } from '@weiliang0121/capix-runtime';
 
 const transcript = new Transcript();
 const resources = new Resources();
@@ -142,19 +142,19 @@ resources.register(new Resource(transcript), TranscriptResource.append);
 
 ## 入口迁移
 
-| 旧入口                                                                              | 当前入口                                 |
-| ----------------------------------------------------------------------------------- | ---------------------------------------- |
-| Runtime 根或 `@capix/server-runtime/content` 的 Transcript 系列                     | `@capix/transcript`                      |
-| Runtime 根或 `/content` 的 Memory/Memories 系列                                     | `@capix/memory`                          |
-| 原 `SelectionUsage` / `@capix/selection-usage`                                      | `@capix/measurement`                     |
-| 原 `ActiveContent` / `@capix/active-content`，以及 `@capix/view` 的 ActiveView 系列 | `@capix/observer-content`                |
-| Observer 装配内部的 ConversationContent、ChangeConsumer、TranscriptFeed             | `@capix/observer-content`                |
-| Runtime 的 ChangeBuffer、发布/捕获契约、ProgressChannel、EventConsumer              | `@capix/changes`                         |
-| Runtime 根或 `/recording` 的记录实体、Helper、snapshotValue、observeMemory          | `@capix/records`                         |
-| 宿主需要准确活记录对象的构造写口                                                    | `@capix/records/construction`            |
-| RuntimeError 实现                                                                   | `@capix/contracts`；Runtime 仅重导同一类 |
+| 旧入口                                                                                           | 当前入口                                              |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Runtime 根或 `@weiliang0121/capix-runtime/content` 的 Transcript 系列                            | `@weiliang0121/capix-transcript`                      |
+| Runtime 根或 `/content` 的 Memory/Memories 系列                                                  | `@weiliang0121/capix-memory`                          |
+| 原 `SelectionUsage` / `@capix/selection-usage`                                                   | `@weiliang0121/capix-measurement`                     |
+| 原 `ActiveContent` / `@capix/active-content`，以及 `@weiliang0121/capix-view` 的 ActiveView 系列 | `@capix/observer-content`                             |
+| Observer 装配内部的 ConversationContent、ChangeConsumer、TranscriptFeed                          | `@capix/observer-content`                             |
+| Runtime 的 ChangeBuffer、发布/捕获契约、ProgressChannel、EventConsumer                           | `@weiliang0121/capix-changes`                         |
+| Runtime 根或 `/recording` 的记录实体、Helper、snapshotValue、observeMemory                       | `@weiliang0121/capix-records`                         |
+| 宿主需要准确活记录对象的构造写口                                                                 | `@weiliang0121/capix-records/construction`            |
+| RuntimeError 实现                                                                                | `@weiliang0121/capix-contracts`；Runtime 仅重导同一类 |
 
-Runtime 的 `/content` 出口已删除；根与 `/recording` 对记录实体的旧重导也已删除，`/recording` 仅保留运行观测预设。记录实体旧名、wire kind 和历史格式继续保留，不改变 CP 格式与恢复语义。`@capix/observer-content` 组合 Observer 内容生命周期并公开自己的 ActiveView 策略，不重导独立实体包或通用 View。客户端继续使用 `@capix/protocol` 的数据契约，不因为服务端分包而依赖实体实现。
+Runtime 的 `/content` 出口已删除；根与 `/recording` 对记录实体的旧重导也已删除，`/recording` 仅保留运行观测预设。记录实体旧名、wire kind 和历史格式继续保留，不改变 CP 格式与恢复语义。`@capix/observer-content` 组合 Observer 内容生命周期并公开自己的 ActiveView 策略，不重导独立实体包或通用 View。客户端继续使用 `@weiliang0121/capix-protocol` 的数据契约，不因为服务端分包而依赖实体实现。
 
 ## 后续逐包整理
 

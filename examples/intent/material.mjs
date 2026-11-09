@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { View, openView } from '@capix/view';
-import { Resource, ResourceOffer } from '@capix/resources';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { View, openView } from '@weiliang0121/capix-view';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 import { conditions } from './fixtures.mjs';
 
 // Skill 在这个实验中只是一个静态来源，尚不是框架的新实体或执行平台。

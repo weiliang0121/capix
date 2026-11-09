@@ -1,9 +1,9 @@
 import { isDeepStrictEqual as equal } from 'node:util';
-import { RuntimeError } from '@capix/contracts';
-import type { CheckpointChild, CheckpointHead } from '@capix/checkpoint';
-import { PersistenceError } from '@capix/diagnostics';
-import { feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ModelExchanges, type ModelExchangeEntry } from '@capix/model-exchanges';
-import { requireModelReply, modelReplyText, type ModelReply, type ModelRequest, type ModelRequestInspection } from '@capix/model-provider';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import type { CheckpointChild, CheckpointHead } from '@weiliang0121/capix-checkpoint';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ModelExchanges, type ModelExchangeEntry } from '@weiliang0121/capix-model-exchanges';
+import { requireModelReply, modelReplyText, type ModelReply, type ModelRequest, type ModelRequestInspection } from '@weiliang0121/capix-model-provider';
 import { z } from 'zod';
 import type { ConversationMaterialInput } from '../materials/input.js';
 import type { ConversationViewSource } from '../materials/view.js';

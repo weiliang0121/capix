@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Selection } from '../../model/types.js';
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 
 import { modelIndexesSchema } from '../../model/schema.js';
 import type { ModelOutputContract } from '../../model/contract.js';

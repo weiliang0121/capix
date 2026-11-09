@@ -1,5 +1,5 @@
-import { Node, Group, Scene, Runner, type Resources, type ChildCallable, defineNode, defineGroup, checkpointPoint, type NodeDefinition, type NodeWork, type CheckpointCodec } from '@capix/server-runtime';
-import { type ResourceRequest } from '@capix/resources';
+import { Node, Group, Scene, Runner, type Resources, type ChildCallable, defineNode, defineGroup, checkpointPoint, type NodeDefinition, type NodeWork, type CheckpointCodec } from '@weiliang0121/capix-runtime';
+import { type ResourceRequest } from '@weiliang0121/capix-resources';
 declare function expect<Value>(value: Value): void;
 declare const count: ResourceRequest<number>;
 declare const text: ResourceRequest<string>;

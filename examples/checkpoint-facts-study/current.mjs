@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Invocation, InvocationContext } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 

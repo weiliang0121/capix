@@ -1,4 +1,4 @@
-import type { MemoryEvent, TranscriptEvent } from '@capix/protocol';
+import type { MemoryEvent, TranscriptEvent } from '@weiliang0121/capix-protocol';
 import type { InvocationFact, ResourceObservation } from '../observation/facts.js';
 import { InvocationObservation } from '../observation/invocation.js';
 import { ObservationError } from '../observation/error.js';

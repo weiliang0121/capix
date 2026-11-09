@@ -1,7 +1,7 @@
 import { ActiveView } from '@capix/observer-content';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { MessageUsage } from '@capix/measurement';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
 import { createBoundRuntime } from './runtime.mjs';
 
 /** Test assembly owns entities independently from the runtime under test. */

@@ -1,6 +1,6 @@
 import type { ClientSubmissionState } from '@capix/client-runtime';
 import { findLast } from 'es-toolkit/compat';
-import type { ConversationActivity, ConversationActivities } from '@capix/protocol';
+import type { ConversationActivity, ConversationActivities } from '@weiliang0121/capix-protocol';
 import type { ConversationProcess } from '../state/conversation.js';
 
 const activityLabels = new WeakMap<ConversationActivities, string>();

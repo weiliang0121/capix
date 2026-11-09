@@ -1,8 +1,8 @@
-import { type Resources } from '@capix/server-runtime';
-import { Resource } from '@capix/resources';
-import { TranscriptResource } from '@capix/transcript';
-import { MemoryResource, type CapturedMemories } from '@capix/memory';
-import { MessageUsageResource } from '@capix/measurement';
+import { type Resources } from '@weiliang0121/capix-runtime';
+import { Resource } from '@weiliang0121/capix-resources';
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
+import { MemoryResource, type CapturedMemories } from '@weiliang0121/capix-memory';
+import { MessageUsageResource } from '@weiliang0121/capix-measurement';
 import type { ModelInteractions } from './model/interactions.js';
 import { ModelResource, ModelSettingsResource } from './model/resources.js';
 import type { ConversationStructure } from './structure.js';

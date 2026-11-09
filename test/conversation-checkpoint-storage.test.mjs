@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { brotliCompressSync, constants } from 'node:zlib';
-import { CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
-import { encodeCheckpointRecord, decodeCheckpointRecord } from '@capix/checkpoint/storage';
+import { CHECKPOINT_MAX_BYTES } from '@weiliang0121/capix-checkpoint';
+import { encodeCheckpointRecord, decodeCheckpointRecord } from '@weiliang0121/capix-checkpoint/storage';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'capix-cp-storage-'));

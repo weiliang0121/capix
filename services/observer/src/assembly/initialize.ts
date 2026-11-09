@@ -1,9 +1,9 @@
 import type { ModelInitialization } from '../conversation/model/types.js';
-import { Runner, Resources, type ObservationInstallation } from '@capix/server-runtime';
-import { Clock, type CheckpointInstallation } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { MessageUsage } from '@capix/measurement';
-import type { Message } from '@capix/protocol';
+import { Runner, Resources, type ObservationInstallation } from '@weiliang0121/capix-runtime';
+import { Clock, type CheckpointInstallation } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
+import type { Message } from '@weiliang0121/capix-protocol';
 import { createConversationStructure } from '../conversation/structure.js';
 import { registerConversationRecording } from '../conversation/recording.js';
 import { registerConversationResources } from '../conversation/binding.js';

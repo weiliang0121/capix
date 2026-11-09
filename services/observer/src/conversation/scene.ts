@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { Scene, checkpointPoint, childReference, type SceneWork } from '@capix/structure';
-import type { GenerationOutput } from '@capix/protocol';
+import { Scene, checkpointPoint, childReference, type SceneWork } from '@weiliang0121/capix-structure';
+import type { GenerationOutput } from '@weiliang0121/capix-protocol';
 import { acceptConversationRequest } from './accept.js';
 import { conversationSceneRequests, type ConversationSceneResources } from './resources.js';
 import { ConversationGroup } from './conversation.js';

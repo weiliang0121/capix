@@ -1,6 +1,6 @@
 # Callable Checkpoint 与有限恢复
 
-状态：2026-11-07，CP 载体与存储由 `@capix/checkpoint` 提供，调用事实发布与续接由 `@capix/invocation` 提供，Runtime 负责结构与恢复 Work 的装配。当前只接收 Frame v6；生产保存使用稳定事实的增量表示，完整 v6 Image 仍可显式冷导入。旧 CP 格式不读取、不迁移，也不进入执行恢复。普通调用仍只执行一次 run，旧 round 2/continuation 不复活。历史推演见 [Checkpoint 设计历史](checkpoint-design-history.md)；新对话服务已有显式 CLI/Web 恢复入口，不自动恢复旧提交。
+状态：2026-11-07，CP 载体与存储由 `@weiliang0121/capix-checkpoint` 提供，调用事实发布与续接由 `@weiliang0121/capix-invocation` 提供，Runtime 负责结构与恢复 Work 的装配。当前只接收 Frame v6；生产保存使用稳定事实的增量表示，完整 v6 Image 仍可显式冷导入。旧 CP 格式不读取、不迁移，也不进入执行恢复。普通调用仍只执行一次 run，旧 round 2/continuation 不复活。历史推演见 [Checkpoint 设计历史](checkpoint-design-history.md)；新对话服务已有显式 CLI/Web 恢复入口，不自动恢复旧提交。
 
 本轮已增加独立被动 `CheckpointInstallation.feedback`，覆盖正常 CP、恢复活动及恢复建立前失败；原 observation 的严格策略和 Store 提交规则保持。Runner 已提供 `observation` 元数据订阅，output 与 observation 都带本次入口 `entryId`，不改变恢复沿用的 Context 身份。该改动只补交付接缝，不扩大可恢复范围，也不把原始 CP 事实直接作为客户端协议。完整出口区分见 [运行出口](runtime-ports.md)。
 
@@ -12,14 +12,14 @@
 
 ## 包与协作边界
 
-| 归属                | 内容与责任                                                                                                |
-| ------------------- | --------------------------------------------------------------------------------------------------------- |
-| `@capix/checkpoint` | Frame/Image/Head/Delivery、持久引用值、纯数据检查与复制冻结、CheckpointStore 和 MemoryCheckpointStore     |
-| `@capix/contracts`  | 单次调用身份 InvocationIdentity，Codec、作者保存端口、refs、已核实事实等共同契约                          |
-| `@capix/structure`  | 具名 point、state、resume.deps/uses/run 及 reception 的作者配置关联                                       |
-| `@capix/invocation` | 消费稳定调用事实、发布新增正文与变化关系、核对固定调用契约、安装 Context/子关系、调用排他、续接与恢复观测 |
-| Runtime             | 解算当前结构的 CP 配置，接线供给、子构造入口与恢复 Work，维护 Runner 入口占用                             |
-| Observer 与独立实体 | SQLite 存储、对话资源依据、业务恢复资格、消息/记忆/文件固定效果确认、外部反馈读取                         |
+| 归属                             | 内容与责任                                                                                                |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `@weiliang0121/capix-checkpoint` | Frame/Image/Head/Delivery、持久引用值、纯数据检查与复制冻结、CheckpointStore 和 MemoryCheckpointStore     |
+| `@weiliang0121/capix-contracts`  | 单次调用身份 InvocationIdentity，Codec、作者保存端口、refs、已核实事实等共同契约                          |
+| `@weiliang0121/capix-structure`  | 具名 point、state、resume.deps/uses/run 及 reception 的作者配置关联                                       |
+| `@weiliang0121/capix-invocation` | 消费稳定调用事实、发布新增正文与变化关系、核对固定调用契约、安装 Context/子关系、调用排他、续接与恢复观测 |
+| Runtime                          | 解算当前结构的 CP 配置，接线供给、子构造入口与恢复 Work，维护 Runner 入口占用                             |
+| Observer 与独立实体              | SQLite 存储、对话资源依据、业务恢复资格、消息/记忆/文件固定效果确认、外部反馈读取                         |
 
 `server/checkpoint` 只依赖 contracts 和通用值比较工具，不依赖 Runtime、结构、资源、观测或数据库。它核验保存值自身的一致性：完整直接子关系、refs 归属、固定 owner/contract/input、revision 比较提交以及终态不可推进。当前结构是否兼容、宿主内容是否仍允许继续，则由 Runtime 与宿主分别核对。格式检查通过不等于取得恢复许可，也不形成通用任意快照能力。
 
@@ -39,7 +39,7 @@ runner.resume(contextId)
 
 Store 保持同步宿主端口，未强制放入普通业务 deps。最终交付在业务工作窗口结束后保存；保存失败仍属于调用必须承担的机制故障。每次恢复沿用稳定 Store 对象以维持本进程排他，不用临时端点身份替代它，也不承诺跨进程租约。
 
-持久类型、MemoryCheckpointStore、cloneCheckpoint*、checkpointReference* 和 CHECKPOINT_MAX_BYTES 从 `@capix/checkpoint` 根入口导入；Runtime 不再重导它们。CheckpointFact、CheckpointInstallation、CheckpointWriter 和 CheckpointRestoration 从 `@capix/invocation` 导入，Runtime 既有出口重导同一定义。其中 Fact 包含运行观测与内容事件，不能反向进入独立持久包。共同 Codec/Value/Contract 可继续从 contracts、structure 取得同一类型。`@capix/checkpoint/storage` 向宿主 Store 提供增量计划、完整重建与无损存储编码辅助，不拥有数据库或新的运行实体。
+持久类型、MemoryCheckpointStore、cloneCheckpoint*、checkpointReference* 和 CHECKPOINT_MAX_BYTES 从 `@weiliang0121/capix-checkpoint` 根入口导入；Runtime 不再重导它们。CheckpointFact、CheckpointInstallation、CheckpointWriter 和 CheckpointRestoration 从 `@weiliang0121/capix-invocation` 导入，Runtime 既有出口重导同一定义。其中 Fact 包含运行观测与内容事件，不能反向进入独立持久包。共同 Codec/Value/Contract 可继续从 contracts、structure 取得同一类型。`@weiliang0121/capix-checkpoint/storage` 向宿主 Store 提供增量计划、完整重建与无损存储编码辅助，不拥有数据库或新的运行实体。
 
 调用分包不增加恢复点或恢复范围。低层 Invocation 可以直接连接 CheckpointStore 和固定工作契约，不要求建立 Scene/Runner；完整框架仍由 Runtime 解算结构、检查资源与行动资格。`test/invocation-boundary-checkpoint.test.mjs` 验证新 Store、Context 与重建契约之间的续接：等待父层消费固定子交付、已接纳事实直接继续，以及缺失或不一致依据的拒绝。
 
@@ -82,7 +82,7 @@ CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理
 
 返回关系与最终交付保存真实子 round、phase、currentInput，不能从较早 CP 或父 round 推测。固定交付视图不伪造原 execute 中间结果或未保存的后代。GenerateAnswer 的显式再次生成核对原拒绝码、诊断与真实 handled 关系，恢复不重置次数或产生第三次生成。
 
-`@capix/checkpoint` 提供 `MemoryCheckpointStore`，服务提供 `SqliteCheckpointStore` 并直接实现同一包的 CheckpointStore。SQLite CP/head 独立事务复用宿主 WAL/FULL 独占连接，与内容实体和模型交互的提交边界分开。每个完整逻辑 image、delivery、对话构造依据分别限制 8 MiB；Image 同时保持100000值、深度64及4096条直接关系上限，物理块共享仍按逻辑出现次数计费；拒绝 getter、函数、活实体、循环和超深结构。head 按 revision 比较更新，终态不可再推进；宿主复用同一端口并独占恢复入口，不承诺跨进程租约或多写者接管。声明版本不兼容明确拒绝，不自动迁移旧 CP。
+`@weiliang0121/capix-checkpoint` 提供 `MemoryCheckpointStore`，服务提供 `SqliteCheckpointStore` 并直接实现同一包的 CheckpointStore。SQLite CP/head 独立事务复用宿主 WAL/FULL 独占连接，与内容实体和模型交互的提交边界分开。每个完整逻辑 image、delivery、对话构造依据分别限制 8 MiB；Image 同时保持100000值、深度64及4096条直接关系上限，物理块共享仍按逻辑出现次数计费；拒绝 getter、函数、活实体、循环和超深结构。head 按 revision 比较更新，终态不可再推进；宿主复用同一端口并独占恢复入口，不承诺跨进程租约或多写者接管。声明版本不兼容明确拒绝，不自动迁移旧 CP。
 
 ### 固定事实与首次持久表示
 

@@ -2,7 +2,7 @@ import { ResourcePortError } from './errors.js';
 import type { ResourceEventConsumer } from './facts.js';
 import type { ResourceActivity, ResourceOperationDescription } from './activity.js';
 import type { ResourceOperation } from './methods.js';
-import type { OperationOptions, OperationResult } from '@capix/contracts';
+import type { OperationOptions, OperationResult } from '@weiliang0121/capix-contracts';
 
 export interface ResourceOperationSource {
   readonly offerId: string;

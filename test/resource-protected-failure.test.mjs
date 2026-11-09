@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Resources as ResourceRegistry, Resource, ResourceOffer, ResourceAccessClosed, ResourcePortError } from '@capix/resources';
+import { Resources as ResourceRegistry, Resource, ResourceOffer, ResourceAccessClosed, ResourcePortError } from '@weiliang0121/capix-resources';
 
 const policy = { isProtected: () => false, isCancellation: () => false, describe: () => null };
 
@@ -96,7 +96,7 @@ test('an aggregate of ordinary operation failures remains eligible for explicit 
 });
 
 test('a child resource closed-window failure cannot be accepted as a parent fallback', async () => {
-  const { Node, Scene, Resources, Runner } = await import('@capix/server-runtime');
+  const { Node, Scene, Resources, Runner } = await import('@weiliang0121/capix-runtime');
   for (const wrapped of [false, true]) {
     const closed = new ResourceAccessClosed();
     const failure = wrapped ? new AggregateError([new ResourcePortError('invalid port'), closed]) : closed;

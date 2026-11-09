@@ -1,9 +1,9 @@
-import type { CallableKind } from '@capix/contracts';
-import type { ChildCallable, CallableStructure, Composite, CheckpointReferenceSlots } from '@capix/structure';
-import { resourceRequests, type ResourceRequirements, isResourceRefinement, type ResourceRefinement } from '@capix/resources';
+import type { CallableKind } from '@weiliang0121/capix-contracts';
+import type { ChildCallable, CallableStructure, Composite, CheckpointReferenceSlots } from '@weiliang0121/capix-structure';
+import { resourceRequests, type ResourceRequirements, isResourceRefinement, type ResourceRefinement } from '@weiliang0121/capix-resources';
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
-import { childKinds } from '@capix/structure/construction';
+import { childKinds } from '@weiliang0121/capix-structure/construction';
 import { originalReception, snapshotDefinition, snapshotObservation, type CallableSnapshot } from './snapshot.js';
 import type { InvocationObservationDeclaration } from './observation.js';
 

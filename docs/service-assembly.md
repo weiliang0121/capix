@@ -20,7 +20,7 @@ Observer 使用 `Scene + Resources + Runner`。先独立定义和持有实体，
 
 这里没有新增通用装配容器。`ConversationCallCapture` 是服务所需的按次关联，不是内核 Source；它不选择资源、不发送模型请求。`ObserverRecording` 则有真实的安装和关闭生命周期，持有 Recorder、RecordSource 与持久会话，正常关闭和安装失败分别处理。消费端通过 `environment.records.book/source/installation/archives` 访问，不再在环境上保留同义的展开入口。
 
-内容实体与计数从 `@capix/transcript`、`@capix/memory` 和 `@capix/measurement` 导入。`@capix/observer-content` 提供 ActiveView 策略并组合内容及同步；ActiveView 内部使用通用 View，但保留 Observer 的保存和维护规则。内容组合只消费宿主提供的窄持久端口，不依赖 Runtime、Observer 服务或 SQLite。内容加载、初始化及借用身份校验仍留在 `assembly/content.ts`；分包不改变环境借用内容、宿主持有内容的关闭关系。具体边界见 [内容实体与独立包](content-entities-packages.md)。
+内容实体与计数从 `@weiliang0121/capix-transcript`、`@weiliang0121/capix-memory` 和 `@weiliang0121/capix-measurement` 导入。`@capix/observer-content` 提供 ActiveView 策略并组合内容及同步；ActiveView 内部使用通用 View，但保留 Observer 的保存和维护规则。内容组合只消费宿主提供的窄持久端口，不依赖 Runtime、Observer 服务或 SQLite。内容加载、初始化及借用身份校验仍留在 `assembly/content.ts`；分包不改变环境借用内容、宿主持有内容的关闭关系。具体边界见 [内容实体与独立包](content-entities-packages.md)。
 
 ## 装配主线
 

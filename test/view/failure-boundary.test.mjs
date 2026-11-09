@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@capix/diagnostics';
-import { ExceptionContract } from '@capix/invocation';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group, Node, Scene } from '@capix/structure';
-import { openViewManager } from '@capix/view';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { ExceptionContract } from '@weiliang0121/capix-invocation';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group, Node, Scene } from '@weiliang0121/capix-structure';
+import { openViewManager } from '@weiliang0121/capix-view';
 import { conflict, fixture } from './fixtures.mjs';
 
 const mutations = {

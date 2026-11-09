@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ProgressChannel } from '@capix/changes';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { MessageUsage } from '@capix/measurement';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { MessageUsage } from '@weiliang0121/capix-measurement';
 import { initializeObserver } from '@capix/observer-service/assembly';
 import { ActiveView } from '@capix/observer-content';
 import { createConversationStructure, ModelInteractions, ModelSource, registerConversationResources, ConversationCallCapture, conversationCallHooks } from '@capix/observer-service/conversation';

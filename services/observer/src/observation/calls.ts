@@ -1,5 +1,5 @@
-import type { CallableRecord as CallableRecordValue, ExecutionRecordSnapshot, InvocationBoundaryRecord as BoundaryValue } from '@capix/protocol';
-import { CallableRecord, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, ResourceRecord, TranscriptRecord, MemoryRecord, CompositeRecord, type BaseRecord, type RecordBook } from '@capix/records';
+import type { CallableRecord as CallableRecordValue, ExecutionRecordSnapshot, InvocationBoundaryRecord as BoundaryValue } from '@weiliang0121/capix-protocol';
+import { CallableRecord, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, ResourceRecord, TranscriptRecord, MemoryRecord, CompositeRecord, type BaseRecord, type RecordBook } from '@weiliang0121/capix-records';
 
 /** A service role attached to this exact business declaration, independent of Callable kind. */
 export const conversationTaskRole = 'conversation-task';

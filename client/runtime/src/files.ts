@@ -1,4 +1,4 @@
-import type { FileTask, FileOutput } from '@capix/protocol';
+import type { FileTask, FileOutput } from '@weiliang0121/capix-protocol';
 import { isEqual } from 'es-toolkit';
 import { isPlainObject } from 'es-toolkit/predicate';
 

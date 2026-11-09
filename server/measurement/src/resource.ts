@@ -1,6 +1,6 @@
-import { ResourceOffer } from '@capix/resources';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 import type { MessageUsage } from './usage.js';
-import type { Message } from '@capix/protocol';
+import type { Message } from '@weiliang0121/capix-protocol';
 
 export const MessageUsageResource = Object.freeze({
   record: new ResourceOffer({

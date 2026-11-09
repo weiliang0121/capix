@@ -1,8 +1,8 @@
 # 记录机制与特化处理
 
-记录实体由 `@capix/records`（`server/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@capix/records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`server/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。
+记录实体由 `@weiliang0121/capix-records`（`server/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@weiliang0121/capix-records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`server/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。
 
-Runtime 的 `@capix/server-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `server/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 提供事实到记录的映射。实体包不依赖 Runtime、结构或内容实体包。
+Runtime 的 `@weiliang0121/capix-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `server/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 提供事实到记录的映射。实体包不依赖 Runtime、结构或内容实体包。
 
 Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 RecordClock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 `server/records/src/tree/`，具体关系规则位于 `tree/relation.ts`，不处理 Context、业务正文或 ExecutionRecordSnapshot。
 
@@ -33,9 +33,9 @@ flowchart LR
 
 普通业务通过 `RecordResource.read` 的 `get(id)` / `snapshot()` 读取纯数据快照，通过 `RecordResource.write` 的 `create(value)` 创建 `kind: 'custom'` 记录并取得快照。写口只接收内容，由实体生成身份；调用方不能指定调用归属、生命周期事实或任意记录类型。读取与创建保持同步，返回值经过记录正文的复制、检查和冻结，不暴露 Book、Recorder 或活记录对象。
 
-宿主自动记录使用 `@capix/records/construction` 的 RecordWriterResource：`root()` 建立记录安装根，`add(record)` 登记准确记录对象，`update(record, apply, describe?)` 核验同一实例后更新，`boundary(location, type)` 登记调用边界。这个写口在观察窗口中使用活记录句柄，沿用实体、登记及关系检查；普通业务资源不提供这些操作。
+宿主自动记录使用 `@weiliang0121/capix-records/construction` 的 RecordWriterResource：`root()` 建立记录安装根，`add(record)` 登记准确记录对象，`update(record, apply, describe?)` 核验同一实例后更新，`boundary(location, type)` 登记调用边界。这个写口在观察窗口中使用活记录句柄，沿用实体、登记及关系检查；普通业务资源不提供这些操作。
 
-RecordingInstallation 在内部用 `@capix/resources` 的 Resources 登记固定 Recorder，并通过 `Resources.bind` 固定 RecordWriterResource 申请。安装根以及每个被消费的调用、资源、消息或记忆事实，分别 `open()` 一个无 ResourceOwner 的访问窗口，在同步写入后的 `finally` 中 `close()`。窗口由观察消费持有，独立于业务 Work 的取消与终态；因此业务工作退出时仍可登记真实终态和边界。窗口关闭后保存的端点立即失效。
+RecordingInstallation 在内部用 `@weiliang0121/capix-resources` 的 Resources 登记固定 Recorder，并通过 `Resources.bind` 固定 RecordWriterResource 申请。安装根以及每个被消费的调用、资源、消息或记忆事实，分别 `open()` 一个无 ResourceOwner 的访问窗口，在同步写入后的 `finally` 中 `close()`。窗口由观察消费持有，独立于业务 Work 的取消与终态；因此业务工作退出时仍可登记真实终态和边界。窗口关闭后保存的端点立即失效。
 
 这些内部访问窗口不接入被记录调用的资源观察链，不把记录写入再次作为同一预设的资源事实递归消费。Recorder 自身的 RecordChangeEvent 捕获与同步订阅出口继续发布；isolate / propagate、消费者失效和来源完整性规则保持原有含义。该窗口分离不改变业务调用控制、Checkpoint 保存格式或恢复范围。
 
@@ -81,7 +81,7 @@ Memories 和 Transcript 负责审查与落实内容，自身不依赖 Recorder�
 
 TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UID 和绝对 index 用于跨端定位；TranscriptRangeRef/MessageRef 只可在内部实体适配中使用，不能进入记录正文。snapshotValue 对普通记录数据执行复制、检查、冻结，不再识别并保留这些实体引用。
 
-`observeMemory` 从 `@capix/records` 导入，按结构兼容的只读输入组合当前记忆内容与已有 MemoryRecord。它只要求集合提供 `transcript.id` 和 `values()`，使用协议中的记忆值；记录包不依赖 `@capix/memory`，也不持有或恢复 Memories。
+`observeMemory` 从 `@weiliang0121/capix-records` 导入，按结构兼容的只读输入组合当前记忆内容与已有 MemoryRecord。它只要求集合提供 `transcript.id` 和 `values()`，使用协议中的记忆值；记录包不依赖 `@weiliang0121/capix-memory`，也不持有或恢复 Memories。
 
 ## 资源运行事实
 

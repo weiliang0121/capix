@@ -1,4 +1,4 @@
-import { Resources, Runner, RecordingInstallation } from '@capix/server-runtime';
+import { Resources, Runner, RecordingInstallation } from '@weiliang0121/capix-runtime';
 import { registerConversationResources, registerConversationRecording, ConversationCallCapture, conversationCallHooks } from '@capix/observer-service/conversation';
 
 /** Service tests exercise the same resource registration and Runner path as the host. */

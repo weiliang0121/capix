@@ -4,7 +4,7 @@
 
 ## 仓库边界与工作方式
 
-- CAPiX 是独立的 C/S 可观测 Agent 框架。仓库内 Observer 和 Conversation 是验证内核的参考服务，业务策略不自动上升为内核规则。
+- CAPiX 是独立的 C/S 可观测 Agent 框架。仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用可在后续独立任务中按边界迁出，本轮不迁移目录或仓库。仓库内 Observer 和 Conversation 是验证内核的参考服务，业务策略不自动上升为内核规则。
 - **外部业务装配项目可以只读参考 CAPiX 的代码、文档和公开包，不能因业务任务自行修改 CAPiX 的源码、测试、配置、文档或 AGENTS.md。** 发现内核缺口时先在业务项目记录复现与建议，由用户在 CAPiX 的任务中明确决定并授权变更。业务装配任务的授权不包含回写框架。
 - 外部业务项目的凭证、环境路径、交付规则与工作约定留在各自仓库，不写入 CAPiX，不作为框架依赖。不读取其他项目凭证，不从外部配置或 Git 历史取得隐式运行环境。CAPiX 自身配置正常维护。
 - 相邻 capix-explorations 只在用户需要时只读参考；不复制旧工程的整套模块或治理配置，不作为运行依赖或当前设计约束。
@@ -14,6 +14,8 @@
 - 不推进 TRS、动态调度、外部能力平台、权限系统或强制 continue-as-new；新增需求需独立论证。不要把性能优化扩大成新的恢复或事务承诺。
 
 ## 包与依赖边界
+
+品牌保持 CAPiX，首批 npm 公开包为 `contracts`、`protocol` 和全部 15 个 `server/*`，统一使用用户已持有的 `@weiliang0121` scope 与 `capix-` 前缀；`server/runtime` 的包名为 `@weiliang0121/capix-runtime`。六个 `client/*`、`services/*`、`apps/*` workspace 暂时保留现有 `@capix/*` 私有身份，不纳入首发。发布契约见 [npm 发布](docs/npm-publishing.md)。
 
 一个根 pnpm Workspace 与锁文件。包按职责划分，跨包只使用公开出口，不导入其他包的 src/dist 私有路径；包独立不意味着新增实体生命周期。
 

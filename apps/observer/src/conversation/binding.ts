@@ -1,6 +1,6 @@
 import type { ConversationSession, ClientTrackingStore } from '@capix/client-runtime';
 import type { SessionHttpTransport } from '@capix/client-http';
-import type { ConversationCallDetail, ConversationInspection, ConversationRecoverySummary, ConversationRecordingState } from '@capix/protocol';
+import type { ConversationCallDetail, ConversationInspection, ConversationRecoverySummary, ConversationRecordingState } from '@weiliang0121/capix-protocol';
 
 type Loading = 'idle' | 'loading' | 'ready' | 'failed';
 type SessionState = ConversationSession['snapshot'];

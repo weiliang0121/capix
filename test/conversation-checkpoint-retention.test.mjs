@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { retainedCheckpointBytes } from './fixtures/checkpoint-accounting.mjs';
 
 const image = (id, contextId = 'root', parentContextId) => ({ id, formatVersion: 6, contract: { key: 'retention-fixture', version: 1 }, point: 'waiting', frame: { owner: { contextId, kind: parentContextId ? 'node' : 'scene', ...(parentContextId ? { parentContextId } : {}) }, round: 1, phase: 'execute', input: { question: 'fixed' }, currentInput: { question: 'fixed' }, nextChildOrder: 0, children: [] }, state: { text: '保留完整的当前依据🙂'.repeat(100) }, references: {} });

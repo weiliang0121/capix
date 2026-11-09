@@ -1,10 +1,10 @@
 import type { AnyCallable } from '../binding/declarations.js';
 import type { ChildResourceBinding } from '../binding/resources.js';
-import { type ChildCallable, Callable } from '@capix/structure';
-import type { CallableInput, Stable } from '@capix/contracts';
-import type { InteractionContract } from '@capix/interaction';
-import type { InteractionChannel, Interactions } from '@capix/interaction';
-import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement, Resource } from '@capix/resources';
+import { type ChildCallable, Callable } from '@weiliang0121/capix-structure';
+import type { CallableInput, Stable } from '@weiliang0121/capix-contracts';
+import type { InteractionContract } from '@weiliang0121/capix-interaction';
+import type { InteractionChannel, Interactions } from '@weiliang0121/capix-interaction';
+import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement, Resource } from '@weiliang0121/capix-resources';
 
 export interface ResourceRegistration {
   readonly offer: ResourceIdentity;

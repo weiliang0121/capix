@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { ModelExchanges, type ModelExchangesState } from '@capix/model-exchanges';
+import { ModelExchanges, type ModelExchangesState } from '@weiliang0121/capix-model-exchanges';
 import type { ConversationExchanges, ExchangeArchiveMetadata } from '../persistence/exchanges.js';
 
 export interface ToolExchangeSelection {

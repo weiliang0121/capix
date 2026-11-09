@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Transcript } from '@capix/transcript';
+import { Transcript } from '@weiliang0121/capix-transcript';
 import { DefaultConversationDecision, FunctionConversationDecision } from '@capix/observer-service';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild, resourceBindingFor } from '../fixtures/observer.mjs';

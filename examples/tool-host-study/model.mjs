@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { createYieldingFetch } from '@capix/conversation-service/assembly';
 
 export function studyModel({ live, thinking, modelCalls = 3, toolSlots = 1, metrics, onDispatch }) {

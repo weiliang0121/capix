@@ -1,5 +1,5 @@
 import { pick } from 'es-toolkit/object';
-import type { InvocationBoundaryRecord as BoundaryData, InvocationBoundaryValue } from '@capix/protocol';
+import type { InvocationBoundaryRecord as BoundaryData, InvocationBoundaryValue } from '@weiliang0121/capix-protocol';
 import { BaseRecord } from '../../record.js';
 
 export type InvocationBoundaryRecordOptions = Omit<BoundaryData, 'id' | 'value' | 'parentId' | 'scopeId'> & { readonly scopeId?: string };

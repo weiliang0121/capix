@@ -1,7 +1,7 @@
-import type { CallableKind, ChildContract, ChildReference, CheckpointOccurrence, CheckpointSelection, OperationOutcome } from '@capix/contracts';
-import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/structure';
-import type { CallableContext, InvocationCheckpointWork, InvocationCheckpointSelection, InvocationCheckpointOccurrence, InvocationWork, Invocation } from '@capix/invocation';
-import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
+import type { CallableKind, ChildContract, ChildReference, CheckpointOccurrence, CheckpointSelection, OperationOutcome } from '@weiliang0121/capix-contracts';
+import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@weiliang0121/capix-structure';
+import type { CallableContext, InvocationCheckpointWork, InvocationCheckpointSelection, InvocationCheckpointOccurrence, InvocationWork, Invocation } from '@weiliang0121/capix-invocation';
+import type { CheckpointReferences, CheckpointReference } from '@weiliang0121/capix-checkpoint';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';
 import { InvocationAccess } from './access.js';
@@ -68,7 +68,7 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
         }),
       ),
     );
-    return point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('@capix/structure').SavedReferences<any>);
+    return point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('@weiliang0121/capix-structure').SavedReferences<any>);
   }
 
   private childPort(access: ReturnType<InvocationAccess<Input, Output, Context>['enter']>) {
@@ -164,11 +164,11 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
           state: point.state,
           references: Object.fromEntries(
             Object.entries(point.references).map(([name, slot]) => {
-              const reference = slot as { definition: import('@capix/structure').ChildContract; many: boolean };
+              const reference = slot as { definition: import('@weiliang0121/capix-structure').ChildContract; many: boolean };
               return [name, { cardinality: reference.many ? ('many' as const) : ('one' as const), position: this.children.position(reference.definition) }];
             }),
           ),
-          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('@capix/invocation').DecodedCheckpointFrame) => {
+          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('@weiliang0121/capix-invocation').DecodedCheckpointFrame) => {
             const query = savedCheckpointFacts(decoded, references, this.children, this.#childBindingsBuilder.receptions);
             try {
               return point.check?.(state, query.facts as never);

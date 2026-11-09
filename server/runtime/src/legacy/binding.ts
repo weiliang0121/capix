@@ -1,5 +1,5 @@
-import type { ResourceProvider } from '@capix/resources';
-import type { CallableInput } from '@capix/contracts';
+import type { ResourceProvider } from '@weiliang0121/capix-resources';
+import type { CallableInput } from '@weiliang0121/capix-contracts';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from '../construction/capabilities.js';
 import { collectObservationProvides, type ChildResourceBinding } from '../binding/resources.js';
 import { resolveDeclaration, type AnyCallable } from '../binding/declarations.js';

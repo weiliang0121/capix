@@ -1,6 +1,6 @@
-import type { InvocationEvent } from '@capix/protocol';
-import type { ChangeCapture } from '@capix/changes';
-import { captureChange } from '@capix/changes';
+import type { InvocationEvent } from '@weiliang0121/capix-protocol';
+import type { ChangeCapture } from '@weiliang0121/capix-changes';
+import { captureChange } from '@weiliang0121/capix-changes';
 
 import type { InvocationIdentity } from '../observation/facts.js';
 

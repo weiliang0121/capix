@@ -1,6 +1,6 @@
-import { Runner, Resources, type CheckpointInstallation, type InvocationProgress, type ObservationInstallation, type RunnerObservation, type RunnerObservationEvent, type RunnerObservationReceiver } from '@capix/server-runtime';
-import type { RootInvocationOptions } from '@capix/server-runtime/construction';
-import { Scene } from '@capix/structure';
+import { Runner, Resources, type CheckpointInstallation, type InvocationProgress, type ObservationInstallation, type RunnerObservation, type RunnerObservationEvent, type RunnerObservationReceiver } from '@weiliang0121/capix-runtime';
+import type { RootInvocationOptions } from '@weiliang0121/capix-runtime/construction';
+import { Scene } from '@weiliang0121/capix-structure';
 
 const runner = new Runner(new Scene<string, string>({ run: (work) => work.input }), new Resources()).build();
 const observation: RunnerObservation = runner.observation;

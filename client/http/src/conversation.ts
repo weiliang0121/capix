@@ -1,5 +1,5 @@
 import { TranscriptConnectionError, SubmissionUnavailableError, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
-import type { ConversationSubmissionBaseline, ConversationSubmissionFrame, ConversationSubmissionRequest, TranscriptFrame } from '@capix/protocol';
+import type { ConversationSubmissionBaseline, ConversationSubmissionFrame, ConversationSubmissionRequest, TranscriptFrame } from '@weiliang0121/capix-protocol';
 import { HttpTransport } from './transport.js';
 import { HttpError, HttpTransportError } from './errors.js';
 import { acceptResponse, conversationResponse, conversationsResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionBaselineResponse, submissionDiscoveryResponse, submissionFrameResponse, responseStatusError, parseLine, deliver } from './responses.js';

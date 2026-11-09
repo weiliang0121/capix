@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeError } from '@capix/contracts';
-import { MemoryResource } from '@capix/memory';
-import { Resource, ResourceAccessClosed, ResourceOffer, Resources } from '@capix/resources';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { MemoryResource } from '@weiliang0121/capix-memory';
+import { Resource, ResourceAccessClosed, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
 import { memoryBasis, memoryCreate, memoryFixture, memoryUpdate, resourceInvocation, resourceOwner } from './resource-promises.mjs';
 
 function openMemory(t, fixture, contextId = 'resource-promises') {

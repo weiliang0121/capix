@@ -4,11 +4,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import ts from 'typescript';
-import * as structures from '@capix/structure';
-import { Scene, Group, Node, checkpointPoint, childReference, reception } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Runner, Resources, Scene as RuntimeScene, Group as RuntimeGroup, Node as RuntimeNode } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import * as structures from '@weiliang0121/capix-structure';
+import { Scene, Group, Node, checkpointPoint, childReference, reception } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Runner, Resources, Scene as RuntimeScene, Group as RuntimeGroup, Node as RuntimeNode } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 test('structure authors can configure a complete tree without loading or executing a runtime', () => {
   const child = spawnSync(
@@ -18,7 +18,7 @@ test('structure authors can configure a complete tree without loading or executi
       '--eval',
       `
     import assert from 'node:assert/strict';
-    import { Scene, Group, Node, defineNode } from '@capix/structure';
+    import { Scene, Group, Node, defineNode } from '@weiliang0121/capix-structure';
     let calls = 0;
     const leaf = defineNode()({ run: () => ++calls });
     const group = new Group().add({ leaf });
@@ -134,15 +134,15 @@ test('structure checkpoint and reception contracts reconnect to runtime recovery
 test('structure declarations have no reverse runtime dependency or private cross-package imports', async () => {
   const root = new URL('../server/structure/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
-  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@capix/contracts', '@capix/resources']);
-  assert.equal(manifest.peerDependencies?.['@capix/server-runtime'], undefined);
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@weiliang0121/capix-contracts', '@weiliang0121/capix-resources']);
+  assert.equal(manifest.peerDependencies?.['@weiliang0121/capix-runtime'], undefined);
   async function inspect(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const child = new URL(entry.name + (entry.isDirectory() ? '/' : ''), directory);
       if (entry.isDirectory()) await inspect(child);
       else if (entry.name.endsWith('.d.ts') || entry.name.endsWith('.js')) {
         const content = await readFile(child, 'utf8');
-        assert.doesNotMatch(content, /@capix\/server-runtime|(?:\.\.\/)+runtime\/|@capix\/[\w-]+\/(?:src|dist)\//, fileURLToPath(child));
+        assert.doesNotMatch(content, /@weiliang0121\/capix-runtime|(?:\.\.\/)+runtime\/|(?:@capix\/|@weiliang0121\/capix-)[\w-]+\/(?:src|dist)\//, fileURLToPath(child));
       }
     }
   }

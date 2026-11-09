@@ -1,4 +1,4 @@
-import type { MemoryRecordValue } from '@capix/protocol';
+import type { MemoryRecordValue } from '@weiliang0121/capix-protocol';
 import type { RecordBook } from '../book.js';
 import { MemoryRecord, type MemoryRecordOptions } from './record.js';
 

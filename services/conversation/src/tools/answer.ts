@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork, type ResumeWork } from '@capix/structure';
+import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork, type ResumeWork } from '@weiliang0121/capix-structure';
 import type { ConversationMaterialInput } from '../materials/input.js';
 import { materialInputCodec, materialInputSchema } from '../recovery/model-codecs.js';
 import { emptyCodec, stringCodec } from '../recovery/codecs.js';

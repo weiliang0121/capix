@@ -1,8 +1,8 @@
-import { RuntimeError } from '@capix/contracts';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { ConversationContent } from '@capix/observer-content';
-import type { Message } from '@capix/protocol';
+import type { Message } from '@weiliang0121/capix-protocol';
 import type { SqliteObserverStore } from '../persistence/store.js';
 
 /** Resolve content ownership and durable identity before installing a running environment. */

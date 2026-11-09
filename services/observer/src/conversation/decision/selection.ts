@@ -1,6 +1,6 @@
-import type { ConversationTask } from '@capix/protocol';
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
-import { ResourceOffer } from '@capix/resources';
+import type { ConversationTask } from '@weiliang0121/capix-protocol';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 export interface TaskSelection {
   select(task: ConversationTask): void;

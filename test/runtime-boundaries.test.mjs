@@ -3,12 +3,12 @@ import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { InvocationRecordHelper } from '@capix/records';
+import { InvocationRecordHelper } from '@weiliang0121/capix-records';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext } from '@capix/invocation';
-import { RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix/records';
-import { Driver, defineNode } from '@capix/server-runtime';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
+import { RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@weiliang0121/capix-records';
+import { Driver, defineNode } from '@weiliang0121/capix-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { initializeObserver, createConversationStructure, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
 

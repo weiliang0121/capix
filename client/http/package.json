@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/protocol": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0",
     "@capix/client-runtime": "workspace:*",
     "zod": "4.6.5"

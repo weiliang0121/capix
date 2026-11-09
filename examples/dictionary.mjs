@@ -1,6 +1,6 @@
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Resource, ResourceOffer } from '@capix/resources';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
 export function createDictionaryRunner(words = new Map([['hello', '你好']])) {
   const dictionary = new Resource(words);

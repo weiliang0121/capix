@@ -1,7 +1,7 @@
-import { Resource, ResourceOffer, Resources } from '@capix/resources';
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { View, openView, openViewManager, type SyncViewSource, type ViewSource, type ViewState, type SourceStamp } from '@capix/view';
+import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { View, openView, openViewManager, type SyncViewSource, type ViewSource, type ViewState, type SourceStamp } from '@weiliang0121/capix-view';
 
 declare function expectType<Value>(value: Value): void;
 declare const stamp: SourceStamp;

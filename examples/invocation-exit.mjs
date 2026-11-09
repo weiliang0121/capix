@@ -1,9 +1,9 @@
 // Diagnostic probes, not a recommended application pattern. No real model or disk store.
 // `node examples/invocation-exit.mjs` exits nonzero while an exit guarantee is unmet.
-import { Resource, ResourceOffer, ResourceSupply } from '@capix/resources';
-import { CallableContext, Invocation, InvocationResources, invocationResourceFailures } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Scene, Resources, Runner } from '@capix/server-runtime';
+import { Resource, ResourceOffer, ResourceSupply } from '@weiliang0121/capix-resources';
+import { CallableContext, Invocation, InvocationResources, invocationResourceFailures } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Scene, Resources, Runner } from '@weiliang0121/capix-runtime';
 
 function deferred() {
   let resolve;

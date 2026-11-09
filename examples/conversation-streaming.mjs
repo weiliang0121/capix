@@ -1,5 +1,5 @@
 import { createConversationRunner } from '@capix/conversation-service';
-import { Transcript } from '@capix/transcript';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const transcript = new Transcript();
 const model = {

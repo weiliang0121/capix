@@ -1,5 +1,5 @@
 import { createInterface, type Interface } from 'node:readline';
-import { Runner } from '@capix/server-runtime';
+import { Runner } from '@weiliang0121/capix-runtime';
 import { loadConversationContent } from '../assembly/index.js';
 import { createConversationHostAssembly } from '../hosting/assembly.js';
 import { ConversationStore } from '../persistence/index.js';

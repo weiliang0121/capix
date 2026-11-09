@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeError } from '@capix/contracts';
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { Memories, MemoryViewSource } from '@capix/memory';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
 
 const changed = (error) => error instanceof RuntimeError && error.code === 'VIEW_SOURCE_CONFLICT';
 

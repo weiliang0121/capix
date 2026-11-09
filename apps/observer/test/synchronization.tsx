@@ -1,7 +1,7 @@
 // Open /test/synchronization.html through Vite. All delivery is local; no service or model is used.
 import { createRoot } from 'react-dom/client';
 import { ClientRuntime, TranscriptConnectionError, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
-import type { TranscriptFrame, TranscriptSnapshot } from '@capix/protocol';
+import type { TranscriptFrame, TranscriptSnapshot } from '@weiliang0121/capix-protocol';
 import { createApplication } from '../src/binding/application';
 import { AppProvider } from '../src/state/react';
 import { ConversationPanel } from '../src/features/conversation/ConversationPanel';

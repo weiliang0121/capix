@@ -1,5 +1,5 @@
 import { observationStatus } from '../observation/status.js';
-import { hasOutput, readOutput, type MemoryObservation, type MemoryRecord, type ExecutionRecordSnapshot } from '@capix/protocol';
+import { hasOutput, readOutput, type MemoryObservation, type MemoryRecord, type ExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import { executionResources } from './resources.js';

@@ -1,6 +1,6 @@
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationDescriptor, type ConversationListResponse, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type ConversationSubmissionBaseline, type ConversationSubmissionDiscovery, type ConversationSubmissionFrame, type AnswerPreviewSnapshot, type AnswerPreviewChange, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
+import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationDescriptor, type ConversationListResponse, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type ConversationSubmissionBaseline, type ConversationSubmissionDiscovery, type ConversationSubmissionFrame, type AnswerPreviewSnapshot, type AnswerPreviewChange, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@weiliang0121/capix-protocol';
 import { HttpError, type HttpResponseInfo, HttpTransportError } from './errors.js';
 
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);

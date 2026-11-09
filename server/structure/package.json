@@ -1,5 +1,5 @@
 {
-  "name": "@capix/structure",
+  "name": "@weiliang0121/capix-structure",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -18,8 +18,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/resources": "workspace:*",
-    "@capix/contracts": "workspace:*"
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*"
   },
   "description": "Composable Scene, Group, and Node structures for CAPiX.",
   "license": "MIT",

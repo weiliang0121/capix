@@ -17,16 +17,16 @@
 | Invocation / CallableContext     | 本次活动协调 / 本次语义状态                | 可复用业务结构                      |
 | Work                             | 业务在当前窗口可用的输入与操作端点         | 内部 Invocation、Context 或绑定对象 |
 
-`@capix/structure` 持有结构及作者配置，`@capix/contracts` 持有两侧共用的端口；运行装配、Invocation 与恢复实现由 `@capix/server-runtime` 提供。Runtime 根入口重导相同结构对象，既有导入不产生第二套类或身份。
+`@weiliang0121/capix-structure` 持有结构及作者配置，`@weiliang0121/capix-contracts` 持有两侧共用的端口；运行装配、Invocation 与恢复实现由 `@weiliang0121/capix-runtime` 提供。Runtime 根入口重导相同结构对象，既有导入不产生第二套类或身份。
 
 Scene 和 Group 具有成员组合能力，Node 在类型和构建检查中都拒绝成员。Scene 用作根，Group/Node 是合法成员。空 Group 仍是组合体。结构共享处理函数和资源实体，一个 Group/Node 实例只占据一个父位置；重复加入同一父去重，跨父共享和循环拒绝。
 
 ## 配置、构建、调用
 
 ```ts
-import { Scene, defineNode } from '@capix/structure';
-import { Runner, Resources } from '@capix/server-runtime';
-import { Resource, ResourceOffer } from '@capix/resources';
+import { Scene, defineNode } from '@weiliang0121/capix-structure';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
 const dictionary = new Resource(new Map([['hello', '你好']]));
 const lookup = new ResourceOffer({

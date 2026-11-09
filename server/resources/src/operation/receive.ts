@@ -1,4 +1,4 @@
-import type { OperationOutcome, OperationResult, Reception } from '@capix/contracts';
+import type { OperationOutcome, OperationResult, Reception } from '@weiliang0121/capix-contracts';
 
 /** Outcome production and result reception are distinct: never catch a receiver as an operation failure. */
 export async function receiveOperation<Value, Failure, Options extends { readonly result?: Reception<Value, Failure, unknown> } = {}>(outcome: OperationOutcome<Value, Failure>, options?: Options): Promise<OperationResult<Value, Options>> {

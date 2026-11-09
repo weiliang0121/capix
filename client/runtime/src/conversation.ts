@@ -1,4 +1,4 @@
-import type { Message } from '@capix/protocol';
+import type { Message } from '@weiliang0121/capix-protocol';
 import type { ClientSubmissionState } from './submission.js';
 import type { TranscriptState } from './transcript.js';
 

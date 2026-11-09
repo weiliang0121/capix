@@ -3,8 +3,8 @@ import { syncBuiltinESMExports } from 'node:module';
 import { performance } from 'node:perf_hooks';
 import { DatabaseSync } from 'node:sqlite';
 import zlib from 'node:zlib';
-import { Invocation } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { Invocation } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 
 // Diagnostic preload only. The ordinary capacity suite does not import this file.

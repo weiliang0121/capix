@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Resources, Runner, Scene } from '@capix/server-runtime';
+import { Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 import { InvocationLifecycleProbe, lifecycleBinding, lifecycleCodec, lifecycleReception } from './invocation-lifecycle.mjs';
 
 function declarations() {

@@ -1,5 +1,5 @@
-import { Interactions, type InteractionRegistration } from '@capix/interaction';
-import type { ModelProvider, ModelRequest, ModelReply } from '@capix/model-provider';
+import { Interactions, type InteractionRegistration } from '@weiliang0121/capix-interaction';
+import type { ModelProvider, ModelRequest, ModelReply } from '@weiliang0121/capix-model-provider';
 import { CompletionInteraction } from '../model/completion-contract.js';
 import { resolveToolBudgets, assertToolReplyBytes, type ToolByteBudgets } from '../tools/budget.js';
 

@@ -1,5 +1,5 @@
 {
-  "name": "@capix/memory",
+  "name": "@weiliang0121/capix-memory",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -14,13 +14,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/contracts": "workspace:*",
-    "@capix/diagnostics": "workspace:*",
-    "@capix/changes": "workspace:*",
-    "@capix/protocol": "workspace:*",
-    "@capix/resources": "workspace:*",
-    "@capix/transcript": "workspace:*",
-    "@capix/view": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-diagnostics": "workspace:*",
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-transcript": "workspace:*",
+    "@weiliang0121/capix-view": "workspace:*",
     "es-toolkit": "1.52.0"
   },
   "description": "Versioned memory entities and controlled resource access for CAPiX.",

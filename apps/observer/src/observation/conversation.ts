@@ -1,4 +1,4 @@
-import type { Message, ObserverOverview } from '@capix/protocol';
+import type { Message, ObserverOverview } from '@weiliang0121/capix-protocol';
 import type { ConversationMessage } from '../state/conversation.js';
 
 /** A view of observed messages, never a write to the server transcript. */

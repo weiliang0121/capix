@@ -1,6 +1,6 @@
-import type { InteractionChannel, InteractionCursor, InteractionReference, InteractionWait } from '@capix/interaction';
-import type { ResourceOperation } from '@capix/resources';
-import { InvocationCancelled } from '@capix/server-runtime';
+import type { InteractionChannel, InteractionCursor, InteractionReference, InteractionWait } from '@weiliang0121/capix-interaction';
+import type { ResourceOperation } from '@weiliang0121/capix-resources';
+import { InvocationCancelled } from '@weiliang0121/capix-runtime';
 /** Waiting needs the read side only; no request type or send capability enters this operation. */
 type ModelFeedbackChannel<Reply> = Pick<InteractionChannel<unknown, Reply, string>, 'read' | 'wait' | 'openProgress'>;
 

@@ -80,9 +80,9 @@ export function rejection(id, code, message) {
  * Result mappings must be side-effect-free and determined only by their input.
  * A Promise is allowed, but an unaccepted successful delivery may be mapped again
  * during restoration; external I/O belongs in the tool, not in these callbacks.
- * @template {import('@capix/contracts').ChildContract} D
+ * @template {import('@weiliang0121/capix-contracts').ChildContract} D
  * @param {D} node
- * @param {{ description: string, input: import('zod').ZodType<import('@capix/contracts').CallableInput<NoInfer<D>>>, result: { succeeded: (value: import('@capix/contracts').CallableOutput<NoInfer<D>>) => import('zod').infer<typeof resultSchema> | Promise<import('zod').infer<typeof resultSchema>>, failed?: (failure: unknown) => import('zod').infer<typeof resultSchema> | Promise<import('zod').infer<typeof resultSchema>> } }} options
+ * @param {{ description: string, input: import('zod').ZodType<import('@weiliang0121/capix-contracts').CallableInput<NoInfer<D>>>, result: { succeeded: (value: import('@weiliang0121/capix-contracts').CallableOutput<NoInfer<D>>) => import('zod').infer<typeof resultSchema> | Promise<import('zod').infer<typeof resultSchema>>, failed?: (failure: unknown) => import('zod').infer<typeof resultSchema> | Promise<import('zod').infer<typeof resultSchema>> } }} options
  */
 export function tool(node, options) {
   if (!node || !['node', 'group'].includes(node.kind)) throw new TypeError('A tool requires an ordinary Node or Group');

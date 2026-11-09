@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, ProviderError } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError } from '@weiliang0121/capix-model-provider';
 
 const baseUsage = { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 };
 const expectedUsage = { promptTokens: 20, completionTokens: 5, totalTokens: 25 };

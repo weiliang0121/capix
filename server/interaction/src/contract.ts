@@ -1,5 +1,5 @@
-import type { RuntimeErrorValue } from '@capix/contracts';
-import type { ProgressReceiver } from '@capix/changes';
+import type { RuntimeErrorValue } from '@weiliang0121/capix-contracts';
+import type { ProgressReceiver } from '@weiliang0121/capix-changes';
 
 /** A versioned data boundary, independent of any invocation or recording preset. */
 export interface InteractionContract<Request, Reply, Delta = never> {

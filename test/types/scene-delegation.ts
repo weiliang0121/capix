@@ -1,6 +1,6 @@
-import { Dynamic, Group, Node, Scene, Sequence, type CallableContract, type CallableDelta, type CallableInput, type CallableOutput } from '@capix/structure';
-import { ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Dynamic, Group, Node, Scene, Sequence, type CallableContract, type CallableDelta, type CallableInput, type CallableOutput } from '@weiliang0121/capix-structure';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 declare function expectType<Value>(value: Value): void;
 

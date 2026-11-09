@@ -1,11 +1,11 @@
-import { combineOutputReceivers, requireNotCancelled, type Invocation, type CallableContext, type InvocationControls, type InvocationRelationOptions, type CheckpointRestoration } from '@capix/invocation';
-import type { CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver, InvocationIdentity, ProgressReceiver } from '@capix/contracts';
+import { combineOutputReceivers, requireNotCancelled, type Invocation, type CallableContext, type InvocationControls, type InvocationRelationOptions, type CheckpointRestoration } from '@weiliang0121/capix-invocation';
+import type { CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver, InvocationIdentity, ProgressReceiver } from '@weiliang0121/capix-contracts';
 import type { CallableFeedback } from './feedback.js';
 import type { AnyCallable } from '../binding/declarations.js';
 import type { CallableCallScope } from '../binding/calls.js';
 import { callableConstruction, type AnyBuiltCallable, type BuiltCallable, type BuiltOptions } from '../structure/construction.js';
 import type { CallableInvocationStarted } from './invocation.js';
-import { stableValue, type Stable } from '@capix/contracts';
+import { stableValue, type Stable } from '@weiliang0121/capix-contracts';
 
 export interface CallableInvocationCallbacks<Input, Output, Resources extends object> {
   readonly started?: CallableInvocationStarted<Input, Output, Resources>;

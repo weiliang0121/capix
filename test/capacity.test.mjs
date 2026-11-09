@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { createCheckpointValueBlock } from '@capix/checkpoint';
+import { createCheckpointValueBlock } from '@weiliang0121/capix-checkpoint';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { measureStorage } from '../examples/capacity/assembly.mjs';

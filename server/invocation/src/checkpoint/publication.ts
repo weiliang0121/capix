@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { stableValue, type CheckpointCodec, type CheckpointValue } from '@capix/contracts';
-import { cloneCheckpointValue, createCheckpointValueBlock, type CheckpointValueBlock, type CheckpointValueReference, type CheckpointChild, type CheckpointChildRecord } from '@capix/checkpoint';
+import { stableValue, type CheckpointCodec, type CheckpointValue } from '@weiliang0121/capix-contracts';
+import { cloneCheckpointValue, createCheckpointValueBlock, type CheckpointValueBlock, type CheckpointValueReference, type CheckpointChild, type CheckpointChildRecord } from '@weiliang0121/capix-checkpoint';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationRelation } from '../invocation/relation.js';
 import type { DecodedCheckpointChild } from './facts.js';

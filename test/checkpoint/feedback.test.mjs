@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CallableContext, Invocation, InvocationResources, ObservationError, attachInvocationResources, prepareCheckpointRestoration } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ResourceOffer, ResourceSupply } from '@capix/resources';
+import { CallableContext, Invocation, InvocationResources, ObservationError, attachInvocationResources, prepareCheckpointRestoration } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ResourceOffer, ResourceSupply } from '@weiliang0121/capix-resources';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 

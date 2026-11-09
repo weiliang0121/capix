@@ -1,4 +1,4 @@
-import type { ConversationStage } from '@capix/protocol';
+import type { ConversationStage } from '@weiliang0121/capix-protocol';
 
 /** Stage metadata is a disposable current projection, never a result or recovered history. */
 export function acceptStage(next: ConversationStage | undefined, previous?: ConversationStage): ConversationStage | undefined {

@@ -1,8 +1,8 @@
-import type { RecordBookState } from '@capix/records';
-import type { RecordingArchive } from '@capix/protocol';
-import type { InteractionPersistence, InteractionState } from '@capix/interaction';
+import type { RecordBookState } from '@weiliang0121/capix-records';
+import type { RecordingArchive } from '@weiliang0121/capix-protocol';
+import type { InteractionPersistence, InteractionState } from '@weiliang0121/capix-interaction';
 
-export type { RecordingArchive } from '@capix/protocol';
+export type { RecordingArchive } from '@weiliang0121/capix-protocol';
 
 /** Interactions are independent entities, loaded on demand rather than with the conversation baseline. */
 export interface ObserverInteractionPersistence extends InteractionPersistence {

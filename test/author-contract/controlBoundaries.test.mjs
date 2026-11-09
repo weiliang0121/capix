@@ -1,9 +1,9 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, checkpointPoint, childReference, defineGroup, defineScene } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { InvocationContext } from '@capix/server-runtime/construction';
+import { ExceptionContract, checkpointPoint, childReference, defineGroup, defineScene } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { InvocationContext } from '@weiliang0121/capix-runtime/construction';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 const rejected = new ExceptionContract('AUTHOR_CONTROL_FIXTURE');

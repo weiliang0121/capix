@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { Stable } from '@capix/contracts';
-import type { ChildContractsOf, ChildCalls, ChildOptions, CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver, ChildCall } from '@capix/structure';
+import type { Stable } from '@weiliang0121/capix-contracts';
+import type { ChildContractsOf, ChildCalls, ChildOptions, CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver, ChildCall } from '@weiliang0121/capix-structure';
 import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
 import { modelTextSchema } from '../model/schema.js';
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { ArchiveStore, PublicationArchive } from './business-progress/archive.mjs';
 import { InteractionJournal, createGateway } from './business-progress/interaction.mjs';
 import { ProgressStore, PublicationProgress } from './business-progress/progress.mjs';

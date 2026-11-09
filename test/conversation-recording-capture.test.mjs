@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
-import { stableValue } from '@capix/contracts';
+import { stableValue } from '@weiliang0121/capix-contracts';
 import { test } from 'node:test';
 import { ConversationRecording } from '@capix/conversation-service/recording';
-import { RecordBook } from '@capix/records';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { View } from '@capix/view';
-import { Group, Node, Scene, checkpointPoint } from '@capix/structure';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Resources, Runner } from '@capix/server-runtime';
+import { RecordBook } from '@weiliang0121/capix-records';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { View } from '@weiliang0121/capix-view';
+import { Group, Node, Scene, checkpointPoint } from '@weiliang0121/capix-structure';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 function content() {
   const transcript = new Transcript();

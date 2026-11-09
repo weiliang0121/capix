@@ -1,10 +1,10 @@
 import { createConversationRunner, createConversationScene, CompletionResource } from '@capix/conversation-service';
-import type { ModelProvider, ModelRequest, ModelReply, ModelMessage } from '@capix/model-provider';
-import type { Message } from '@capix/protocol';
-import { Resource, type ResourcesOf } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Node, Scene } from '@capix/structure';
-import { Transcript } from '@capix/transcript';
+import type { ModelProvider, ModelRequest, ModelReply, ModelMessage } from '@weiliang0121/capix-model-provider';
+import type { Message } from '@weiliang0121/capix-protocol';
+import { Resource, type ResourcesOf } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const model: ModelProvider = {
   async complete(request, controls) {

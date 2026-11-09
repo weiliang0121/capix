@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CHECKPOINT_MAX_BYTES, cloneCheckpointValue, cloneCheckpointImage, checkpointSaveReceipt } from '@capix/checkpoint';
+import { CHECKPOINT_MAX_BYTES, cloneCheckpointValue, cloneCheckpointImage, checkpointSaveReceipt } from '@weiliang0121/capix-checkpoint';
 
 function nested(value, levels) {
   let result = value;

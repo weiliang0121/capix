@@ -1,6 +1,6 @@
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures } from '@weiliang0121/capix-runtime/construction';
 import { contextWithSource } from './observer.mjs';
-import { Invocation, InvocationChildren, CallableContext, bindInvocationObservation, invocationRecording, Clock } from '@capix/server-runtime';
+import { Invocation, InvocationChildren, CallableContext, bindInvocationObservation, invocationRecording, Clock } from '@weiliang0121/capix-runtime';
 import { fixtureState } from './runtime.mjs';
 import { callFor, recordFor, rememberCall } from './calls.mjs';
 export { callFor, recordFor, rememberCall } from './calls.mjs';

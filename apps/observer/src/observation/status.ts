@@ -1,4 +1,4 @@
-import type { RecordingArchiveOrigin } from '@capix/protocol';
+import type { RecordingArchiveOrigin } from '@weiliang0121/capix-protocol';
 
 export type ObservationStatus = 'running' | 'succeeded' | 'failed' | 'unresolved';
 

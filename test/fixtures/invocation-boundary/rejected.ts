@@ -1,4 +1,4 @@
-import { Invocation, InvocationContext, type InvocationStarted } from '@capix/invocation';
+import { Invocation, InvocationContext, type InvocationStarted } from '@weiliang0121/capix-invocation';
 
 new Invocation<number, string>({
   context: new InvocationContext('wrong input'),

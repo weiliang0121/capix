@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationChildren, InvocationContext } from '@capix/invocation';
+import { InvocationChildren, InvocationContext } from '@weiliang0121/capix-invocation';
 
 function owner() {
   const context = new InvocationContext(null);

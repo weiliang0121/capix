@@ -1,8 +1,8 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import { createHash } from 'node:crypto';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Group, Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Group, Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { catalog, decisionInstructions, acceptDecision, DecisionContractError } from './catalog.mjs';
 import { MaterialResource, createMaterial, projectMaterial } from './material.mjs';
 import { conditions } from './fixtures.mjs';

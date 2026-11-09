@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { spawnSync } from 'node:child_process';
-import { ModelExchanges } from '@capix/model-exchanges';
-import { requireModelRequest } from '@capix/model-provider';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+import { requireModelRequest } from '@weiliang0121/capix-model-provider';
 import { ToolPrefixIndex } from './tool-prefix.mjs';
 
 const scope = 'explicit-business-scope';
@@ -169,7 +169,7 @@ for (const point of ['row-inserted', 'tip-updated', 'committed']) {
     const moduleUrl = new URL('./tool-prefix.mjs', import.meta.url).href;
     const script = `
       import { readFileSync } from 'node:fs';
-      import { ModelExchanges } from '@capix/model-exchanges';
+      import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
       import { ToolPrefixIndex } from ${JSON.stringify(moduleUrl)};
       const [path, entityPath, referencePath, point] = process.argv.slice(1);
       const entity = ModelExchanges.restore(JSON.parse(readFileSync(entityPath, 'utf8')));

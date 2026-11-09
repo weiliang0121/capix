@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { cloneCheckpointValue } from '@capix/checkpoint';
-import { type CheckpointCodec } from '@capix/structure';
-import type { GenerationOutput } from '@capix/protocol';
+import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
+import { type CheckpointCodec } from '@weiliang0121/capix-structure';
+import type { GenerationOutput } from '@weiliang0121/capix-protocol';
 import { modelIndexesSchema, modelTextSchema } from '../../model/schema.js';
 import { answerOutputContract } from './output.js';
 import { answerMessageContextSchema } from '../checkpoint.js';

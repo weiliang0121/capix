@@ -1,5 +1,5 @@
-import type { TranscriptEvent, TranscriptSnapshot, TranscriptUpdate } from '@capix/protocol';
-import type { Transcript } from '@capix/transcript';
+import type { TranscriptEvent, TranscriptSnapshot, TranscriptUpdate } from '@weiliang0121/capix-protocol';
+import type { Transcript } from '@weiliang0121/capix-transcript';
 
 /** The endpoint reads only the entity explicitly installed in this service. */
 export function transcriptSnapshot(transcript: Transcript): TranscriptSnapshot {

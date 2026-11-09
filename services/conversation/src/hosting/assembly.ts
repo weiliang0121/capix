@@ -1,6 +1,6 @@
-import type { ModelProvider } from '@capix/model-provider';
-import type { CheckpointStore } from '@capix/checkpoint';
-import { Resources, type RunnerObservation, type RunnerOutput } from '@capix/server-runtime';
+import type { ModelProvider } from '@weiliang0121/capix-model-provider';
+import type { CheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Resources, type RunnerObservation, type RunnerOutput } from '@weiliang0121/capix-runtime';
 import type { ConversationViewSource } from '../materials/view.js';
 import type { ConversationStore } from '../persistence/store.js';
 import { createConversationInteractions } from '../assembly/interactions.js';

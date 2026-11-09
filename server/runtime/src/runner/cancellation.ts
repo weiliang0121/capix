@@ -1,4 +1,4 @@
-import { InvocationCancelled, isInvocationCancelled } from '@capix/invocation';
+import { InvocationCancelled, isInvocationCancelled } from '@weiliang0121/capix-invocation';
 
 /** One entry's control signal. The original host options and signal are never rewritten. */
 export class RunnerCancellation {

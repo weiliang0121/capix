@@ -1,5 +1,5 @@
-import type { ConversationActivities, ConversationActivity, ConversationActivityChange } from '@capix/protocol';
-import type { InvocationProgress } from '@capix/invocation';
+import type { ConversationActivities, ConversationActivity, ConversationActivityChange } from '@weiliang0121/capix-protocol';
+import type { InvocationProgress } from '@weiliang0121/capix-invocation';
 
 const labels = { scene: '场景', group: '组合处理', node: '直接处理' } as const;
 const maximumCalls = 512;

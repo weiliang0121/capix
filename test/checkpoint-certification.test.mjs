@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cloneCheckpointImage, cloneCheckpointDelivery, cloneCheckpointHead, cloneCheckpointValue, checkpointSaveReceipt, checkpointFinishReceipt, checkCheckpointSaveReceipt, checkCheckpointFinishReceipt } from '@capix/checkpoint';
+import { cloneCheckpointImage, cloneCheckpointDelivery, cloneCheckpointHead, cloneCheckpointValue, checkpointSaveReceipt, checkpointFinishReceipt, checkCheckpointSaveReceipt, checkCheckpointFinishReceipt } from '@weiliang0121/capix-checkpoint';
 
 function image() {
   return { id: 'image', formatVersion: 6, contract: { key: 'fixture', version: 1 }, point: 'saved', frame: { owner: { contextId: 'call', kind: 'node' }, round: 1, phase: 'execute', input: { text: 'original' }, currentInput: null, nextChildOrder: 0, children: [] }, state: { value: 'fixed' }, references: {} };

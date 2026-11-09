@@ -1,5 +1,5 @@
-import type { ObserverChange, InvocationEvent } from '@capix/protocol';
-import type { ChangeBuffer } from '@capix/changes';
+import type { ObserverChange, InvocationEvent } from '@weiliang0121/capix-protocol';
+import type { ChangeBuffer } from '@weiliang0121/capix-changes';
 
 /** One Observer host owns the buffer drain; content and recording delivery sources only subscribe. */
 export class ChangeConsumer {

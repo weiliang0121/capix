@@ -1,7 +1,7 @@
 import { writeSync } from 'node:fs';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Scene, checkpointPoint } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Scene, checkpointPoint } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 
 // An actual saved, unfinished root is reopened by a different process. No copied

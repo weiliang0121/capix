@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Node, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
+import { Node, defineNode, defineGroup, defineScene } from '@weiliang0121/capix-runtime';
 
 const metadata = { name: 'test', label: 'test', source: 'test' };
 function assemble(leaf) {

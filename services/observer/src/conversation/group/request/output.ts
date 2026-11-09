@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { FileTask } from '@capix/protocol';
-import { RuntimeError } from '@capix/contracts';
+import type { FileTask } from '@weiliang0121/capix-protocol';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { modelTextSchema } from '../../model/schema.js';
 import type { ModelOutputContract } from '../../model/contract.js';
 

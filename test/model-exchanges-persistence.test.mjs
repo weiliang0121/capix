@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
-import { ModelExchanges, ModelExchangeViewSource, defaultModelExchangeLimits, maximumModelExchangeLimits } from '@capix/model-exchanges';
-import { PersistenceError } from '@capix/diagnostics';
+import { ModelExchanges, ModelExchangeViewSource, defaultModelExchangeLimits, maximumModelExchangeLimits } from '@weiliang0121/capix-model-exchanges';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
 const operation = (child) => ({ parentContextId: 'loop', childContextId: child, position: 'receive' });
 const reply = () => ({ formatVersion: 1, id: 'reply', model: 'offline', output: [{ kind: 'tool-call', id: 'a', name: 'read', arguments: { encoding: 'json-text', text: '{}' } }], termination: { kind: 'completed', reason: 'tool_calls' }, native: { format: 'chat-completions', version: 1 }, usage: null });

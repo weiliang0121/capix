@@ -1,10 +1,10 @@
-import { Resources } from '@capix/server-runtime';
+import { Resources } from '@weiliang0121/capix-runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Driver, Scene, Group, Node, checkpointPoint } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { ResourceOffer } from '@capix/resources';
-import { CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
+import { Driver, Scene, Group, Node, checkpointPoint } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { CallableBuilder, callableConstruction, createRootInvocation } from '@weiliang0121/capix-runtime/construction';
 
 const build = (driver, structure, providers = []) => driver.build(structure, { providers, source: { capture: () => null } });
 const codec = { encode: (value) => value, decode: (value) => value };
@@ -519,7 +519,7 @@ test('binding rejects rewritten processing fields and preserves the business rec
 });
 
 test('factory configuration reads inherited getters and keeps the same concrete author objects', async () => {
-  const { defineGroup } = await import('@capix/server-runtime');
+  const { defineGroup } = await import('@weiliang0121/capix-runtime');
   const child = new Node({ run: (work) => work.input + 1 });
   const handler = {
     offset: 10,

@@ -1,4 +1,4 @@
-import { Driver } from '@capix/server-runtime';
+import { Driver } from '@weiliang0121/capix-runtime';
 
 /** Test harness for one built callable and its owning Driver. */
 export function installCallable(definition, options) {

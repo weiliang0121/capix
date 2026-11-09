@@ -1,7 +1,7 @@
 // Open /test/files.html through Vite. Local transport only: no filesystem, service or model access.
 import { createRoot } from 'react-dom/client';
 import { ClientRuntime, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
-import type { ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionRequest, TranscriptFrame, TranscriptSnapshot, Message } from '@capix/protocol';
+import type { ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionRequest, TranscriptFrame, TranscriptSnapshot, Message } from '@weiliang0121/capix-protocol';
 import { createApplication } from '../src/binding/application';
 import { AppProvider } from '../src/state/react';
 import { ConversationPanel } from '../src/features/conversation/ConversationPanel';

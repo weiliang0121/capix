@@ -1,4 +1,4 @@
-import type { TranscriptChange } from '@capix/protocol';
+import type { TranscriptChange } from '@weiliang0121/capix-protocol';
 import type { RecordClock } from '../recorder.js';
 import { TranscriptRecord, type TranscriptRecordOptions } from './record.js';
 

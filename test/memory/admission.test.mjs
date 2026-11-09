@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeBuffer } from '@capix/changes';
-import { Memories, Memory } from '@capix/memory';
-import { Transcript } from '@capix/transcript';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
+import { Memories, Memory } from '@weiliang0121/capix-memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
 
 const create = (content) => ({ action: 'create', memoryId: null, change: 'retain evidence', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
 const fixed = (memories, changes) => ({ contract: { key: 'memories.apply', version: 1 }, operation: { contextId: 'applying-call', position: 'memory' }, memoriesId: memories.id, changes });

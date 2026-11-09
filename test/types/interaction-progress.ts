@@ -1,6 +1,6 @@
-import { Interactions, type InteractionContract, type InteractionChannel, type InteractionCursor } from '@capix/interaction';
-import { ResourceOffer } from '@capix/resources';
-import { Resources } from '@capix/server-runtime';
+import { Interactions, type InteractionContract, type InteractionChannel, type InteractionCursor } from '@weiliang0121/capix-interaction';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources } from '@weiliang0121/capix-runtime';
 
 const contract: InteractionContract<string, { answer: string }, string> = {
   key: 'typed.progress',

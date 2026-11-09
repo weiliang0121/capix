@@ -1,5 +1,5 @@
 import { observationStatus } from '../observation/status.js';
-import type { RelationChangeRecord } from '@capix/protocol';
+import type { RelationChangeRecord } from '@weiliang0121/capix-protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import type { CallDetail, ExecutionDetail, RoundView } from '../state/data.js';
 import type { CallGraphModel, CallGraphNode } from '../state/graph.js';

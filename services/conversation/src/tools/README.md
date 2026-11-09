@@ -4,7 +4,7 @@
 
 ```ts
 import { z } from 'zod';
-import { Node } from '@capix/structure';
+import { Node } from '@weiliang0121/capix-structure';
 import { createToolLoop, tool } from '@capix/conversation-service/tools';
 
 const length = new Node<{ text: string }, number>({

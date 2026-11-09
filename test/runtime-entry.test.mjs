@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Driver, Resources, Runner, Scene } from '@capix/server-runtime';
+import { Driver, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 
 function deferred() {
   let resolve;

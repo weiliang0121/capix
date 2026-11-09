@@ -1,7 +1,7 @@
 import { CallableRecord } from '../../callable/record.js';
 import { sortBy } from 'es-toolkit/array';
 import { isFinite } from 'es-toolkit/compat';
-import type { InvocationBoundaryValue } from '@capix/protocol';
+import type { InvocationBoundaryValue } from '@weiliang0121/capix-protocol';
 import type { Recorder } from '../../recorder.js';
 import type { RecordBook } from '../../book.js';
 import { ExecutionRecord } from '../../execution/record.js';

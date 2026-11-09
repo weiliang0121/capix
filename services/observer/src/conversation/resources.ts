@@ -1,8 +1,8 @@
 import type { ModelInteractionReader } from './model/resources.js';
-import type { ResourceRequest } from '@capix/resources';
-import { TranscriptResource, type TranscriptRangeReader } from '@capix/transcript';
-import { MemoryResource } from '@capix/memory';
-import type { ModelSettings } from '@capix/protocol';
+import type { ResourceRequest } from '@weiliang0121/capix-resources';
+import { TranscriptResource, type TranscriptRangeReader } from '@weiliang0121/capix-transcript';
+import { MemoryResource } from '@weiliang0121/capix-memory';
+import type { ModelSettings } from '@weiliang0121/capix-protocol';
 import { ConversationTaskResource, type TaskSelection } from './decision/selection.js';
 import type { ModelInteractionCreator } from './model/interactions.js';
 import { ConversationMaterialUsageResource } from './content/usage.js';

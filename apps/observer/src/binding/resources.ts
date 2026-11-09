@@ -1,4 +1,4 @@
-import type { ExecutionRecordSnapshot } from '@capix/protocol';
+import type { ExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 import { isEqual } from 'es-toolkit';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 

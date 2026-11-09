@@ -1,5 +1,5 @@
-import type { ResourceRequirements, ResourceRequests, ResourcesOf } from '@capix/resources';
-import type { Stable, CallableKind, CheckpointCodec, CheckpointContract, ChildContract, ChildReferenceSlot, CheckpointReferenceSlots, SavedReferences, CheckpointFacts, CheckpointPointOwner } from '@capix/contracts';
+import type { ResourceRequirements, ResourceRequests, ResourcesOf } from '@weiliang0121/capix-resources';
+import type { Stable, CallableKind, CheckpointCodec, CheckpointContract, ChildContract, ChildReferenceSlot, CheckpointReferenceSlots, SavedReferences, CheckpointFacts, CheckpointPointOwner } from '@weiliang0121/capix-contracts';
 import type { ChildContractsOf } from './children.js';
 import type { ResumeWork } from './work.js';
 import type { DefinitionReceptions } from './reception.js';

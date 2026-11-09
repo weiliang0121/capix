@@ -1,6 +1,6 @@
 // Declarations and business composition.
-export * from '@capix/structure';
-export { ChildCallFailure, ExceptionContract, DeclaredException } from '@capix/invocation';
+export * from '@weiliang0121/capix-structure';
+export { ChildCallFailure, ExceptionContract, DeclaredException } from '@weiliang0121/capix-invocation';
 export * from './definition/observation.js';
 
 export * from './legacy/driver.js';
@@ -15,17 +15,17 @@ export { Resources, CapturedResources } from './resource/resources.js';
 export * from './initializer.js';
 
 // Independent external interactions; waiting invocations do not own delivery or retained feedback.
-export * from '@capix/interaction';
+export * from '@weiliang0121/capix-interaction';
 
 // Business-facing context and invocation views, results and shared time.
-export { invocationContextView, invocationView, childInvocationView, Clock, InvocationCancelled, isInvocationCancelled } from '@capix/invocation';
-export type { InvocationContextView, CallableContextView, ContextViewOf, ContextViewResources, ContextFactsOf, InvocationRelationView, InvocationView, ChildInvocationView, InvocationViewSource, InvocationProgress, InvocationResult, InvocationFailure, InvocationPhase } from '@capix/invocation';
-export type { InvocationIdentity } from '@capix/contracts';
+export { invocationContextView, invocationView, childInvocationView, Clock, InvocationCancelled, isInvocationCancelled } from '@weiliang0121/capix-invocation';
+export type { InvocationContextView, CallableContextView, ContextViewOf, ContextViewResources, ContextFactsOf, InvocationRelationView, InvocationView, ChildInvocationView, InvocationViewSource, InvocationProgress, InvocationResult, InvocationFailure, InvocationPhase } from '@weiliang0121/capix-invocation';
+export type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 
 // Live facts and observation installations, independent of the recording preset.
-export { InvocationChangeEmitter, InvocationObservation, ObservationError } from '@capix/invocation';
-export type { InvocationRelationIdentity, InvocationDescription, InvocationRelationChange, InvocationChange, InvocationFact, ResourceObservation, BusinessEvent, BusinessObservation, InvocationObserver } from '@capix/invocation';
-export type { EventConsumer } from '@capix/changes';
+export { InvocationChangeEmitter, InvocationObservation, ObservationError } from '@weiliang0121/capix-invocation';
+export type { InvocationRelationIdentity, InvocationDescription, InvocationRelationChange, InvocationChange, InvocationFact, ResourceObservation, BusinessEvent, BusinessObservation, InvocationObserver } from '@weiliang0121/capix-invocation';
+export type { EventConsumer } from '@weiliang0121/capix-changes';
 export type { DriverFact, DriverObserver } from './observation/driver.js';
 
 // Explicit public subpaths also remain available from the grouped root surface.
@@ -33,9 +33,9 @@ export * from './construction.js';
 export * from './recording.js';
 
 // Shared diagnostics and runtime error conversion.
-export { RuntimeError } from '@capix/contracts';
-export { PersistenceError, RuntimeErrorHelper } from '@capix/diagnostics';
-export { isNonEmptyArray, hasUniqueItems, isObject, isObjectLike, isNonBlankString, nonBlankStringPattern } from '@capix/invocation';
+export { RuntimeError } from '@weiliang0121/capix-contracts';
+export { PersistenceError, RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
+export { isNonEmptyArray, hasUniqueItems, isObject, isObjectLike, isNonBlankString, nonBlankStringPattern } from '@weiliang0121/capix-invocation';
 
 // Optional checkpoint installation and runtime recovery facts.
-export type { CheckpointFact, CheckpointInstallation, CheckpointWriter, CheckpointRestoration } from '@capix/invocation';
+export type { CheckpointFact, CheckpointInstallation, CheckpointWriter, CheckpointRestoration } from '@weiliang0121/capix-invocation';

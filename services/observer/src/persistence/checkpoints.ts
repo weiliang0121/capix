@@ -1,8 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { RuntimeError } from '@capix/contracts';
-import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointHeadCommit } from '@capix/checkpoint';
-import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt, CheckpointCommit } from '@capix/checkpoint';
-import { checkpointImageCommit, CheckpointRelationCache } from '@capix/checkpoint/storage';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointHeadCommit } from '@weiliang0121/capix-checkpoint';
+import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt, CheckpointCommit } from '@weiliang0121/capix-checkpoint';
+import { checkpointImageCommit, CheckpointRelationCache } from '@weiliang0121/capix-checkpoint/storage';
 import { initializeCheckpointSchema } from './checkpoint-schema.js';
 import { initializeCheckpointFacts, saveCheckpointFacts, readCheckpointFacts, finishCheckpointFacts } from './checkpoint-facts.js';
 

@@ -1,6 +1,6 @@
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
-import type { ModelProvider } from '@capix/model-provider';
-import { Runner } from '@capix/server-runtime';
+import type { ModelProvider } from '@weiliang0121/capix-model-provider';
+import { Runner } from '@weiliang0121/capix-runtime';
 import { loadConversationContent } from '../assembly/index.js';
 import { ConversationStore } from '../persistence/index.js';
 import { ConversationRecording } from '../recording/index.js';

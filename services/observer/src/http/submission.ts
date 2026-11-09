@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { ConversationSubmissionFrame } from '@capix/protocol';
+import type { ConversationSubmissionFrame } from '@weiliang0121/capix-protocol';
 import type { ConversationSubmission } from '../conversation/submission.js';
 
 /** A slow connection resumes from an authoritative baseline, never drops arbitrary deltas. */

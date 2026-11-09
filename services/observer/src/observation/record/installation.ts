@@ -1,8 +1,8 @@
-import { type Clock } from '@capix/invocation';
-import { type ChangeCapture } from '@capix/changes';
-import { bindRecording, type RecordingInstallation } from '@capix/server-runtime/recording';
-import { RecordBook, Recorder } from '@capix/records';
-import type { RecordChangeEvent, RecordingArchive } from '@capix/protocol';
+import { type Clock } from '@weiliang0121/capix-invocation';
+import { type ChangeCapture } from '@weiliang0121/capix-changes';
+import { bindRecording, type RecordingInstallation } from '@weiliang0121/capix-runtime/recording';
+import { RecordBook, Recorder } from '@weiliang0121/capix-records';
+import type { RecordChangeEvent, RecordingArchive } from '@weiliang0121/capix-protocol';
 import type { ChangeConsumer } from '@capix/observer-content';
 import type { SqliteObserverStore } from '../../persistence/store.js';
 import { RecordSource } from './source.js';

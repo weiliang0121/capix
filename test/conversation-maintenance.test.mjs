@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@capix/diagnostics';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { ConversationViewResource, createConversationScene, createMaterialPreparation, createMessageInclusion, HistoryResource } from '@capix/conversation-service';
-import { Memories } from '@capix/memory';
-import { Resource, Resources as ResourceRegistry } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Group, Node, Scene } from '@capix/structure';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Resource, Resources as ResourceRegistry } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Group, Node, Scene } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const messageRef = (key) => ({ source: 'messages', key });
 const collect = (events) => ({ receive: (event) => void events.push(event) });

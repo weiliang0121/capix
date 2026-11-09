@@ -1,8 +1,8 @@
-import { RecordBook, Recorder, RecordResource } from '@capix/records';
-import { Resource } from '@capix/resources';
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
-import { bindRecording } from '@capix/server-runtime/recording';
+import { RecordBook, Recorder, RecordResource } from '@weiliang0121/capix-records';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { bindRecording } from '@weiliang0121/capix-runtime/recording';
 
 // Records live independently; resources grant specific operations on this entity.
 const recorder = new Recorder(new RecordBook());

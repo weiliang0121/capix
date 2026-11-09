@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { isDeepStrictEqual as equal } from 'node:util';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Interaction } from '@capix/interaction';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Interaction } from '@weiliang0121/capix-interaction';
 import { CompletionResource, CompletionInteraction, CompletionInteractionResource } from '@capix/conversation-service';
 import { createConversationInteractions, loadConversationContent } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';

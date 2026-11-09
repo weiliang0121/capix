@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Resource, ResourceOffer, Resources } from '@capix/resources';
-import { invocationResourceFailures } from '@capix/invocation';
+import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
+import { invocationResourceFailures } from '@weiliang0121/capix-invocation';
 import { createBoundaryCall } from './action-boundaries.mjs';
 
 // This is the existing public provenance seam. It supplies identity, not an

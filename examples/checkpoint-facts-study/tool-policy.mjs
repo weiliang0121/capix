@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual as equal } from 'node:util';
-import { requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt } from '@capix/model-exchanges';
+import { requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt } from '@weiliang0121/capix-model-exchanges';
 import { StableValues } from './stable.mjs';
 import { ToolRelations } from './tool-relations.mjs';
 

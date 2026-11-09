@@ -8,7 +8,7 @@ import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { ToolExchanges, assertArchiveAdmission, ConversationArchiveFull, createToolConversationInteractions, readToolCheckpoint } from '@capix/conversation-service/tools/hosting';
 import { CompletionInteraction } from '@capix/conversation-service';
-import { requireModelReply } from '@capix/model-provider';
+import { requireModelReply } from '@weiliang0121/capix-model-provider';
 
 function directory(t) {
   const path = mkdtempSync(join(tmpdir(), 'capix-tool-host-'));

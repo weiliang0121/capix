@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationInteractions, createConversationResources, createMaterialConversationScene } from '@capix/conversation-service/assembly';
 import { createConversationRecording } from '@capix/conversation-service/recording';
-import { CallableRecord, RecordBook, Recorder } from '@capix/records';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
-import { View } from '@capix/view';
-import { Node, Scene } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { CallableRecord, RecordBook, Recorder } from '@weiliang0121/capix-records';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
+import { View } from '@weiliang0121/capix-view';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 
 const preview = 'PREVIEW_ONLY_NOT_FORMAL_CONTENT';
 const reply = (text) => ({ id: 'recording-offline', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });

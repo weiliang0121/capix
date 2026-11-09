@@ -5,7 +5,7 @@ import type { Composite, NamedMembers, MemberRegistration, NamedMemberRegistrati
 import type { ChildCallable } from './definition/children.js';
 import type { EmptyResources } from './definition/callable.js';
 import { assertStructureConfigurable } from './configuration.js';
-import type { CallableContract, Stable } from '@capix/contracts';
+import type { CallableContract, Stable } from '@weiliang0121/capix-contracts';
 
 /** A callable root with ordinary configuration and explicit member composition. */
 export class Scene<Input = unknown, Output = unknown, Resources extends object = EmptyResources, Delta = never> extends Callable<Input, Output, 'scene', Resources, Delta> implements Composite {

@@ -1,5 +1,5 @@
 import { ModelCompletionIncomplete } from '../model/incomplete.js';
-import { ProviderError } from '@capix/model-provider';
+import { ProviderError } from '@weiliang0121/capix-model-provider';
 import { ConversationArchiveFull } from './archive-admission.js';
 
 /** Never print arbitrary causes, model payloads, headers or credential-bearing configuration. */

@@ -1,4 +1,4 @@
-import { Scene } from '@capix/server-runtime';
+import { Scene } from '@weiliang0121/capix-runtime';
 
 /** A real Scene used by tests that focus on one selected child. */
 export function runtimeDefinition(execution) {

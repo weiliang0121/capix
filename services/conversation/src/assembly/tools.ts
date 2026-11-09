@@ -1,7 +1,7 @@
-import type { InteractionChannel } from '@capix/interaction';
-import type { ModelReply, ModelRequest, ModelRequestInspection } from '@capix/model-provider';
-import { Resource } from '@capix/resources';
-import { Resources } from '@capix/server-runtime';
+import type { InteractionChannel } from '@weiliang0121/capix-interaction';
+import type { ModelReply, ModelRequest, ModelRequestInspection } from '@weiliang0121/capix-model-provider';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources } from '@weiliang0121/capix-runtime';
 import { createArchivedToolAnswer, registerArchivedToolResources, type ToolHostOptions } from '../hosting/tool-answer.js';
 import { resolveToolConversationPolicy, type ToolConversationPolicyOptions } from '../hosting/tool-policy.js';
 import { createHistoryTools } from '../history/tools/nodes.js';

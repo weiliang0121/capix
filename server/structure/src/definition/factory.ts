@@ -1,14 +1,14 @@
-import type { CallableKind } from '@capix/contracts';
-import type { OutputDeclaration } from '@capix/contracts';
+import type { CallableKind } from '@weiliang0121/capix-contracts';
+import type { OutputDeclaration } from '@weiliang0121/capix-contracts';
 import type { ChildrenOf } from './children.js';
 import type { InvocationCheckpointDefinition } from './checkpoint.js';
-import { ResourceRequest, type ResourceRequests, type ResourcesOf } from '@capix/resources';
+import { ResourceRequest, type ResourceRequests, type ResourcesOf } from '@weiliang0121/capix-resources';
 import type { CallableWork } from './work.js';
 import { Scene } from '../scene.js';
 import { Group } from '../group.js';
 import { Node } from '../node.js';
 import type { CallableDefinition } from './callable.js';
-import type { ReceptionRegistration } from '@capix/contracts';
+import type { ReceptionRegistration } from '@weiliang0121/capix-contracts';
 
 type EmptyDependencies = Readonly<Record<never, never>>;
 type LocalDependencies<Common extends ResourceRequests, Deps extends ResourceRequests> = Deps & { readonly [Name in keyof Common]?: never };

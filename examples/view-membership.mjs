@@ -1,10 +1,10 @@
 // pnpm build && node examples/view-membership.mjs
 // 已知引用的维护策略：通过原子操作修改成员，不先读取所有材料。
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Node, Scene } from '@capix/structure';
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { View, openViewManager } from '@capix/view';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { View, openViewManager } from '@weiliang0121/capix-view';
 
 const transcript = new Transcript([{ role: 'user', content: '旧话题：介绍一下这个项目。' }]);
 const sources = { messages: new TranscriptViewSource(transcript) };

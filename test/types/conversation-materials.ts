@@ -1,11 +1,11 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, type AcceptedConversationMessage, type ConversationMaterialInput, type ConversationMaterialSources } from '@capix/conversation-service';
-import { Memories } from '@capix/memory';
-import { Resource, type ResourcesOf } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Node } from '@capix/structure';
-import { Transcript, TranscriptResource } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories } from '@weiliang0121/capix-memory';
+import { Resource, type ResourcesOf } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Node } from '@weiliang0121/capix-structure';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const transcript = new Transcript();
 const memories = new Memories(transcript);

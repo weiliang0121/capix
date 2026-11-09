@@ -1,5 +1,5 @@
 import { ArrowUpRight } from 'lucide-react';
-import type { MemoryRecord } from '@capix/protocol';
+import type { MemoryRecord } from '@weiliang0121/capix-protocol';
 import type { MemoryView } from '../../state/data';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';

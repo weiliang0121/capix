@@ -1,16 +1,16 @@
-import { MemoryCheckpointStore, type CheckpointStore, type CheckpointImage, type InvocationCheckpointFrame, type CheckpointCodec, type CheckpointSaveReceipt, type CheckpointFinishReceipt } from '@capix/checkpoint';
-import type { InvocationIdentity, CheckpointCodec as CommonCodec } from '@capix/contracts';
-import type { CheckpointInstallation, CheckpointFact, CheckpointWriter, CheckpointRestoration } from '@capix/server-runtime';
+import { MemoryCheckpointStore, type CheckpointStore, type CheckpointImage, type InvocationCheckpointFrame, type CheckpointCodec, type CheckpointSaveReceipt, type CheckpointFinishReceipt } from '@weiliang0121/capix-checkpoint';
+import type { InvocationIdentity, CheckpointCodec as CommonCodec } from '@weiliang0121/capix-contracts';
+import type { CheckpointInstallation, CheckpointFact, CheckpointWriter, CheckpointRestoration } from '@weiliang0121/capix-runtime';
 // @ts-expect-error Runtime observations are not part of the persistence package.
-import type { CheckpointFact as StoredFact } from '@capix/checkpoint';
+import type { CheckpointFact as StoredFact } from '@weiliang0121/capix-checkpoint';
 // @ts-expect-error Installation coordinates a live running host.
-import type { CheckpointInstallation as StoredInstallation } from '@capix/checkpoint';
+import type { CheckpointInstallation as StoredInstallation } from '@weiliang0121/capix-checkpoint';
 // @ts-expect-error The current activity's writer requires Runtime ownership checks.
-import type { CheckpointWriter as StoredWriter } from '@capix/checkpoint';
+import type { CheckpointWriter as StoredWriter } from '@weiliang0121/capix-checkpoint';
 // @ts-expect-error Restoration construction belongs to Runtime.
-import type { CheckpointRestoration as StoredRestoration } from '@capix/checkpoint';
+import type { CheckpointRestoration as StoredRestoration } from '@weiliang0121/capix-checkpoint';
 // @ts-expect-error Runtime no longer reexports persistent frame types.
-import type { InvocationCheckpointFrame as RuntimeFrame } from '@capix/server-runtime';
+import type { InvocationCheckpointFrame as RuntimeFrame } from '@weiliang0121/capix-runtime';
 
 const owner: InvocationIdentity = { contextId: 'single-call', kind: 'node' };
 const frame: InvocationCheckpointFrame = { owner, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] };

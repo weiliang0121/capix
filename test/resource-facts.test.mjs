@@ -1,14 +1,14 @@
 import { bindResources } from './fixtures/resources.mjs';
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures } from '@weiliang0121/capix-runtime/construction';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { lifecycleFor, callFor, recordFor } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TranscriptResource, TranscriptRangeRef, Transcript } from '@capix/transcript';
-import { Memories, MemoryResource } from '@capix/memory';
-import { ChangeBuffer } from '@capix/changes';
-import { Recorder, RecordBook, CallableRecordHelper, ResourceRecord, snapshotValue } from '@capix/records';
-import { ResourceOffer } from '@capix/resources';
+import { TranscriptResource, TranscriptRangeRef, Transcript } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
+import { Recorder, RecordBook, CallableRecordHelper, ResourceRecord, snapshotValue } from '@weiliang0121/capix-records';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 function scope(recorder = new Recorder(new RecordBook()), contextId = 'call') {
   const runtime = createBoundRuntime({ recorder });

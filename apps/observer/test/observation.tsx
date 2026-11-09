@@ -1,7 +1,7 @@
 // Deterministic transports only: no service, user content or model requests.
 import { createRoot } from 'react-dom/client';
 import { ClientRuntime, ObservationConnectionError, type ConversationTransport, type TranscriptTransport, type ObservationTransport } from '@capix/client-runtime';
-import type { InteractionObservation, ObserverOverview, TranscriptSnapshot } from '@capix/protocol';
+import type { InteractionObservation, ObserverOverview, TranscriptSnapshot } from '@weiliang0121/capix-protocol';
 import { createApplication } from '../src/binding/application';
 import { AppProvider } from '../src/state/react';
 import { ExplorerPanel } from '../src/features/explorer/ExplorerPanel';

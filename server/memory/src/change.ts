@@ -1,5 +1,5 @@
-import type { MemoryContent, MemoryResultSource } from '@capix/protocol';
-import type { Transcript } from '@capix/transcript';
+import type { MemoryContent, MemoryResultSource } from '@weiliang0121/capix-protocol';
+import type { Transcript } from '@weiliang0121/capix-transcript';
 import { isEqual } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import { Memory } from './memory.js';

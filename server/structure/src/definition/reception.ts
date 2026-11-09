@@ -1,4 +1,4 @@
-import type { CallableKind, ReceptionValue, ReceptionDefinition, ReceptionRegistration, ChildContract } from '@capix/contracts';
+import type { CallableKind, ReceptionValue, ReceptionDefinition, ReceptionRegistration, ChildContract } from '@weiliang0121/capix-contracts';
 import type { ChildContractsOf } from './children.js';
 
 export type DefinitionReceptions<Kind extends CallableKind> = Kind extends 'node' ? never : readonly ReceptionRegistration<ChildContractsOf<Kind>>[];

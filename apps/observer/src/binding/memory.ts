@@ -1,4 +1,4 @@
-import type { MemoryResultSource } from '@capix/protocol';
+import type { MemoryResultSource } from '@weiliang0121/capix-protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 

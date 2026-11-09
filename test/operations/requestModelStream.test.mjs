@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { defineScene, defineGroup } from '@capix/server-runtime';
+import { defineScene, defineGroup } from '@weiliang0121/capix-runtime';
 import { RequestModel, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 test('request-model keeps its progress subscription until the follow child returns', async () => {

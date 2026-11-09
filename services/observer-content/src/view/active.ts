@@ -1,8 +1,8 @@
-import { RuntimeError } from '@capix/contracts';
-import { MemoryViewSource, type Memories, type MemoryState } from '@capix/memory';
-import { TranscriptViewSource, type Transcript } from '@capix/transcript';
-import type { Message } from '@capix/protocol';
-import { View, type ViewBasis, type ViewReference, type ViewState } from '@capix/view';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { MemoryViewSource, type Memories, type MemoryState } from '@weiliang0121/capix-memory';
+import { TranscriptViewSource, type Transcript } from '@weiliang0121/capix-transcript';
+import type { Message } from '@weiliang0121/capix-protocol';
+import { View, type ViewBasis, type ViewReference, type ViewState } from '@weiliang0121/capix-view';
 import { isEqual } from 'es-toolkit';
 import { appendActiveView, initialActiveView } from './default-policy.js';
 import { freezeActiveView, type ActiveViewState, type ActiveViewBasis, type ActiveViewSnapshot, type ActiveViewSelection, type ActiveViewPersistence } from './state.js';

@@ -1,4 +1,4 @@
-import type { InvocationFailureFact, RuntimeErrorValue } from '@capix/contracts';
+import type { InvocationFailureFact, RuntimeErrorValue } from '@weiliang0121/capix-contracts';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 
 import type { Recorder } from '../recorder.js';

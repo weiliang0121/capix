@@ -1,7 +1,7 @@
 import { isEqual } from 'es-toolkit';
-import type { CallableInvocationCallbacks } from '@capix/server-runtime';
-import { TranscriptRangeRef, type TranscriptAppendProgress } from '@capix/transcript';
-import type { GenerationOutput, ModelSettings } from '@capix/protocol';
+import type { CallableInvocationCallbacks } from '@weiliang0121/capix-runtime';
+import { TranscriptRangeRef, type TranscriptAppendProgress } from '@weiliang0121/capix-transcript';
+import type { GenerationOutput, ModelSettings } from '@weiliang0121/capix-protocol';
 import type { ConversationScene } from '../scene.js';
 import { validateSettings } from '../model/settings.js';
 import type { AcceptedConversationInput } from '../accept.js';

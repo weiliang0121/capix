@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { RuntimeError } from '@capix/contracts';
-import { Group, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/structure';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { Group, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@weiliang0121/capix-structure';
 import { isEqual } from 'es-toolkit';
-import type { GenerationOutput, ConversationTask } from '@capix/protocol';
+import type { GenerationOutput, ConversationTask } from '@weiliang0121/capix-protocol';
 import { conversationTaskRequests, type ConversationTaskResources } from './resources.js';
 import { prepareMemoryInput } from './group/memory/input.js';
 import type { PrepareConversationContext, PreparedConversationContext } from './group/context/prepare.js';

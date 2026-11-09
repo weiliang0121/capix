@@ -1,12 +1,12 @@
-import { MemoryResource } from '@capix/memory';
+import { MemoryResource } from '@weiliang0121/capix-memory';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ModelCallResources, type MemoryWriteResources } from '../../resources.js';
-import { checkpointPoint, childReference, type GroupWork, type ChildCall, type CheckpointFacts, type ChildFact } from '@capix/structure';
+import { checkpointPoint, childReference, type GroupWork, type ChildCall, type CheckpointFacts, type ChildFact } from '@weiliang0121/capix-structure';
 import { isEqual } from 'es-toolkit/predicate';
 import { memoryCheckpointInput, memoryCheckpointOutput } from './checkpoint.js';
 import { originalCheckpoint, waitingChild, acceptedChild, emptyCheckpointState } from '../checkpoint.js';
 import { modelOutputSchema } from '../../model/interactions.js';
-import { Group } from '@capix/structure';
+import { Group } from '@weiliang0121/capix-structure';
 import { PrepareModelRequest } from '../../node/model/prepare.js';
 import { RequestModel } from '../model/request.js';
 import { AcceptModelOutput, type ModelAcceptanceInput } from '../../node/model/accept.js';

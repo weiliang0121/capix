@@ -1,6 +1,6 @@
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
-import type { ConversationStage } from '@capix/protocol';
-import type { RunnerObservation, RunnerObservationEvent } from '@capix/server-runtime';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
+import type { ConversationStage } from '@weiliang0121/capix-protocol';
+import type { RunnerObservation, RunnerObservationEvent } from '@weiliang0121/capix-runtime';
 import type { ToolLoop } from '../tools/loop.js';
 
 export interface ToolStageEvent {

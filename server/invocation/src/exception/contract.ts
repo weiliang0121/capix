@@ -1,4 +1,4 @@
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { isNonBlankString } from '../value/string.js';
 
 /** Identity owned by the declaration producing an expected exceptional outcome. */

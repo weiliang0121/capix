@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { ConversationSession } from '@capix/client-runtime';
-import type { ConversationStage } from '@capix/protocol';
+import type { ConversationStage } from '@weiliang0121/capix-protocol';
 import { ArrowDown } from 'lucide-react';
 import { MessageContent } from '../components/message-content.js';
 import { CopyMessageButton } from '../features/conversation/CopyMessageButton.js';

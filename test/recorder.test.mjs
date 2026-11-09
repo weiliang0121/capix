@@ -1,12 +1,12 @@
 import { ExecutionFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper } from '@capix/records';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper } from '@weiliang0121/capix-records';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { createBoundRuntime, observeCall, fixtureState } from './fixtures/runtime.mjs';
 import { subscribeExecutions } from '@capix/observer-service';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 class CustomRecord extends BaseRecord {
   revise(value) {

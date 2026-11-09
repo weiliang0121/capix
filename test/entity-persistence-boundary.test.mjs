@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeCaptureError } from '@capix/changes';
-import { RuntimeError } from '@capix/contracts';
-import { PersistenceError } from '@capix/diagnostics';
-import { Memories, MemoryResource } from '@capix/memory';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Group, Node, Resources, Runner, Scene } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { ChangeCaptureError } from '@weiliang0121/capix-changes';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Group, Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 const entities = [
   {

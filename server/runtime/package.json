@@ -1,5 +1,5 @@
 {
-  "name": "@capix/server-runtime",
+  "name": "@weiliang0121/capix-runtime",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -22,17 +22,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix/protocol": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0",
-    "@capix/resources": "workspace:*",
-    "@capix/structure": "workspace:*",
-    "@capix/contracts": "workspace:*",
-    "@capix/changes": "workspace:*",
-    "@capix/records": "workspace:*",
-    "@capix/checkpoint": "workspace:*",
-    "@capix/invocation": "workspace:*",
-    "@capix/interaction": "workspace:*",
-    "@capix/diagnostics": "workspace:*"
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-structure": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-records": "workspace:*",
+    "@weiliang0121/capix-checkpoint": "workspace:*",
+    "@weiliang0121/capix-invocation": "workspace:*",
+    "@weiliang0121/capix-interaction": "workspace:*",
+    "@weiliang0121/capix-diagnostics": "workspace:*"
   },
   "description": "Structure binding, resource assembly, and Runner for CAPiX.",
   "license": "MIT",

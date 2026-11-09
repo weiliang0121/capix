@@ -1,9 +1,9 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, InvocationContext, InvocationChildren } from '@capix/server-runtime';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Scene, Group, InvocationContext, InvocationChildren } from '@weiliang0121/capix-runtime';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 class Answer extends Group {

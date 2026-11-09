@@ -11,7 +11,7 @@
   "dependencies": {
     "@capix/client-http": "workspace:*",
     "@capix/client-runtime": "workspace:*",
-    "@capix/protocol": "workspace:*",
+    "@weiliang0121/capix-protocol": "workspace:*",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "es-toolkit": "1.52.0",

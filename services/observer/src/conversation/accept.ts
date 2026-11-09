@@ -1,8 +1,8 @@
-import { RuntimeError } from '@capix/contracts';
-import { isObject, isNonEmptyArray, isNonBlankString } from '@capix/server-runtime';
-import { type Transcript } from '@capix/transcript';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { isObject, isNonEmptyArray, isNonBlankString } from '@weiliang0121/capix-runtime';
+import { type Transcript } from '@weiliang0121/capix-transcript';
 
-import type { Message, FileTask } from '@capix/protocol';
+import type { Message, FileTask } from '@weiliang0121/capix-protocol';
 import { isRelativeFilePath } from '../files/index.js';
 
 export class ConversationInputError extends RuntimeError {

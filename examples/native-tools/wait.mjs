@@ -1,5 +1,5 @@
 import { ModelReplyPending } from '@capix/conversation-service';
-import { InvocationCancelled } from '@capix/invocation';
+import { InvocationCancelled } from '@weiliang0121/capix-invocation';
 
 /**
  * One local wait. A timeout retains the existing interaction reference; it does

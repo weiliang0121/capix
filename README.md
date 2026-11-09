@@ -1,6 +1,6 @@
 # CAPiX
 
-CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服务端运行能力、无 UI 的客户端运行能力与传输适配。**Observer 是同仓库的参考服务与应用**：装配对话能力、可选记录预设和观测交付，用真实使用验证内核。
+CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服务端运行能力、无 UI 的客户端运行能力与传输适配。仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用后续可按边界拆到独立仓库，本轮不迁移目录或仓库。**Observer 是同仓库的参考服务与应用**：装配对话能力、可选记录预设和观测交付，用真实使用验证内核。
 
 本仓库原名 `capix-observer`，现在是 CAPiX 的实现主线。原 `capix` 已移至相邻的 `capix-explorations`，保留独立 Git 历史和概念探索；不合并其 Graph/TRS 实现，也不把探索方案作为本内核的约束。
 
@@ -74,7 +74,7 @@ const environment = initializeObserver(provider);
 const output = await environment.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal, progress });
 ```
 
-上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@capix/server-runtime`：先构造 Scene 并向 Resources 注册供给，再 `const runner = new Runner(scene, resources).build()`，最后 `runner.run(input, options)`。可选 Interactions 作为第三参数接入；无需持有另一个已绑定场景，也不必使用 Observer 的装配。可运行入口见 [examples/runner.mjs](examples/runner.mjs)，完整资源与具名子调用例子见 [examples/dictionary.mjs](examples/dictionary.mjs)。
+上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@weiliang0121/capix-runtime`：先构造 Scene 并向 Resources 注册供给，再 `const runner = new Runner(scene, resources).build()`，最后 `runner.run(input, options)`。可选 Interactions 作为第三参数接入；无需持有另一个已绑定场景，也不必使用 Observer 的装配。可运行入口见 [examples/runner.mjs](examples/runner.mjs)，完整资源与具名子调用例子见 [examples/dictionary.mjs](examples/dictionary.mjs)。
 
 回答在正式追加消息后交付，随后处理记忆。启用持久化时，正式追加先提交到数据库。后处理失败保留已成立的回答。当前只有生成回答业务显式组织的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或默认服务未完成调用恢复。
 
@@ -82,20 +82,20 @@ const output = await environment.runner.run({ messages: [{ role: 'user', content
 
 ## 包与公开入口
 
-首批 npm 发布范围为 `contracts`、`protocol` 和 `server/*`，共 17 个包；参考服务、客户端与应用不在首发范围。当前包名使用的 `@capix` scope 已确认无法注册，只作为仓库内占位；新品牌与 scope 尚未确定，此时不能按占位名称正式发布。发布准备与当前阻碍见 [npm 发布](docs/npm-publishing.md)。
+首批 npm 发布范围为 `contracts`、`protocol` 和全部 15 个 `server/*` 包，共 17 个包，品牌保持 **CAPiX**，统一使用用户已持有的 **`@weiliang0121`** scope 和 `capix-` 包名前缀。六个参考服务、客户端与应用 workspace 不在首发范围，继续保留现有 `@capix/*` 私有工作区身份；上面的服务装配示例需在本仓库使用。发布步骤见 [npm 发布](docs/npm-publishing.md)。
 
-| 包或分组                                                                                                              | 当前职责                                                   |
-| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `@capix/contracts`、`@capix/protocol`                                                                                 | 进程内共同契约与稳定数据；真实跨端纯值契约                 |
-| `@capix/resources`、`@capix/structure`                                                                                | 资源定义和受控访问；Scene / Group / Node 及作者契约        |
-| `@capix/invocation`、`@capix/checkpoint`、`@capix/interaction`                                                        | 单次调用与接纳；固定事实保存和有限恢复；独立外部请求与反馈 |
-| `@capix/server-runtime`                                                                                               | 结构绑定、资源装配、Runner、作者端口适配及可选记录安装     |
-| `@capix/transcript`、`@capix/memory`、`@capix/view`、`@capix/measurement`、`@capix/records`、`@capix/model-exchanges` | 独立内容、视图、计量、记录和模型交换实体及其资源访问       |
-| `@capix/changes`、`@capix/diagnostics`、`@capix/model-provider`                                                       | 变化交付、故障诊断、模型协议适配                           |
-| `@capix/observer-content`、`@capix/observer-service`、`@capix/conversation-service`                                   | 内容策略组合、Observer 参考服务、新内核典型对话装配        |
-| `@capix/client-runtime`、`@capix/client-http`、`@capix/observer-app`                                                  | 无 UI 的客户端协作、HTTP 适配、React 参考应用              |
+| 包或分组                                                                                                                                                                                            | 当前职责                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `@weiliang0121/capix-contracts`、`@weiliang0121/capix-protocol`                                                                                                                                     | 进程内共同契约与稳定数据；真实跨端纯值契约                 |
+| `@weiliang0121/capix-resources`、`@weiliang0121/capix-structure`                                                                                                                                    | 资源定义和受控访问；Scene / Group / Node 及作者契约        |
+| `@weiliang0121/capix-invocation`、`@weiliang0121/capix-checkpoint`、`@weiliang0121/capix-interaction`                                                                                               | 单次调用与接纳；固定事实保存和有限恢复；独立外部请求与反馈 |
+| `@weiliang0121/capix-runtime`                                                                                                                                                                       | 结构绑定、资源装配、Runner、作者端口适配及可选记录安装     |
+| `@weiliang0121/capix-transcript`、`@weiliang0121/capix-memory`、`@weiliang0121/capix-view`、`@weiliang0121/capix-measurement`、`@weiliang0121/capix-records`、`@weiliang0121/capix-model-exchanges` | 独立内容、视图、计量、记录和模型交换实体及其资源访问       |
+| `@weiliang0121/capix-changes`、`@weiliang0121/capix-diagnostics`、`@weiliang0121/capix-model-provider`                                                                                              | 变化交付、故障诊断、模型协议适配                           |
+| 私有：`@capix/observer-content`、`@capix/observer-service`、`@capix/conversation-service`                                                                                                           | 内容策略组合、Observer 参考服务、新内核典型对话装配        |
+| 私有：`@capix/client-runtime`、`@capix/client-http`、`@capix/observer-app`                                                                                                                          | 无 UI 的客户端协作、HTTP 适配、React 参考应用              |
 
-内容实体从各自包导入，Runtime 不提供 `/content`。Runtime 的 `/recording`、`/construction` 分别提供可选记录安装和底层构造入口。服务包的 `/conversation`、`/observation`、`/assembly`、`/http` 对应装配职责。所有跨包导入经过公开出口，完整职责见 [项目组织](docs/organization.md)。资源基础对象从 `@capix/resources` 导入，操作契约从 `@capix/resources/operation` 导入；场景资源登记 `Resources` 留在 Runtime，边界见 [资源包](docs/resources-package.md)。
+内容实体从各自包导入，Runtime 不提供 `/content`。Runtime 的 `/recording`、`/construction` 分别提供可选记录安装和底层构造入口。服务包的 `/conversation`、`/observation`、`/assembly`、`/http` 对应装配职责。所有跨包导入经过公开出口，完整职责见 [项目组织](docs/organization.md)。资源基础对象从 `@weiliang0121/capix-resources` 导入，操作契约从 `@weiliang0121/capix-resources/operation` 导入；场景资源登记 `Resources` 留在 Runtime，边界见 [资源包](docs/resources-package.md)。
 
 服务端与客户端不互相依赖；HTTP 适配依赖客户端端口；UI 通过应用绑定将客户端状态投影到 Store。实体实例、网络契约和 UI 读模型不互相替代。
 

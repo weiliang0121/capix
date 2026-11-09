@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { ModelExchanges, requireExchangeReference } from '@capix/model-exchanges';
+import { ModelExchanges, requireExchangeReference } from '@weiliang0121/capix-model-exchanges';
 
 // Isolated experiment, NOT a ModelExchanges change or a proposed universal
 // history order. One explicit owner selects one linear sequence of closed

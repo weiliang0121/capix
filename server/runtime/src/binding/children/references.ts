@@ -1,6 +1,6 @@
-import type { ChildContract, ChildReference, ChildFact, ChildFacts, ExceptionOrigin, ContinuationFact, ReceptionDefinition, Stable, ChildReturnFact } from '@capix/contracts';
-import { type Invocation, type InvocationRelation, type InvocationTarget, type InvocationExceptionOrigin, type CheckpointContinuationFact, failureFact, failureDiagnostic, isInvocationCancelled } from '@capix/invocation';
-import type { CheckpointReference } from '@capix/checkpoint';
+import type { ChildContract, ChildReference, ChildFact, ChildFacts, ExceptionOrigin, ContinuationFact, ReceptionDefinition, Stable, ChildReturnFact } from '@weiliang0121/capix-contracts';
+import { type Invocation, type InvocationRelation, type InvocationTarget, type InvocationExceptionOrigin, type CheckpointContinuationFact, failureFact, failureDiagnostic, isInvocationCancelled } from '@weiliang0121/capix-invocation';
+import type { CheckpointReference } from '@weiliang0121/capix-checkpoint';
 import type { BoundChildren } from './bound.js';
 import type { BoundReceptions } from '../receptions.js';
 

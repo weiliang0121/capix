@@ -4,9 +4,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { PersistenceError } from '@capix/diagnostics';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { ActiveView, ConversationContent } from '@capix/observer-content';
 import { SqliteObserverStore } from '@capix/observer-service/assembly';
 

@@ -1,6 +1,6 @@
-import type { Memories, MemoryBasis, MemoryState } from '@capix/memory';
-import type { Message } from '@capix/protocol';
-import { ResourceOffer } from '@capix/resources';
+import type { Memories, MemoryBasis, MemoryState } from '@weiliang0121/capix-memory';
+import type { Message } from '@weiliang0121/capix-protocol';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 import type { AcceptedConversationMessage } from '../scene.js';
 
 /** A fixed extraction input, including inactive memories so updates can retain identity. */

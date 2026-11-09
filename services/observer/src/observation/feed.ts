@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { ObservationBaseline, ObservationFrame, ObservationUpdate, ObserverChange, ObservationChange, RecordEntry, RecordingArchive } from '@capix/protocol';
-import type { Transcript } from '@capix/transcript';
-import type { Memories } from '@capix/memory';
-import { type RecordingInstallation } from '@capix/server-runtime/recording';
-import { observeMemory, snapshotValue, CompositeRecord, CallableRecord, ExecutionRecord, RuntimeCallRecord, type BaseRecord, type RecordBook } from '@capix/records';
+import type { ObservationBaseline, ObservationFrame, ObservationUpdate, ObserverChange, ObservationChange, RecordEntry, RecordingArchive } from '@weiliang0121/capix-protocol';
+import type { Transcript } from '@weiliang0121/capix-transcript';
+import type { Memories } from '@weiliang0121/capix-memory';
+import { type RecordingInstallation } from '@weiliang0121/capix-runtime/recording';
+import { observeMemory, snapshotValue, CompositeRecord, CallableRecord, ExecutionRecord, RuntimeCallRecord, type BaseRecord, type RecordBook } from '@weiliang0121/capix-records';
 import type { ChangeConsumer } from '@capix/observer-content';
 import type { RecordReceiver, RecordSource } from './record/source.js';
 import { observeOverview } from './overview.js';

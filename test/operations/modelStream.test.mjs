@@ -1,9 +1,9 @@
 import { bindResources } from '../fixtures/resources.mjs';
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures } from '@weiliang0121/capix-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ProgressChannel } from '@capix/changes';
-import { isInvocationCancelled } from '@capix/server-runtime';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { isInvocationCancelled } from '@weiliang0121/capix-runtime';
 
 import { DeepSeekProvider, ModelInteractions, ModelSource, ModelResource, modelInteractionContract } from '@capix/observer-service';
 

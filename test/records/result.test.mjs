@@ -1,15 +1,15 @@
 import { ExecutionFixture, OperationFixture, AttemptFixture } from '../fixtures/behavior.mjs';
 import { callFor, rememberCall } from '../fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix/observer-service';
-import { ExecutionRecordHelper } from '@capix/records';
+import { ExecutionRecordHelper } from '@weiliang0121/capix-records';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runner, Resources, Scene, Node, bindRecording } from '@capix/server-runtime';
-import { Recorder, RecordBook, InvocationRecord, CallableRecord } from '@capix/records';
+import { Runner, Resources, Scene, Node, bindRecording } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook, InvocationRecord, CallableRecord } from '@weiliang0121/capix-records';
 import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
-import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
+import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 

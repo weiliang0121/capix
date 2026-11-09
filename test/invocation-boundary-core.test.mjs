@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceAccessClosed, ResourceOffer, ResourceSupply } from '@capix/resources';
-import { CallableContext, Invocation, InvocationContext, InvocationResources, invocationResourceFailures } from '@capix/invocation';
+import { ResourceAccessClosed, ResourceOffer, ResourceSupply } from '@weiliang0121/capix-resources';
+import { CallableContext, Invocation, InvocationContext, InvocationResources, invocationResourceFailures } from '@weiliang0121/capix-invocation';
 
 // This fixture deliberately supplies a business entry directly: no structure,
 // binding installation, Runner, recording preset or service environment is needed.

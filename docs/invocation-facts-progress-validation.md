@@ -183,7 +183,7 @@ verify({
 
 ### 既有资源形式可以兑现交接
 
-[资源接缝测试](../examples/checkpoint-facts-study/local-progress-resource.test.mjs)用真实 `@capix/resources` 的 `register → bind → open → methods` 做了 5 项验证，调用与持久事实仍使用实验模型，没有运行完整 Runner：
+[资源接缝测试](../examples/checkpoint-facts-study/local-progress-resource.test.mjs)用真实 `@weiliang0121/capix-resources` 的 `register → bind → open → methods` 做了 5 项验证，调用与持久事实仍使用实验模型，没有运行完整 Runner：
 
 ```text
 父调用捕获局部材料

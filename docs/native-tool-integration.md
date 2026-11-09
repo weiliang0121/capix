@@ -58,9 +58,9 @@ flowchart TD
 | Interaction    | 可选的独立发送、反馈保存、局部等待与再次读取         | 模型循环、远端幂等、任意调用恢复                        |
 | 宿主           | 实体、Provider/MCP Client、持久端口、结构装配与关闭  | 根据记录猜测业务效果                                    |
 
-共同模型类型先归 `@capix/model-provider`，不因被多个包使用就晋级到通用 contracts 或跨端 protocol。模型交换实体独立放在 `@capix/model-exchanges`；它消费模型纯值及 resources/view/changes 等公开端口，不依赖 Invocation 或 Runtime。其持久存储仍由宿主实现。
+共同模型类型先归 `@weiliang0121/capix-model-provider`，不因被多个包使用就晋级到通用 contracts 或跨端 protocol。模型交换实体独立放在 `@weiliang0121/capix-model-exchanges`；它消费模型纯值及 resources/view/changes 等公开端口，不依赖 Invocation 或 Runtime。其持久存储仍由宿主实现。
 
-ToolLoop 先在服务的独立 tools 目录实现，通过 example 验证；稳定后再决定公共预设包。不要放入 `@capix/structure`，以免通用结构包反向依赖模型协议。MCP 客户端适配也独立于模型 Provider。
+ToolLoop 先在服务的独立 tools 目录实现，通过 example 验证；稳定后再决定公共预设包。不要放入 `@weiliang0121/capix-structure`，以免通用结构包反向依赖模型协议。MCP 客户端适配也独立于模型 Provider。
 
 ## 4. 模型协议：共同字段与原生补充形成一份回复
 
@@ -450,8 +450,8 @@ examples/native-tools/      离线闭环、真实模型显式入口、故障验�
 
 生产出口落在三处：
 
-- `@capix/model-provider`：ModelReply v1 唯一材料、Chat Completions JSON/SSE 工具解析、完整交换续接，以及 `modelReplyText` 纯投影。`native.format` 表达协议，不将通用端点伪装成某厂商。
-- `@capix/model-exchanges`：完整交换实体、按 callId 固定反馈、准确接纳凭据、同步持久接口及 ViewSource。SQLite v4 新增对应独立表。
+- `@weiliang0121/capix-model-provider`：ModelReply v1 唯一材料、Chat Completions JSON/SSE 工具解析、完整交换续接，以及 `modelReplyText` 纯投影。`native.format` 表达协议，不将通用端点伪装成某厂商。
+- `@weiliang0121/capix-model-exchanges`：完整交换实体、按 callId 固定反馈、准确接纳凭据、同步持久接口及 ViewSource。SQLite v4 新增对应独立表。
 - `@capix/conversation-service/tools`：普通 ToolLoop Group、类型关联的 `tool()`、显式资源装配与 `createToolAnswer`。默认无需 CP；选装恢复要求工具 CP 和宿主原交互读取，核对准确请求与完整反馈后再消费。首版串行工具，不转交候选正文预览；Provider 自身仍支持 SSE 工具聚合。
 
 回复迁移覆盖现有服务、测试替身及公开 Provider 的 examples，未修改旧 Observer 自有模型协议。新交互使用 v2，默认 Scene、材料回答及记忆提案 CP 使用 v3，模型完成节点及 Group 使用 v2。旧文本历史通过独立只读入口保留，不假造原生续接依据。Frame v5、Invocation、资源窗口、接纳与终态恢复规则不变。

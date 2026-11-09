@@ -1,4 +1,4 @@
-import type { Stable } from '@capix/contracts';
+import type { Stable } from '@weiliang0121/capix-contracts';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationContextView } from '../context/view.js';
 import type { InvocationResult } from './result.js';

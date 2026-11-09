@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Interaction, Interactions } from '@capix/interaction';
-import { PersistenceError } from '@capix/diagnostics';
-import { ResourceOffer } from '@capix/resources';
-import { Node, Resources, Runner, Scene } from '@capix/server-runtime';
+import { Interaction, Interactions } from '@weiliang0121/capix-interaction';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 
 const contract = (key = 'pending-count.echo') => ({ key, request: (value) => value, reply: (value) => value });
 const tick = () => new Promise((resolve) => setImmediate(resolve));

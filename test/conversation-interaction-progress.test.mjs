@@ -1,12 +1,12 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationScene, createInteractionAnswer, HistoryResource, CompletionInteractionResource, CompletionInteraction } from '@capix/conversation-service';
-import { Interactions } from '@capix/interaction';
-import { Resource, Resources as ResourceRegistry, ResourceAccessClosed } from '@capix/resources';
-import { Node, Resources, Runner, Scene } from '@capix/server-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { Resource, Resources as ResourceRegistry, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 import { modelReply } from './fixtures/conversation-model.mjs';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 const messages = [{ role: 'user', content: 'question' }];
 

@@ -2,9 +2,9 @@ import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { defineScene, defineGroup, reception, checkpointPoint } from '@capix/server-runtime';
-import { cloneCheckpointImage, checkpointReference, MemoryCheckpointStore } from '@capix/checkpoint';
-import { decodeCheckpointFrame } from '@capix/server-runtime/construction';
+import { defineScene, defineGroup, reception, checkpointPoint } from '@weiliang0121/capix-runtime';
+import { cloneCheckpointImage, checkpointReference, MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import { decodeCheckpointFrame } from '@weiliang0121/capix-runtime/construction';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const dateBinding = { position: 0, childPosition: 0, check: (value) => assert.ok(typeof value?.iso === 'string' && Number.isFinite(Date.parse(value.iso))), codec: { encode: (value) => value.iso, decode: (value) => ({ iso: value }) } };

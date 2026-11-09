@@ -1,4 +1,4 @@
-import type { ResourceRecord as ResourceRecordData } from '@capix/protocol';
+import type { ResourceRecord as ResourceRecordData } from '@weiliang0121/capix-protocol';
 import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';
 

@@ -1,13 +1,13 @@
-import { modelReplyText } from '@capix/model-provider';
+import { modelReplyText } from '@weiliang0121/capix-model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createCompletionReplyNode, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
-import { PersistenceError } from '@capix/diagnostics';
-import { Interactions } from '@capix/interaction';
-import { Resource } from '@capix/resources';
-import { Resources, Runner, Scene } from '@capix/server-runtime';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 import { modelReply } from './fixtures/conversation-model.mjs';
-import { Transcript, TranscriptResource } from '@capix/transcript';
+import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
 
 const input = Object.freeze({ role: 'user', content: '请总结已有讨论。' });
 const answer = '已保存的外部回答。';

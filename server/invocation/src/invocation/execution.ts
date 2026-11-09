@@ -3,9 +3,9 @@ import { requireNotCancelled } from './cancellation.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
 import type { InvocationExecutionWork, InvocationProcess } from './work.js';
 import { InvocationOutputSection } from '../output/section.js';
-import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter, OperationOutcome } from '@capix/contracts';
-import { ProgressChannel } from '@capix/changes';
-import { stableValue, type Stable } from '@capix/contracts';
+import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter, OperationOutcome } from '@weiliang0121/capix-contracts';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { stableValue, type Stable } from '@weiliang0121/capix-contracts';
 
 export interface InvocationExecutionControls {
   healthy(): void;

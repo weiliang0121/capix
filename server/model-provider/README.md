@@ -1,9 +1,9 @@
 # 模型 Provider
 
-`@capix/model-provider` 提供 Chat Completions 文本与原生函数调用、可选 SSE，以及唯一的 `ModelReply` 纯值契约。可以从 `.mjs` 使用，不依赖 Runtime、资源、Interaction 或服务。Provider 负责通信和协议接纳；工具选择、参数业务校验、执行、接纳与恢复由调用方组织。
+`@weiliang0121/capix-model-provider` 提供 Chat Completions 文本与原生函数调用、可选 SSE，以及唯一的 `ModelReply` 纯值契约。可以从 `.mjs` 使用，不依赖 Runtime、资源、Interaction 或服务。Provider 负责通信和协议接纳；工具选择、参数业务校验、执行、接纳与恢复由调用方组织。
 
 ```js
-import { ChatCompletionsProvider, modelReplyText } from '@capix/model-provider';
+import { ChatCompletionsProvider, modelReplyText } from '@weiliang0121/capix-model-provider';
 
 const model = new ChatCompletionsProvider({
   endpoint: 'https://api.deepseek.com/chat/completions',
@@ -19,7 +19,7 @@ if (reply.termination.reason !== 'stop') throw new Error('模型未正常完成'
 console.log(modelReplyText(reply));
 ```
 
-通过 `npm install @capix/model-provider` 安装后可直接运行；仅在本仓库从源码使用时需要先执行 `pnpm build`。配置由宿主传入，包不读取环境文件。只有显式执行真实请求才会访问模型。
+通过 `npm install @weiliang0121/capix-model-provider` 安装后可直接运行；仅在本仓库从源码使用时需要先执行 `pnpm build`。配置由宿主传入，包不读取环境文件。只有显式执行真实请求才会访问模型。
 
 ## 唯一回复材料
 

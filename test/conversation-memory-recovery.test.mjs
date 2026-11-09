@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { CompletionResource, ConversationMemoryResource, ConversationViewResource, createMemoryMaintenance, createMessageInclusion } from '@capix/conversation-service';
-import { Memories, MemoryResource } from '@capix/memory';
-import { Resource } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Scene, childReference, checkpointPoint } from '@capix/structure';
-import { Transcript } from '@capix/transcript';
-import { View } from '@capix/view';
+import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { Resource } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Scene, childReference, checkpointPoint } from '@weiliang0121/capix-structure';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { View } from '@weiliang0121/capix-view';
 
 const valueCodec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 const voidCodec = { encode: () => null, decode: () => undefined };

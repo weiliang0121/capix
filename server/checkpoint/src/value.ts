@@ -1,7 +1,7 @@
-import { RuntimeError } from '@capix/contracts';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { createHash } from 'node:crypto';
 import type { CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
-import type { CheckpointValue } from '@capix/contracts';
+import type { CheckpointValue } from '@weiliang0121/capix-contracts';
 import { encodeCheckpointData } from './encoding.js';
 import { checkpointHeadCommit, rememberCheckpointHead } from './evidence.js';
 import { checkCheckpointPublication } from './incremental.js';

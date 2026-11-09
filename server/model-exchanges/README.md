@@ -1,6 +1,6 @@
 # ModelExchanges
 
-`@capix/model-exchanges` 保存模型的完整回复与每个工具调用的正式反馈。它不保存调用运行状态，不执行工具，不把工具消息写入 Transcript。
+`@weiliang0121/capix-model-exchanges` 保存模型的完整回复与每个工具调用的正式反馈。它不保存调用运行状态，不执行工具，不把工具消息写入 Transcript。
 
 ```ts
 const exchanges = new ModelExchanges({ persistence });

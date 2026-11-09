@@ -1,7 +1,7 @@
 import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
-import { ResourceOffer } from '@capix/resources';
-import { Scene, Group, Node, checkpointPoint, childReference, childReferences, reception } from '@capix/structure';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import { Scene, Group, Node, checkpointPoint, childReference, childReferences, reception } from '@weiliang0121/capix-structure';
 import { ExchangeResource, feedbackDigest } from './exchanges.mjs';
 import { validateReply, encodeHistory } from './protocol.mjs';
 import { precheck, rejection, validateCatalog } from './catalog.mjs';

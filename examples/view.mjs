@@ -1,11 +1,11 @@
 // 运行：pnpm build && node examples/view.mjs
 // 全部使用内存数据。本例准备材料并维护视图，不调用外部模型。
-import { Transcript, TranscriptViewSource } from '@capix/transcript';
-import { Memories, MemoryViewSource } from '@capix/memory';
-import { View, openView, openViewManager } from '@capix/view';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Node, Scene, Sequence } from '@capix/structure';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
+import { View, openView, openViewManager } from '@weiliang0121/capix-view';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Node, Scene, Sequence } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 import { createSkillSource } from './view/skills.mjs';
 
 // 1. 宿主建立独立实体。消息与记忆继续由各自实体管理。

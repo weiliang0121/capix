@@ -1,12 +1,12 @@
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual as equal } from 'node:util';
-import type { CheckpointHead, CheckpointStore } from '@capix/checkpoint';
-import type { InteractionState } from '@capix/interaction';
-import type { ModelReply, ModelRequest } from '@capix/model-provider';
-import { RuntimeError } from '@capix/contracts';
-import { ResourceOffer } from '@capix/resources';
-import type { ViewReference, ViewState } from '@capix/view';
+import type { CheckpointHead, CheckpointStore } from '@weiliang0121/capix-checkpoint';
+import type { InteractionState } from '@weiliang0121/capix-interaction';
+import type { ModelReply, ModelRequest } from '@weiliang0121/capix-model-provider';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
+import type { ViewReference, ViewState } from '@weiliang0121/capix-view';
 import { z } from 'zod';
 import type { ConversationMaterialSources, ConversationViewSource } from '../materials/view.js';
 import { memoryApplySchema } from '../memory/codecs.js';

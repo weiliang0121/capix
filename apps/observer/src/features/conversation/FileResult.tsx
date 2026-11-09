@@ -1,4 +1,4 @@
-import type { FileOutput, FileTask } from '@capix/protocol';
+import type { FileOutput, FileTask } from '@weiliang0121/capix-protocol';
 
 /** A publication receipt remains visible even when later work fails or is cancelled. */
 export function FileResult({ task, output }: { task?: FileTask; output?: FileOutput }) {

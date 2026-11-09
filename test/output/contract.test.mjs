@@ -1,8 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindCallSource, Scene, Group, Node } from '@capix/server-runtime';
-import { ExceptionContract, Invocation, InvocationContext } from '@capix/invocation';
+import { bindCallSource, Scene, Group, Node } from '@weiliang0121/capix-runtime';
+import { ExceptionContract, Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
 
 const contract = {
   result(value) {

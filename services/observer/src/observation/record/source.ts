@@ -1,5 +1,5 @@
-import type { RecordChangeEvent, RecordEntry } from '@capix/protocol';
-import { snapshotValue, type BaseRecord, type RecordBook, type Recorder } from '@capix/records';
+import type { RecordChangeEvent, RecordEntry } from '@weiliang0121/capix-protocol';
+import { snapshotValue, type BaseRecord, type RecordBook, type Recorder } from '@weiliang0121/capix-records';
 import type { ChangeConsumer } from '@capix/observer-content';
 
 import { SourceIncomplete, type ObservationSource, type SourceReceiver } from '../delivery.js';

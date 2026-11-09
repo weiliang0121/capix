@@ -1,7 +1,7 @@
 import { isPlainObject } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
-import type { MemoryResultSource } from '@capix/protocol';
-import type { Transcript } from '@capix/transcript';
+import type { MemoryResultSource } from '@weiliang0121/capix-protocol';
+import type { Transcript } from '@weiliang0121/capix-transcript';
 import { isNonBlankString } from './validation.js';
 
 /** Validate and freeze the built-in memory carrier. Producers establish the receipt's truth. */

@@ -1,5 +1,5 @@
 import { isEqual } from 'es-toolkit';
-import type { AnswerPreviewSnapshot, AnswerPreviewChange, MessageLocator, TranscriptRangeLocator } from '@capix/protocol';
+import type { AnswerPreviewSnapshot, AnswerPreviewChange, MessageLocator, TranscriptRangeLocator } from '@weiliang0121/capix-protocol';
 
 export interface AnswerPreviewState {
   readonly snapshot?: AnswerPreviewSnapshot;

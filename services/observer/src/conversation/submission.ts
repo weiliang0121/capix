@@ -1,7 +1,7 @@
-import type { ConversationAdmission, ConversationFailure, ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionBaseline, ConversationSubmissionChange, ConversationSubmissionUpdate, ConversationActivity, AnswerPreviewChange } from '@capix/protocol';
-import { RuntimeError } from '@capix/contracts';
-import { ProgressChannel } from '@capix/changes';
-import { isInvocationCancelled, type InvocationProgress } from '@capix/invocation';
+import type { ConversationAdmission, ConversationFailure, ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionBaseline, ConversationSubmissionChange, ConversationSubmissionUpdate, ConversationActivity, AnswerPreviewChange } from '@weiliang0121/capix-protocol';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { ProgressChannel } from '@weiliang0121/capix-changes';
+import { isInvocationCancelled, type InvocationProgress } from '@weiliang0121/capix-invocation';
 import { ConversationInputError } from './accept.js';
 import type { ConversationProgress } from './progress.js';
 import { ConversationActivityProjection } from './activity.js';

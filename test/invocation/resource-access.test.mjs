@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceAccessClosed, ResourceOffer, ResourceSupply } from '@capix/resources';
-import { InvocationResources, invocationResourceFailures } from '@capix/invocation';
+import { ResourceAccessClosed, ResourceOffer, ResourceSupply } from '@weiliang0121/capix-resources';
+import { InvocationResources, invocationResourceFailures } from '@weiliang0121/capix-invocation';
 
 test('runtime phase windows share captured materials but never reopen retained endpoints', () => {
   let captures = 0;

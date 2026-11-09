@@ -1,14 +1,14 @@
-import type { MemoryEvent, TranscriptEvent } from '@capix/protocol';
+import type { MemoryEvent, TranscriptEvent } from '@weiliang0121/capix-protocol';
 import type { InvocationObservationSetup, ObservationInstallation } from '../../binding/observation.js';
 import type { ObservationDeclarationScope } from '../../definition/observation.js';
-import { ObservationError, type InvocationObserver } from '@capix/invocation';
-import type { EventConsumer } from '@capix/changes';
-import type { Recorder, RecordingRootRecord } from '@capix/records';
-import { RecordWriterResource, type RecordWriter } from '@capix/records/construction';
-import { Resource, Resources, type ResourceBinding } from '@capix/resources';
+import { ObservationError, type InvocationObserver } from '@weiliang0121/capix-invocation';
+import type { EventConsumer } from '@weiliang0121/capix-changes';
+import type { Recorder, RecordingRootRecord } from '@weiliang0121/capix-records';
+import { RecordWriterResource, type RecordWriter } from '@weiliang0121/capix-records/construction';
+import { Resource, Resources, type ResourceBinding } from '@weiliang0121/capix-resources';
 import { InvocationRecordAccess, invocationRecording, type InvocationRecordDescription } from './declaration.js';
-import type { CallableInput, CallableOutput } from '@capix/contracts';
-import { assertStructureConfigurable } from '@capix/structure/construction';
+import type { CallableInput, CallableOutput } from '@weiliang0121/capix-contracts';
+import { assertStructureConfigurable } from '@weiliang0121/capix-structure/construction';
 import { InvocationRecording } from './invocation.js';
 import { memoryRecord, transcriptRecord } from './mapping.js';
 

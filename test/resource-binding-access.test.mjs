@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Resource, ResourceOffer, ResourceRequest, ResourceBinding, ResourceSupply, Resources } from '@capix/resources';
+import { Resource, ResourceOffer, ResourceRequest, ResourceBinding, ResourceSupply, Resources } from '@weiliang0121/capix-resources';
 
 const policy = Object.freeze({
   isProtected: () => false,

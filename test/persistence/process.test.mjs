@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SqliteObserverStore, initializeObserver, observeOverview, ObservationFeed } from '@capix/observer-service';
-import { CallableRecord, CallableRecordHelper } from '@capix/records';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { CallableRecord, CallableRecordHelper } from '@weiliang0121/capix-records';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 for (const mode of ['content', 'running', 'finished']) {
   test(`SIGKILL at ${mode} boundary recovers saved facts without restarting work`, { timeout: 20000 }, async (t) => {

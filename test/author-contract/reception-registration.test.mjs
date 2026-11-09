@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Node, defineNode, defineGroup, reception, resolveDeclaration } from '@capix/server-runtime';
+import { Node, defineNode, defineGroup, reception, resolveDeclaration } from '@weiliang0121/capix-runtime';
 
 const metadata = { name: 'test', label: 'test', source: 'test' };
 const identity = { check: (value) => value, encode: (value) => value, decode: (value) => value };

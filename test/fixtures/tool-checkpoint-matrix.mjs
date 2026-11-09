@@ -1,16 +1,16 @@
 import { DatabaseSync } from 'node:sqlite';
 import { writeSync } from 'node:fs';
 import { z } from 'zod';
-import { Node, Scene, checkpointPoint, childReference } from '@capix/structure';
-import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner } from '@capix/server-runtime';
-import { Interactions } from '@capix/interaction';
-import { ModelExchanges } from '@capix/model-exchanges';
+import { Node, Scene, checkpointPoint, childReference } from '@weiliang0121/capix-structure';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
 import { CompletionInteraction } from '@capix/conversation-service';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { createToolLoop, registerToolLoopResources, tool, toolLoopInputCodec } from '@capix/conversation-service/tools';
-import { requireModelReply } from '@capix/model-provider';
+import { requireModelReply } from '@weiliang0121/capix-model-provider';
 
 // Test-only author scheduling: omit calls to Work.checkpoint before they enter
 // the mechanism. Kept writes use the actual store and real CAS receipts.

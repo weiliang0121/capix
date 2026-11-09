@@ -1,8 +1,8 @@
-import type { InteractionChannel, InteractionReference } from '@capix/interaction';
-import type { ModelReply, ModelRequest } from '@capix/model-provider';
+import type { InteractionChannel, InteractionReference } from '@weiliang0121/capix-interaction';
+import type { ModelReply, ModelRequest } from '@weiliang0121/capix-model-provider';
 import { isDeepStrictEqual } from 'node:util';
-import { ResourceOffer, type ResourceOperation, type ResourcesOf } from '@capix/resources';
-import { Group, Node, checkpointPoint, childReference, type ChildCall, type GroupWork, type NodeWork, type ResumeWork, type CheckpointFacts } from '@capix/structure';
+import { ResourceOffer, type ResourceOperation, type ResourcesOf } from '@weiliang0121/capix-resources';
+import { Group, Node, checkpointPoint, childReference, type ChildCall, type GroupWork, type NodeWork, type ResumeWork, type CheckpointFacts } from '@weiliang0121/capix-structure';
 import { requireString } from '../text.js';
 import { followModelFeedback, waitModelFeedback, type ModelFeedbackInput, type ModelProgressDelta, type ModelProgressInput } from './feedback.js';
 import { ModelReplyPending } from './pending.js';

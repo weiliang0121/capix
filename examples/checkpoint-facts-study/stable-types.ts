@@ -1,4 +1,4 @@
-import type { CallableContract, CallableInput, CallableOutput } from '@capix/contracts';
+import type { CallableContract, CallableInput, CallableOutput } from '@weiliang0121/capix-contracts';
 
 // Compile-only candidate, not a production API or a declaration of stable.mjs.
 // This projects admitted data into a readonly view; it is NOT ownership evidence.

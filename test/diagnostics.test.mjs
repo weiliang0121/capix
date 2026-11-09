@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import { RuntimeError } from '@capix/contracts';
-import { PersistenceError, RuntimeErrorHelper } from '@capix/diagnostics';
-import * as invocation from '@capix/invocation';
-import * as runtime from '@capix/server-runtime';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { PersistenceError, RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
+import * as invocation from '@weiliang0121/capix-invocation';
+import * as runtime from '@weiliang0121/capix-runtime';
 
 test('diagnostics owns the same error and formatter objects exposed by compatibility entrypoints', () => {
   for (const entry of [invocation, runtime]) {
@@ -35,7 +35,7 @@ test('Invocation protects diagnostics persistence failures by identity, includin
 
 test('diagnostics has no dependency on live invocation, structure, resources or Runtime', async () => {
   const manifest = JSON.parse(await readFile(new URL('../server/diagnostics/package.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.name, '@capix/diagnostics');
-  assert.deepEqual(Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).sort(), ['@capix/contracts', 'es-toolkit']);
+  assert.equal(manifest.name, '@weiliang0121/capix-diagnostics');
+  assert.deepEqual(Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).sort(), ['@weiliang0121/capix-contracts', 'es-toolkit']);
   assert.deepEqual(Object.keys(manifest.exports), ['.']);
 });

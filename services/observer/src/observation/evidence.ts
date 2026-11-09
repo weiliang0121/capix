@@ -1,5 +1,5 @@
-import type { TranscriptRangeLocator } from '@capix/protocol';
-import { ResourceRecord, type RecordBook } from '@capix/records';
+import type { TranscriptRangeLocator } from '@weiliang0121/capix-protocol';
+import { ResourceRecord, type RecordBook } from '@weiliang0121/capix-records';
 
 import { isTaskRecord } from './calls.js';
 

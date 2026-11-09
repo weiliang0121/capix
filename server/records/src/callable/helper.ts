@@ -1,4 +1,4 @@
-import type { ExecutionRecordSnapshot } from '@capix/protocol';
+import type { ExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 import type { Recorder } from '../recorder.js';
 import { InvocationBoundaryRecord } from '../invocation/boundary/record.js';
 import { MemoryRecord } from '../memory/record.js';

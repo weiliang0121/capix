@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
-import { MemoryViewSource } from '@capix/memory';
-import { TranscriptViewSource } from '@capix/transcript';
-import { ResourceOffer, type ResourcesOf } from '@capix/resources';
-import { Node, checkpointPoint } from '@capix/structure';
+import { MemoryViewSource } from '@weiliang0121/capix-memory';
+import { TranscriptViewSource } from '@weiliang0121/capix-transcript';
+import { ResourceOffer, type ResourcesOf } from '@weiliang0121/capix-resources';
+import { Node, checkpointPoint } from '@weiliang0121/capix-structure';
 import type { ConversationViewSource } from '../../materials/view.js';
 import type { ConversationMaterialInput } from '../../materials/input.js';
 import type { AcceptedConversationMessage } from '../../scene.js';

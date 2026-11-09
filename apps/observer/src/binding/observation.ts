@@ -1,6 +1,6 @@
 import { observationStatus } from '../observation/status.js';
 import type { ObservationState, TranscriptState } from '@capix/client-runtime';
-import type { ObserverOverview, MemoryRecord } from '@capix/protocol';
+import type { ObserverOverview, MemoryRecord } from '@weiliang0121/capix-protocol';
 import type { AppData, RoundView, MemoryView, ExecutionDetail } from '../state/data.js';
 import type { CallGraphModel } from '../state/graph.js';
 import { projectDetail } from './details.js';

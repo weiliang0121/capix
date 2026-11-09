@@ -1,6 +1,6 @@
-import { RuntimeError } from '@capix/contracts';
-import type { Message } from '@capix/protocol';
-import type { SyncViewSource } from '@capix/view';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import type { Message } from '@weiliang0121/capix-protocol';
+import type { SyncViewSource } from '@weiliang0121/capix-view';
 import type { Transcript } from './transcript.js';
 
 export interface TranscriptViewSummary {

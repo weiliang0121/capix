@@ -1,8 +1,8 @@
-import type { InvocationOutputReceiver } from '@capix/contracts';
+import type { InvocationOutputReceiver } from '@weiliang0121/capix-contracts';
 import type { ResourceInstallation } from '../resource/installation.js';
-import type { ResourceSupply } from '@capix/resources';
-import type { ProgressReceiver } from '@capix/changes';
-import { requireNotCancelled, type InvocationProgress } from '@capix/invocation';
+import type { ResourceSupply } from '@weiliang0121/capix-resources';
+import type { ProgressReceiver } from '@weiliang0121/capix-changes';
+import { requireNotCancelled, type InvocationProgress } from '@weiliang0121/capix-invocation';
 import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable } from './declarations.js';
 import type { CallableHooks, CallableHookBinding } from './hooks.js';

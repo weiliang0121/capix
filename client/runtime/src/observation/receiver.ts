@@ -1,4 +1,4 @@
-import type { ExecutionRecordSnapshot, InvocationEvent, MemoryObservation, ObserverOverview, SourceResponse, TranscriptRecord } from '@capix/protocol';
+import type { ExecutionRecordSnapshot, InvocationEvent, MemoryObservation, ObserverOverview, SourceResponse, TranscriptRecord } from '@weiliang0121/capix-protocol';
 import { ObservationConnectionError, type ObservationTransport } from '../transport.js';
 import { ObservationReplica, ObservationSequenceError, ObservationContractError } from './replica.js';
 

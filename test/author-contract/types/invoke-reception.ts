@@ -1,4 +1,4 @@
-import { Node, Group, reception, type ChildCalls, type ChildReceptionOptions } from '@capix/server-runtime';
+import { Node, Group, reception, type ChildCalls, type ChildReceptionOptions } from '@weiliang0121/capix-runtime';
 
 declare const calls: ChildCalls;
 const text = new Node<number, string, {}, string>({

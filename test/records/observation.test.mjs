@@ -1,12 +1,12 @@
-import { ResourceAccessClosed } from '@capix/resources';
+import { ResourceAccessClosed } from '@weiliang0121/capix-resources';
 import { ResourceBindings } from '../fixtures/resources.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindRecording, bindInvocationObservation, invocationRecording, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
-import { Recorder, RecordBook, CallableRecordHelper, CallableRecord } from '@capix/records';
-import { ChangeBuffer } from '@capix/changes';
+import { bindRecording, bindInvocationObservation, invocationRecording, defineObservation, InvocationRecordAccess } from '@weiliang0121/capix-runtime';
+import { Recorder, RecordBook, CallableRecordHelper, CallableRecord } from '@weiliang0121/capix-records';
+import { ChangeBuffer } from '@weiliang0121/capix-changes';
 
-import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
+import { readOutput, validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
 
 function fixture(options) {
   const changes = new ChangeBuffer();

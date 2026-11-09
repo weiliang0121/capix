@@ -1,8 +1,8 @@
-import { RecordBook, Recorder } from '@capix/records';
-import type { ConversationRecordingState, ConversationInspection, ConversationCallDetail, MemoryEvent, TranscriptEvent } from '@capix/protocol';
-import type { CallableStructure, Composite } from '@capix/structure';
-import type { DriverFact, DriverObserver, InvocationFact, InvocationObserver, InvocationObservationSetup, ObservationDeclarationScope, ObservationInstallation, ResourceObservation } from '@capix/server-runtime';
-import { bindRecording, invocationRecording, InvocationRecordAccess, type InvocationRecording } from '@capix/server-runtime/recording';
+import { RecordBook, Recorder } from '@weiliang0121/capix-records';
+import type { ConversationRecordingState, ConversationInspection, ConversationCallDetail, MemoryEvent, TranscriptEvent } from '@weiliang0121/capix-protocol';
+import type { CallableStructure, Composite } from '@weiliang0121/capix-structure';
+import type { DriverFact, DriverObserver, InvocationFact, InvocationObserver, InvocationObservationSetup, ObservationDeclarationScope, ObservationInstallation, ResourceObservation } from '@weiliang0121/capix-runtime';
+import { bindRecording, invocationRecording, InvocationRecordAccess, type InvocationRecording } from '@weiliang0121/capix-runtime/recording';
 import type { ConversationViewSource } from '../materials/view.js';
 import { conversationRecordDescription } from './installation.js';
 import { inspectConversation, inspectConversationCall, inspectConversationContent } from './inspection.js';

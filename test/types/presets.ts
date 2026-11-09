@@ -1,5 +1,5 @@
-import { Sequence, Node, Group, Scene, type SequenceStep, type CallableInput, type CallableOutput } from '@capix/structure';
-import { Runner, Resources } from '@capix/server-runtime';
+import { Sequence, Node, Group, Scene, type SequenceStep, type CallableInput, type CallableOutput } from '@weiliang0121/capix-structure';
+import { Runner, Resources } from '@weiliang0121/capix-runtime';
 
 declare function expectType<Value>(value: Value): void;
 type Request = { source: string; destination: string };

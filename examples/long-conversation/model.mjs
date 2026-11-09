@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ChatCompletionsProvider } from '@capix/model-provider';
+import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { textBytes } from './measurement.mjs';
 
 // Fixture facts are an explicit test script, never a second source of truth for live requests.

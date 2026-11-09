@@ -1,7 +1,7 @@
 import { isEqual } from 'es-toolkit/predicate';
-import type { TranscriptRangeReader } from '@capix/transcript';
-import type { Memory } from '@capix/memory';
-import type { Message } from '@capix/protocol';
+import type { TranscriptRangeReader } from '@weiliang0121/capix-transcript';
+import type { Memory } from '@weiliang0121/capix-memory';
+import type { Message } from '@weiliang0121/capix-protocol';
 
 export interface SelectionInput {
   readonly message: Readonly<Message>;

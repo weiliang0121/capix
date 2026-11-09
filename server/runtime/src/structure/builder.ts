@@ -1,7 +1,7 @@
 import { CallableBinder } from '../binding/callable.js';
 import type { Resources } from '../resource/resources.js';
 import type { CallableCallsOptions } from '../binding/calls.js';
-import type { Interactions } from '@capix/interaction';
+import type { Interactions } from '@weiliang0121/capix-interaction';
 import type { AnyCallable } from '../binding/declarations.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from '../construction/capabilities.js';
 import type { BuiltCallable } from './construction.js';

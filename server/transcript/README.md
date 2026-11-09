@@ -1,17 +1,17 @@
-# @capix/transcript
+# @weiliang0121/capix-transcript
 
 Append-only conversation messages and resource contracts for CAPiX.
 
 ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
 
 ```sh
-npm install @capix/transcript
+npm install @weiliang0121/capix-transcript
 ```
 
 ## Public entry points
 
-- `@capix/transcript`
-- `@capix/transcript/presets`
+- `@weiliang0121/capix-transcript`
+- `@weiliang0121/capix-transcript/presets`
 
 This package is part of CAPiX. The npm distribution contains compiled JavaScript, type declarations, and this package's MIT license. Reference services and client applications are not included in this package or the initial npm release.
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript } from '@capix/transcript';
-import { Memories } from '@capix/memory';
+import { Transcript } from '@weiliang0121/capix-transcript';
+import { Memories } from '@weiliang0121/capix-memory';
 import { checkpointTranscriptFingerprint, validateConversationCheckpointContent } from '@capix/observer-service/assembly';
 
 const content = (text) => ({ topic: 'topic', content: text, sourceIndexes: [0] });

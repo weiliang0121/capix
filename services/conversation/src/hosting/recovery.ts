@@ -1,5 +1,5 @@
-import type { ConversationRecoveryActivity, ConversationRecoveryEvent } from '@capix/protocol';
-import type { RunnerObservation, RunnerObservationEvent } from '@capix/server-runtime';
+import type { ConversationRecoveryActivity, ConversationRecoveryEvent } from '@weiliang0121/capix-protocol';
+import type { RunnerObservation, RunnerObservationEvent } from '@weiliang0121/capix-runtime';
 
 /** A bounded, process-local explanation of resumed activity. No old records are invented. */
 export class RecoveryActivity {

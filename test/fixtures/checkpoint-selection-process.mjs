@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
-import { Scene, Node, Runner, Resources, checkpointPoint, childReferences } from '@capix/server-runtime';
+import { Scene, Node, Runner, Resources, checkpointPoint, childReferences } from '@weiliang0121/capix-runtime';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 
 const [mode, path, marker, effects] = process.argv.slice(2);

@@ -1,5 +1,5 @@
-import { RuntimeError } from '@capix/contracts';
-import type { SourceStamp, SyncViewSource } from '@capix/view';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import type { SourceStamp, SyncViewSource } from '@weiliang0121/capix-view';
 import type { ModelExchanges } from './exchanges.js';
 import type { ModelExchangeEntry } from './types.js';
 import { capture, identity, record } from './value.js';

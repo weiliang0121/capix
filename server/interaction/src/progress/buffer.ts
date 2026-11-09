@@ -1,6 +1,6 @@
 import { isPromise } from 'node:util/types';
-import { RuntimeError } from '@capix/contracts';
-import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
+import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import { captureInteractionValue, isNonBlankString } from '../value.js';
 import { positiveLimit, ProgressBudget } from './budget.js';
 import type { InteractionCursor, InteractionProgressFact, InteractionProgressLimits, InteractionProgressRead, InteractionProgressReader, InteractionPublication } from './types.js';

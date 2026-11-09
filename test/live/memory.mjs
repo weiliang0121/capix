@@ -1,4 +1,4 @@
-import { readOutput } from '@capix/protocol';
+import { readOutput } from '@weiliang0121/capix-protocol';
 // Optional real-provider check. Uses the product execution unchanged; not part of the offline test suite.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';

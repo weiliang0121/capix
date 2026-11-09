@@ -6,12 +6,12 @@
 
 ## 独立包与 Runtime 的绑定职责
 
-`@capix/interaction` 位于 `server/interaction`，公开 Interaction、Interactions 及请求/反馈/持久/观察契约。固定值复制与核验是包内实现，不作为额外作者 API。它不依赖 Runtime、Invocation、结构、资源或 Recorder；只消费 contracts、changes、diagnostics 的公共能力及通用值工具。
+`@weiliang0121/capix-interaction` 位于 `server/interaction`，公开 Interaction、Interactions 及请求/反馈/持久/观察契约。固定值复制与核验是包内实现，不作为额外作者 API。它不依赖 Runtime、Invocation、结构、资源或 Recorder；只消费 contracts、changes、diagnostics 的公共能力及通用值工具。
 
 ```ts
-import { Interaction, Interactions } from '@capix/interaction';
-import { PersistenceError } from '@capix/diagnostics';
-import { Resources, Runner } from '@capix/server-runtime';
+import { Interaction, Interactions } from '@weiliang0121/capix-interaction';
+import { PersistenceError } from '@weiliang0121/capix-diagnostics';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
 ```
 
 Runtime 的主责之一就是绑定与运行装配：根据完整结构核验申请，固定资源与机制接线，按次构造 Invocation，并把本阶段端点交给 Work。交互包被抽离后，Runner 仍接受可选 Interactions，Resources.registerInteraction 仍在构建时取得准确契约通道并兑现为资源 provider；此过程不会发送请求。固定安装不取得交互实体的所有权，也不代替交互的发送、持久提交或关闭规则。
@@ -24,7 +24,7 @@ Runtime 的主责之一就是绑定与运行装配：根据完整结构核验申
 
 因此绑定代码应表达模块间的匹配和接线，不重复实现模块内部规则。Runtime 不根据交互保存状态自行决定重发，也不把关闭调用等同于关闭交互。
 
-PersistenceError 与诊断格式化原来借用调用包，现归独立 `@capix/diagnostics`，避免交互反向依赖调用。唯一错误类身份保持，invocation/runtime 的既有诊断出口重导同一对象；持久失败不能被业务 fallback 消费的判断仍在 invocation。Runtime 的交互出口也继续精确重导新包同一对象。
+PersistenceError 与诊断格式化原来借用调用包，现归独立 `@weiliang0121/capix-diagnostics`，避免交互反向依赖调用。唯一错误类身份保持，invocation/runtime 的既有诊断出口重导同一对象；持久失败不能被业务 fallback 消费的判断仍在 invocation。Runtime 的交互出口也继续精确重导新包同一对象。
 
 Observer 直接消费新包；ModelInteractions 继续负责模型流式片段、Provider 超时和模型用途，SQLite 保存及调用关联的观察投影仍归服务。没有将通用 Interactions 强加到模型宿主，也没有新增沙箱、工作区或进程恢复能力。
 

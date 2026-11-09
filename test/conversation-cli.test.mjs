@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { ConversationStore } from '@capix/conversation-service/persistence';
-import { RecordBook } from '@capix/records';
+import { RecordBook } from '@weiliang0121/capix-records';
 
 const entry = fileURLToPath(new URL('../services/conversation/dist/start.js', import.meta.url));
 
@@ -239,7 +239,7 @@ test('an isolated recording failure marks the export incomplete while accepted c
   await writeFile(
     injection,
     `
-import {Recorder} from ${JSON.stringify(import.meta.resolve('@capix/records'))};
+import {Recorder} from ${JSON.stringify(import.meta.resolve('@weiliang0121/capix-records'))};
 const add = Recorder.prototype.add;
 Recorder.prototype.add = function(record) {
   if (record.kind === 'resource') throw new Error('fixture record sink failed');

@@ -1,6 +1,6 @@
-import { Sequence, defineGroup, defineScene, Group, type SequenceStep, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
-import { bindChildResources } from '@capix/server-runtime';
-import { type ResourceRefinement } from '@capix/resources';
+import { Sequence, defineGroup, defineScene, Group, type SequenceStep, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@weiliang0121/capix-runtime';
+import { bindChildResources } from '@weiliang0121/capix-runtime';
+import { type ResourceRefinement } from '@weiliang0121/capix-resources';
 
 const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], string>({ name: 'bounded', expose: (source) => source.allowed, timing: 'access', refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
 declare const fileOperation: Group<{ readonly path: string }, string>;
@@ -118,8 +118,8 @@ parent.complete('done');
 // @ts-expect-error child facts do not publish reception mutation
 parent.children.facts.values()[0]?.accept(() => null);
 
-import { type CallableRun } from '@capix/server-runtime';
-import { ResourceOffer } from '@capix/resources';
+import { type CallableRun } from '@weiliang0121/capix-runtime';
+import { ResourceOffer } from '@weiliang0121/capix-resources';
 const workValue = new ResourceOffer({ name: 'work-value', expose: (value: number) => value });
 const run: CallableRun<string, string, 'group', { value: number }> = (work) => {
   const value: number = work.resources.value;
@@ -153,7 +153,7 @@ const childFact = operation.children.facts.get(operation.children.create(leaf, '
 // @ts-expect-error child facts do not grant its resources to the parent
 childFact.resources;
 
-import { defineObservation, type InvocationFact, type DriverFact, type ObservationDefinition, type ObservationDeclaration } from '@capix/server-runtime';
+import { defineObservation, type InvocationFact, type DriverFact, type ObservationDefinition, type ObservationDeclaration } from '@weiliang0121/capix-runtime';
 const counter = new ResourceOffer({ name: 'counter', expose: (value: { increment(): void }) => value });
 const callProbe: ObservationDeclaration<InvocationFact> = defineObservation<InvocationFact, { counter: { increment(): void } }>({
   deps: { counter: counter.request() },

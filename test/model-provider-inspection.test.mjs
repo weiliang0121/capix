@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, ProviderError, requireModelRequest } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError, requireModelRequest } from '@weiliang0121/capix-model-provider';
 
 const limit = 2 * 1024 * 1024;
 const completed = () => Response.json({ id: 'r', model: 'fixture', choices: [{ index: 0, message: { role: 'assistant', content: 'Done' }, finish_reason: 'stop' }], usage: null });

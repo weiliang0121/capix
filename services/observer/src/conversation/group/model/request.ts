@@ -1,6 +1,6 @@
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { Group, checkpointPoint, childReference, childReferences, type GroupWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildrenOf } from '@capix/structure';
+import { Group, checkpointPoint, childReference, childReferences, type GroupWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildrenOf } from '@weiliang0121/capix-structure';
 import { isEqual } from 'es-toolkit/predicate';
 import type { ModelRequest, ModelOutput, Purpose, ModelTextDelta } from '../../model/types.js';
 import { InvokeModel } from '../../node/model/invoke.js';
@@ -148,8 +148,8 @@ function originalRequest(facts: CheckpointFacts<ModelRequest>): void {
   if (facts.round !== 1 || !isEqual(facts.initialInput, facts.input)) throw new Error('Model feedback checkpoint must preserve its original request');
 }
 
-function acceptedOutput<D extends InvokeModel | FollowModel>(child: ChildFact<D>): Stable<import('@capix/server-runtime').CallableOutput<D>> {
+function acceptedOutput<D extends InvokeModel | FollowModel>(child: ChildFact<D>): Stable<import('@weiliang0121/capix-runtime').CallableOutput<D>> {
   if (child.parentRound !== 1 || child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted' || !isEqual(child.returned.output, child.reception.value)) throw new Error('Model feedback checkpoint requires a returned and accepted child');
   return child.returned.output;
 }
-import type { Stable } from '@capix/contracts';
+import type { Stable } from '@weiliang0121/capix-contracts';

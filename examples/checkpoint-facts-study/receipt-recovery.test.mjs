@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { Invocation, InvocationContext } from '@capix/invocation';
-import { MemoryCheckpointStore } from '@capix/checkpoint';
+import { Invocation, InvocationContext } from '@weiliang0121/capix-invocation';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const fixture = fileURLToPath(new URL('./receipt-process.mjs', import.meta.url));

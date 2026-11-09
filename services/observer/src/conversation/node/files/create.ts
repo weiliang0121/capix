@@ -1,8 +1,8 @@
-import { Node, checkpointPoint, type NodeWork } from '@capix/structure';
+import { Node, checkpointPoint, type NodeWork } from '@weiliang0121/capix-structure';
 import { z } from 'zod';
 import { checkpointCodec } from '../../checkpoint.js';
 import { checkLeafResult } from '../../group/checkpoint.js';
-import type { FileReceipt } from '@capix/protocol';
+import type { FileReceipt } from '@weiliang0121/capix-protocol';
 import { FileResources, type FileCreator } from '../../../files/index.js';
 
 export interface CreateTextInput {
