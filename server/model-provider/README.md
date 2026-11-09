@@ -19,7 +19,7 @@ if (reply.termination.reason !== 'stop') throw new Error('模型未正常完成'
 console.log(modelReplyText(reply));
 ```
 
-运行前执行 `pnpm build`。配置由宿主传入，包不读取环境文件。只有显式执行真实请求才会访问模型。
+通过 `npm install @capix/model-provider` 安装后可直接运行；仅在本仓库从源码使用时需要先执行 `pnpm build`。配置由宿主传入，包不读取环境文件。只有显式执行真实请求才会访问模型。
 
 ## 唯一回复材料
 
@@ -110,4 +110,4 @@ JSON 与 SSE 共用 `ModelUsage`：`promptTokens / completionTokens / totalToken
 - `ProviderError` 只含 code/message/可选 HTTP status，不保存上游正文、请求、headers、密钥或底层错误。宿主可注入 fetch；实现必须遵守 Fetch 取消与重定向语义。
 - `thinking` 是宿主显式配置的 DeepSeek 扩展。当前实现 Chat Completions 函数调用与文本；不承诺 Responses、Anthropic 原生协议、MCP、多模态或 strict beta。正式 Transcript 的消息角色不因此扩展。
 
-更多设计与恢复边界见 [原生工具方案](../../docs/native-tool-integration.md)；[离线验证](../../examples/native-tools/README.md) 保留早期契约推演。完整协议参考 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) 与 [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
+仓库中的原生工具方案与离线验证记录保留设计和早期契约推演，不包含在此 npm 包中。完整协议参考 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) 与 [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。

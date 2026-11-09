@@ -32,8 +32,6 @@ ModelExchangeResource          ModelExchangeViewSource
 - 默认预算 `defaultModelExchangeLimits` 为 10,000 个交换、累计 64 MiB 的交换 JSON；可显式调整，`maximumModelExchangeLimits` 限定最大 100,000 个、128 MiB。每个交换最大 `maximumModelExchangeEntryBytes`（8 MiB），Provider 单回复/单反馈自己的限制仍适用。超限在持久提交前拒绝，不将实体标为持久故障；已有事实仍可读取和确认。没有自动淘汰：过期与保留策略归宿主。
 - ViewSource 可以固定某个 scope 或全体；版本覆盖成员和反馈变化，完整目录按创建顺序返回，`inspect/read` 只访问请求的 keys。旧快照保持原值，版本变化后读取拒绝。视图策略可退出整个交换，不能留下孤立 tool 消息。
 
-新服务的 SQLite `store.exchanges` 提供 `load(collectionId)`、`initialize(empty, metadata)`、`commit(change)` 与分页 `list()`。先初始化对话内容，再以固定元数据初始化空交换集合；载入返回 `{ state, metadata }`，实体通过 `ModelExchanges.restore(state, { persistence: store.exchanges, limits })` 接回。Schema v4 最初新增交换表，v5 将其扩展为独立多集合；旧 v4 集合迁为未锚定只读，当前 v6 延续此接口。实体提交不与 Invocation CP 或其他实体构成事务。
+宿主负责集合的创建、持久化和重新载入。当前快照通过 `ModelExchanges.restore(state, { persistence, limits })` 恢复；旧格式明确拒绝，不自动迁移。预算不写进快照，恢复时应传入相同配置；更低预算无法容纳快照时明确拒绝，不截断或淘汰事实。
 
-SQLite 的初始化、写入与载入统一采用实体公开的最大容量，支持显式高于默认预算的集合；实体自身仍在提交前执行宿主选定的预算。预算不写进快照，宿主恢复时应再次传入同一配置：`ModelExchanges.restore(state, { persistence: store.exchanges, limits })`。用更低预算恢复过大的快照会明确拒绝，不截断或淘汰原记录。
-
-SQLite 按准确 ID 载入并核验一个完整集合，启动和分页目录查询不加载全部旧交换正文。CLI/Web 的可选工具宿主已为每次回答分配独立集合，ToolExchangeUse 在本次 run/resume 退出时关闭并释放载入实体；独立交互继续按自身生命周期保存反馈。集合容量与两种回答模式的联合归档入口门槛分别检查，目前没有自动退休归档。退出 View 或关闭句柄均不删除事实，不能据此删除尚被恢复或续接引用的记录。宿主范围见 [原生工具宿主设计](../../docs/native-tool-host-integration.md)。
+实体提交不与 Invocation CP 或其他实体构成事务。退出 View 或关闭宿主持有的句柄不会删除交换事实，宿主仍需保留被恢复或续接依据引用的集合。参考服务的 SQLite 装配与归档入口规则见仓库中的 Conversation 服务文档；它们不属于本包的依赖或存储契约。

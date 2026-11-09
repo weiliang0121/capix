@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [["@capix/changes", "@capix/checkpoint", "@capix/contracts", "@capix/diagnostics", "@capix/interaction", "@capix/invocation", "@capix/measurement", "@capix/memory", "@capix/model-exchanges", "@capix/model-provider", "@capix/protocol", "@capix/records", "@capix/resources", "@capix/server-runtime", "@capix/structure", "@capix/transcript", "@capix/view"]],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "privatePackages": {
+    "version": false,
+    "tag": false
+  },
+  "format": "prettier",
+  "ignore": []
+}

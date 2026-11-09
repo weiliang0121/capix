@@ -7,6 +7,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 ## 从哪里开始
 
 - [文档导航](docs/README.md)：当前契约、使用说明与历史实验分别查阅。
+- [npm 发布](docs/npm-publishing.md)：17 个内核包的 MIT 分发范围、产物验证、Changesets 和手动发布设置。
 - [项目组织与命名](docs/organization.md)：框架、应用、实体和记录的定位；对象角色、公开入口与本轮迁移表。
 - [可调用结构](docs/callable-structures.md)：Scene / Group / Node、Callable / Composite、绑定与驱动的职责。
 - [运行边界](docs/runtime-boundaries.md)：统一调用、资源窗口、父子接纳与恢复。
@@ -80,6 +81,8 @@ const output = await environment.runner.run({ messages: [{ role: 'user', content
 模型请求通过独立 Interaction 发出。请求模型 Group 接纳首个 Node 的有限等待结果，必要时建立新的 Node 调用读取同一交互；不会因为本地等待结束而重发。反馈先保存再交给业务解释，已保存反馈可按 ID 再次读取，与恢复旧调用分开。
 
 ## 包与公开入口
+
+首批 npm 发布范围为 `contracts`、`protocol` 和 `server/*`，共 17 个包；参考服务、客户端与应用不在首发范围。当前包名使用的 `@capix` scope 已确认无法注册，只作为仓库内占位；新品牌与 scope 尚未确定，此时不能按占位名称正式发布。发布准备与当前阻碍见 [npm 发布](docs/npm-publishing.md)。
 
 | 包或分组                                                                                                              | 当前职责                                                   |
 | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
