@@ -6,7 +6,7 @@
 
 ## 独立包与 Runtime 的绑定职责
 
-`@weiliang0121/capix-interaction` 位于 `server/interaction`，公开 Interaction、Interactions 及请求/反馈/持久/观察契约。固定值复制与核验是包内实现，不作为额外作者 API。它不依赖 Runtime、Invocation、结构、资源或 Recorder；只消费 contracts、changes、diagnostics 的公共能力及通用值工具。
+`@weiliang0121/capix-interaction` 位于 `packages/interaction`，公开 Interaction、Interactions 及请求/反馈/持久/观察契约。固定值复制与核验是包内实现，不作为额外作者 API。它不依赖 Runtime、Invocation、结构、资源或 Recorder；只消费 packages/contracts、changes、diagnostics 的公共能力及通用值工具。
 
 ```ts
 import { Interaction, Interactions } from '@weiliang0121/capix-interaction';
@@ -55,7 +55,7 @@ const runner = new Runner(structure.scene, resources, undefined, {
 }).build();
 ```
 
-Observer 的 ModelInteractions 作为普通资源注册，继续负责 SSE、模型超时与固定请求校验；它不冒充通用 Interactions。通用交互注册是另一种可选接法，见 [Runner / Resources](runner-resources-pilot.md)。
+Observer 的 ModelInteractions 作为普通资源注册，继续负责 SSE、模型超时与固定请求校验；它不冒充通用 Interactions。通用交互注册是另一种可选接法，见 [Runner / Resources](../../capix-lab/docs/runner-resources-pilot.md)。
 
 业务只取得资源端点。`create.start(request, purpose, { timeoutMs })` 返回 `{ id }`，不接收 Invocation 的取消信号；`read.wait` 返回 `received | pending`，`read.result` 取得已接收反馈或抛出真实失败。读取端点没有发送方法，不能凭缺少结果自动重发。读取 Node 使用自己的 Context 和资源端点；不能复用已经结束的发起 Node 端点。
 

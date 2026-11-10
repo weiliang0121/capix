@@ -147,7 +147,7 @@ interface ResourceFailurePolicy {
 
 打开访问前校验并固定策略函数和 receiver；失效 owner 不能先触发材料捕获。策略判定抛错或返回非法值属于机制失败，保留原操作错误；非法异步判定的迟到拒绝也被消费。validate、故障报告、接纳来源和观测端口同样要求同步完成；保留 void 回调的普通同步返回值，异步返回会被拒绝并消费迟到拒绝。ResourceAccessClosed 和 ResourcePortError 在资源包及 Runtime 中均属于受保护故障，包含在 AggregateError 中也不能进入业务 fallback。Runtime 提供自己的策略，Runner 使用者不必配置它。
 
-无 owner 的独立访问没有调用归属，仍受本地窗口控制；它不能替其他宿主判断控制错误。`ResourceOwner` 的 transcript/memory 事实端口暂以 protocol 类型保留，不为这两处关联新增通用事件注册机制。
+无 owner 的独立访问没有调用归属，仍受本地窗口控制；它不能替其他宿主判断控制错误。`ResourceOwner` 的 transcript/memory 事实端口暂以 packages/protocol 类型保留，不为这两处关联新增通用事件注册机制。
 
 ## 验证范围
 

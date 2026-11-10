@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { InteractionProgress, unavailableProgressReader, validateProgressLimits } from '../server/interaction/dist/progress/buffer.js';
-import { ProgressBudget } from '../server/interaction/dist/progress/budget.js';
+import { InteractionProgress, unavailableProgressReader, validateProgressLimits } from '../packages/interaction/dist/progress/buffer.js';
+import { ProgressBudget } from '../packages/interaction/dist/progress/budget.js';
 
 const immediate = { waitMs: 0 };
 const wait = { waitMs: 1000 };

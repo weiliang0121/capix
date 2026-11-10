@@ -103,6 +103,6 @@ Invocation.failure 表达真实最终交付，Context 保存已经成立的语�
 
 ## 通用诊断与调用故障策略
 
-`@weiliang0121/capix-diagnostics` 独立持有 PersistenceError 和 RuntimeErrorHelper，后者把异常转换为有界的诊断纯值。算法保留原来的循环处理、跨 realm 原生错误识别、大小预算和字段读取行为。RuntimeError 基类及 RuntimeErrorValue/Detail 仍来自 contracts；contracts 不因此引入 Node 依赖。
+`@weiliang0121/capix-diagnostics` 独立持有 PersistenceError 和 RuntimeErrorHelper，后者把异常转换为有界的诊断纯值。算法保留原来的循环处理、跨 realm 原生错误识别、大小预算和字段读取行为。RuntimeError 基类及 RuntimeErrorValue/Detail 仍来自 contracts；packages/contracts 不因此引入 Node 依赖。
 
 诊断包不决定取消、异常来源、接收资格或重试。Invocation 在自己的操作故障策略中识别真实 PersistenceError，并拒绝业务 failed 回调掩盖必要持久化失败；同一 code 的普通错误不获得该身份。调用与 Runtime 兼容出口重导同一个类和格式化对象，不建立平行错误层次。

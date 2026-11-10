@@ -1,6 +1,6 @@
 # 客户端 Runtime
 
-ClientRuntime 装配提交跟踪、消息同步与可选观测消费，协调它们的已接纳状态并发布快照，不依赖 React、HTTP 实现或服务端对象。client/runtime 公开 ConversationTransport、TranscriptTransport 和 ObservationTransport 三个契约；应用通过 conversation / transcripts / observation 具名参数接入。
+ClientRuntime 装配提交跟踪、消息同步与可选观测消费，协调它们的已接纳状态并发布快照，不依赖 React、HTTP 实现或服务端对象。packages/client-runtime 公开 ConversationTransport、TranscriptTransport 和 ObservationTransport 三个契约；应用通过 conversation / transcripts / observation 具名参数接入。
 
 接口分类不等于 HTTP 实例拆分。ConversationHttpTransport 同时实现业务交付和消息实体契约；ObservationHttpTransport 提供独立的观测接口，两者共用通用 HttpTransport。
 
@@ -129,7 +129,7 @@ accepted 不再在网络接纳函数内调用。待通知提交独立保留到�
 
 ## 对话目录与切换
 
-ClientRuntime 提供 refreshConversations、createConversation（创建并打开）、openConversation。初始化读取目录并打开稳定默认对话。快照 conversation 是当前元信息，conversations 是目录，switching/canSwitchConversation/conversationError 表达切换。提交与队列归属固定；仅当前提交已确认结束且等待队列为空才可切换。目标有效基线到达前保留旧对话，成功后替换提交与观测作用域；代次保护旧回调，观测失败不阻止对话使用。详细边界见 [对话身份与切换](conversations.md)。
+ClientRuntime 提供 refreshConversations、createConversation（创建并打开）、openConversation。初始化读取目录并打开稳定默认对话。快照 conversation 是当前元信息，conversations 是目录，switching/canSwitchConversation/conversationError 表达切换。提交与队列归属固定；仅当前提交已确认结束且等待队列为空才可切换。目标有效基线到达前保留旧对话，成功后替换提交与观测作用域；代次保护旧回调，观测失败不阻止对话使用。详细边界见 [对话身份与切换](../../capix-lab/docs/conversations.md)。
 
 ## 消息实体的按需加载与同步
 

@@ -6,41 +6,40 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const packages = [
-  { path: 'contracts', allowed: [] },
-  { path: 'protocol', allowed: ['@weiliang0121/capix-contracts'] },
-  { path: 'server/model-provider', allowed: [] },
-  { path: 'server/model-exchanges', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-model-provider', '@weiliang0121/capix-resources', '@weiliang0121/capix-view'] },
-  { path: 'server/diagnostics', allowed: ['@weiliang0121/capix-contracts'] },
-  { path: 'server/interaction', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-diagnostics'] },
-  { path: 'server/changes', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol'] },
-  { path: 'server/resources', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol'] },
-  { path: 'server/structure', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-resources'] },
-  { path: 'server/transcript', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-view'] },
-  { path: 'server/memory', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-transcript', '@weiliang0121/capix-view'] },
-  { path: 'server/view', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-resources'] },
-  { path: 'server/measurement', allowed: ['@weiliang0121/capix-protocol', '@weiliang0121/capix-resources'] },
-  { path: 'server/records', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-changes', '@weiliang0121/capix-resources'] },
-  { path: 'server/checkpoint', allowed: ['@weiliang0121/capix-contracts'] },
-  { path: 'server/invocation', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-changes', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-diagnostics'] },
-  { path: 'server/runtime', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-structure', '@weiliang0121/capix-changes', '@weiliang0121/capix-records', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-invocation', '@weiliang0121/capix-interaction', '@weiliang0121/capix-diagnostics'] },
-  { path: 'services/observer-content', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-transcript', '@weiliang0121/capix-memory', '@weiliang0121/capix-view'] },
-  { path: 'services/conversation', allowed: ['@weiliang0121/capix-model-exchanges', '@weiliang0121/capix-model-provider', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-structure', '@weiliang0121/capix-transcript', '@weiliang0121/capix-memory', '@weiliang0121/capix-view', '@weiliang0121/capix-runtime', '@weiliang0121/capix-interaction', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-records', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-contracts', '@weiliang0121/capix-changes'] },
-  { path: 'services/observer', allowed: ['@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-structure', '@weiliang0121/capix-runtime', '@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-transcript', '@weiliang0121/capix-memory', '@weiliang0121/capix-view', '@weiliang0121/capix-measurement', '@weiliang0121/capix-records', '@capix/observer-content', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-invocation', '@weiliang0121/capix-interaction'] },
-  { path: 'client/runtime', allowed: ['@weiliang0121/capix-protocol'] },
-  { path: 'client/http', allowed: ['@weiliang0121/capix-protocol', '@capix/client-runtime'] },
-  { path: 'apps/observer', allowed: ['@weiliang0121/capix-protocol', '@capix/client-runtime', '@capix/client-http'] },
+  { path: 'packages/contracts', allowed: [] },
+  { path: 'packages/protocol', allowed: ['@weiliang0121/capix-contracts'] },
+  { path: 'packages/model-provider', allowed: [] },
+  { path: 'packages/model-exchanges', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-model-provider', '@weiliang0121/capix-resources', '@weiliang0121/capix-view'] },
+  { path: 'packages/diagnostics', allowed: ['@weiliang0121/capix-contracts'] },
+  { path: 'packages/interaction', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-diagnostics'] },
+  { path: 'packages/changes', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol'] },
+  { path: 'packages/resources', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol'] },
+  { path: 'packages/structure', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-resources'] },
+  { path: 'packages/transcript', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-view'] },
+  { path: 'packages/memory', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-transcript', '@weiliang0121/capix-view'] },
+  { path: 'packages/view', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-resources'] },
+  { path: 'packages/measurement', allowed: ['@weiliang0121/capix-protocol', '@weiliang0121/capix-resources'] },
+  { path: 'packages/records', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-changes', '@weiliang0121/capix-resources'] },
+  { path: 'packages/checkpoint', allowed: ['@weiliang0121/capix-contracts'] },
+  { path: 'packages/invocation', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-changes', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-diagnostics'] },
+  { path: 'packages/runtime', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-structure', '@weiliang0121/capix-changes', '@weiliang0121/capix-records', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-invocation', '@weiliang0121/capix-interaction', '@weiliang0121/capix-diagnostics'] },
+  { path: 'packages/observer-content', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-transcript', '@weiliang0121/capix-memory', '@weiliang0121/capix-view'] },
+  { path: 'packages/client-runtime', allowed: ['@weiliang0121/capix-protocol'] },
+  { path: 'packages/client-http', allowed: ['@weiliang0121/capix-protocol', '@capix/client-runtime'] },
 ];
 
 test('the boundary inventory covers every workspace package', async () => {
-  const discovered = ['contracts', 'protocol'];
-  for (const directory of ['server', 'client', 'services', 'apps']) {
+  const discovered = [];
+  for (const directory of ['packages']) {
     for (const entry of await readdir(resolve(root, directory), { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const path = `${directory}/${entry.name}`;
       try {
         const manifest = JSON.parse(await readFile(resolve(root, path, 'package.json'), 'utf8'));
-        if (directory === 'server') assert.equal(manifest.name, `@weiliang0121/capix-${entry.name}`);
-        else {
+        if (directory === 'packages' && !['client-http', 'client-runtime', 'observer-content'].includes(entry.name)) {
+          assert.equal(manifest.name, `@weiliang0121/capix-${entry.name}`);
+          assert.equal(manifest.private, false);
+        } else {
           assert.equal(manifest.private, true, `${path} is outside the release scope`);
           assert.ok(manifest.name.startsWith('@capix/'), `${path} must have an explicit private package boundary`);
         }
@@ -91,7 +90,7 @@ test('workspace production imports follow one-way public package boundaries', as
           assert.ok(manifests.get(packageName)?.exports?.[entry], `${relative(root, file)} must use a public package export: ${specifier}`);
         }
         if (specifier.startsWith('.')) assert.ok(!relative(dir, resolve(dirname(file), specifier)).startsWith('..'), `${relative(root, file)} crosses a package boundary: ${specifier}`);
-        if (pkg.path === 'contracts' || pkg.path === 'protocol' || pkg.path.startsWith('client/')) assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `${pkg.path} cannot depend on ${specifier}`);
+        if (pkg.path === 'packages/contracts' || pkg.path === 'packages/protocol' || pkg.path.startsWith('packages/client-')) assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `${pkg.path} cannot depend on ${specifier}`);
       }
     }
   }

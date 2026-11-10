@@ -180,7 +180,7 @@ test('async host failure classifiers reject their contract without leaking unhan
 });
 
 test('resource package declarations contain no reverse runtime dependency or private cross-package imports', async () => {
-  const root = new URL('../server/resources/', import.meta.url);
+  const root = new URL('../packages/resources/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
   for (const name of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.notEqual(name, '@weiliang0121/capix-runtime');
   async function inspect(directory) {

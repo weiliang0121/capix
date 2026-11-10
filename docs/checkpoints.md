@@ -1,6 +1,6 @@
 # Callable Checkpoint 与有限恢复
 
-状态：2026-11-07，CP 载体与存储由 `@weiliang0121/capix-checkpoint` 提供，调用事实发布与续接由 `@weiliang0121/capix-invocation` 提供，Runtime 负责结构与恢复 Work 的装配。当前只接收 Frame v6；生产保存使用稳定事实的增量表示，完整 v6 Image 仍可显式冷导入。旧 CP 格式不读取、不迁移，也不进入执行恢复。普通调用仍只执行一次 run，旧 round 2/continuation 不复活。历史推演见 [Checkpoint 设计历史](checkpoint-design-history.md)；新对话服务已有显式 CLI/Web 恢复入口，不自动恢复旧提交。
+状态：2026-11-07，CP 载体与存储由 `@weiliang0121/capix-checkpoint` 提供，调用事实发布与续接由 `@weiliang0121/capix-invocation` 提供，Runtime 负责结构与恢复 Work 的装配。当前只接收 Frame v6；生产保存使用稳定事实的增量表示，完整 v6 Image 仍可显式冷导入。旧 CP 格式不读取、不迁移，也不进入执行恢复。普通调用仍只执行一次 run，旧 round 2/continuation 不复活。历史推演见 [Checkpoint 设计历史](../../capix-lab/docs/checkpoint-design-history.md)；新对话服务已有显式 CLI/Web 恢复入口，不自动恢复旧提交。
 
 本轮已增加独立被动 `CheckpointInstallation.feedback`，覆盖正常 CP、恢复活动及恢复建立前失败；原 observation 的严格策略和 Store 提交规则保持。Runner 已提供 `observation` 元数据订阅，output 与 observation 都带本次入口 `entryId`，不改变恢复沿用的 Context 身份。该改动只补交付接缝，不扩大可恢复范围，也不把原始 CP 事实直接作为客户端协议。完整出口区分见 [运行出口](runtime-ports.md)。
 
@@ -8,7 +8,7 @@
 
 当前验证覆盖材料准备、普通回答、文件处理与保存、澄清、记忆收尾和有限二次生成；维护预设有局部续接验证，不等于自定义维护已开放宿主恢复。**声明接入不代表任意时刻都能恢复：每次续接仍须取得准确子工作、已保存结果或实体凭据。**未知外部效果不重新执行，明确失败或取消不复活。
 
-外部框架与早期候选路径保留在 [恢复机制研究](recovery.md)。运行、实体、交互和观测行为分别以 [运行边界](runtime-boundaries.md)、[持久化](persistence.md)、[外部交互](interactions.md)、[记录机制](recording.md) 为准。普通服务启动、提交和客户端接回的承诺保持不变。
+外部框架与早期候选路径保留在 [恢复机制研究](../../capix-lab/docs/recovery.md)。运行、实体、交互和观测行为分别以 [运行边界](runtime-boundaries.md)、[持久化](../../capix-lab/docs/persistence.md)、[外部交互](interactions.md)、[记录机制](recording.md) 为准。普通服务启动、提交和客户端接回的承诺保持不变。
 
 ## 包与协作边界
 
@@ -21,7 +21,7 @@
 | Runtime                          | 解算当前结构的 CP 配置，接线供给、子构造入口与恢复 Work，维护 Runner 入口占用                             |
 | Observer 与独立实体              | SQLite 存储、对话资源依据、业务恢复资格、消息/记忆/文件固定效果确认、外部反馈读取                         |
 
-`server/checkpoint` 只依赖 contracts 和通用值比较工具，不依赖 Runtime、结构、资源、观测或数据库。它核验保存值自身的一致性：完整直接子关系、refs 归属、固定 owner/contract/input、revision 比较提交以及终态不可推进。当前结构是否兼容、宿主内容是否仍允许继续，则由 Runtime 与宿主分别核对。格式检查通过不等于取得恢复许可，也不形成通用任意快照能力。
+`packages/checkpoint` 只依赖 packages/contracts 和通用值比较工具，不依赖 Runtime、结构、资源、观测或数据库。它核验保存值自身的一致性：完整直接子关系、refs 归属、固定 owner/contract/input、revision 比较提交以及终态不可推进。当前结构是否兼容、宿主内容是否仍允许继续，则由 Runtime 与宿主分别核对。格式检查通过不等于取得恢复许可，也不形成通用任意快照能力。
 
 ```text
 work.checkpoint({ point, state, refs })
@@ -39,13 +39,13 @@ runner.resume(contextId)
 
 Store 保持同步宿主端口，未强制放入普通业务 deps。最终交付在业务工作窗口结束后保存；保存失败仍属于调用必须承担的机制故障。每次恢复沿用稳定 Store 对象以维持本进程排他，不用临时端点身份替代它，也不承诺跨进程租约。
 
-持久类型、MemoryCheckpointStore、cloneCheckpoint*、checkpointReference* 和 CHECKPOINT_MAX_BYTES 从 `@weiliang0121/capix-checkpoint` 根入口导入；Runtime 不再重导它们。CheckpointFact、CheckpointInstallation、CheckpointWriter 和 CheckpointRestoration 从 `@weiliang0121/capix-invocation` 导入，Runtime 既有出口重导同一定义。其中 Fact 包含运行观测与内容事件，不能反向进入独立持久包。共同 Codec/Value/Contract 可继续从 contracts、structure 取得同一类型。`@weiliang0121/capix-checkpoint/storage` 向宿主 Store 提供增量计划、完整重建与无损存储编码辅助，不拥有数据库或新的运行实体。
+持久类型、MemoryCheckpointStore、cloneCheckpoint*、checkpointReference* 和 CHECKPOINT_MAX_BYTES 从 `@weiliang0121/capix-checkpoint` 根入口导入；Runtime 不再重导它们。CheckpointFact、CheckpointInstallation、CheckpointWriter 和 CheckpointRestoration 从 `@weiliang0121/capix-invocation` 导入，Runtime 既有出口重导同一定义。其中 Fact 包含运行观测与内容事件，不能反向进入独立持久包。共同 Codec/Value/Contract 可继续从 packages/contracts、structure 取得同一类型。`@weiliang0121/capix-checkpoint/storage` 向宿主 Store 提供增量计划、完整重建与无损存储编码辅助，不拥有数据库或新的运行实体。
 
 调用分包不增加恢复点或恢复范围。低层 Invocation 可以直接连接 CheckpointStore 和固定工作契约，不要求建立 Scene/Runner；完整框架仍由 Runtime 解算结构、检查资源与行动资格。`test/invocation-boundary-checkpoint.test.mjs` 验证新 Store、Context 与重建契约之间的续接：等待父层消费固定子交付、已接纳事实直接继续，以及缺失或不一致依据的拒绝。
 
 ## 当前实现与入口
 
-内核 CP 保持可选；Observer 默认给新产生的调用安装保存端口。新建对话正常聊天即可产生真实 CP，已有对话之后的新调用采用相同规则，不给过去的任务补写 CP。Observer 启动不扫描或自动继续旧 QA，旧 Observer 未增加 HTTP 恢复界面；并排的新对话服务另有显式恢复入口，见 [新服务有限恢复](conversation-recovery.md)。
+内核 CP 保持可选；Observer 默认给新产生的调用安装保存端口。新建对话正常聊天即可产生真实 CP，已有对话之后的新调用采用相同规则，不给过去的任务补写 CP。Observer 启动不扫描或自动继续旧 QA，旧 Observer 未增加 HTTP 恢复界面；并排的新对话服务另有显式恢复入口，见 [新服务有限恢复](../../capix-lab/docs/conversation-recovery.md)。
 
 | 入口                                                                                              | 当前行为                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -78,7 +78,7 @@ CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理
 
 ## 内核事实与保存
 
-持久契约见 [checkpoint/contract.ts](../server/checkpoint/src/contract.ts)，运行安装与观测见 [invocation checkpoint/contract.ts](../server/invocation/src/checkpoint/contract.ts)，作者配置见 [structure definition/checkpoint.ts](../server/structure/src/definition/checkpoint.ts)。调用事实与业务 state 分开，逻辑镜像包含全部直接子关系，热保存只发布变化，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败。业务循环进度属于 point state；它不重建活异常、不让失败子调用复活。尚未处理或正在处理的失败、结构故障及取消不能当作开放恢复点。
+持久契约见 [checkpoint/contract.ts](../packages/checkpoint/src/contract.ts)，运行安装与观测见 [invocation checkpoint/contract.ts](../packages/invocation/src/checkpoint/contract.ts)，作者配置见 [structure definition/checkpoint.ts](../packages/structure/src/definition/checkpoint.ts)。调用事实与业务 state 分开，逻辑镜像包含全部直接子关系，热保存只发布变化，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败。业务循环进度属于 point state；它不重建活异常、不让失败子调用复活。尚未处理或正在处理的失败、结构故障及取消不能当作开放恢复点。
 
 返回关系与最终交付保存真实子 round、phase、currentInput，不能从较早 CP 或父 round 推测。固定交付视图不伪造原 execute 中间结果或未保存的后代。GenerateAnswer 的显式再次生成核对原拒绝码、诊断与真实 handled 关系，恢复不重置次数或产生第三次生成。
 
@@ -120,7 +120,7 @@ Context/Relation 是事实所有者。CP 只记录已成立内容，不在保存
 | 终态 delivery             | 保留，当前 head 及其引用正文继续存在；终态不可推进                     |
 | 已完成根与子 head         | 不做整树自动退休，不把完成标记当成可删除所有依据的证明                 |
 
-Memory 和两个 SQLite 实现遵循相同逻辑。Conversation SQLite 当前为 schema 8，包含值块、当前关系、选择及出现项表；Observer 的独立格式见[持久化](persistence.md)。两种宿主只创建空的新库或打开形状完整的当前格式库，旧版本和不匹配表结构均拒绝，不执行升级或清空。增量元数据含校验摘要，正文块和最终交付使用保留 -0 的内部无损编码；Conversation 正文再以有界 Brotli 存储。归档计数在同一事务涵盖当前头、值块正文、块元数据、关系、选择、出现项和交付。
+Memory 和两个 SQLite 实现遵循相同逻辑。Conversation SQLite 当前为 schema 8，包含值块、当前关系、选择及出现项表；Observer 的独立格式见[持久化](../../capix-lab/docs/persistence.md)。两种宿主只创建空的新库或打开形状完整的当前格式库，旧版本和不匹配表结构均拒绝，不执行升级或清空。增量元数据含校验摘要，正文块和最终交付使用保留 -0 的内部无损编码；Conversation 正文再以有界 Brotli 存储。归档计数在同一事务涵盖当前头、值块正文、块元数据、关系、选择、出现项和交付。
 
 v6 热写按本次变化读取所需元数据，冷读取完整认证；不存在旧 v5 镜像推进缓存或旧格式读写分支。
 
@@ -128,7 +128,7 @@ v6 热写按本次变化读取所需元数据，冷读取完整认证；不存�
 
 任何事务失败整体回滚；回执失败仍不意味着回滚。当前 head 缺正文、引用缺块或数据不一致均拒绝，不回退旧镜像。旧 image 身份行、块墓碑、关系、head 与终态仍可能增长，内存和冷恢复也未承诺恒定规模。不自动 VACUUM，不保证文件立即缩小；分叉、整树退休与外部事务继续是独立议题。
 
-保存粒度仍按恢复安全、覆盖范围与允许重算内容分别验证，见 [恢复承诺与保存组合验证](checkpoint-recovery-coverage.md)。增量表示不自动扩大宿主资格，不通过保存次数下降来代替恢复切点证明。
+保存粒度仍按恢复安全、覆盖范围与允许重算内容分别验证，见 [恢复承诺与保存组合验证](../../capix-lab/docs/checkpoint-recovery-coverage.md)。增量表示不自动扩大宿主资格，不通过保存次数下降来代替恢复切点证明。
 
 ## Observer 声明覆盖
 
@@ -228,4 +228,4 @@ Observer 默认绑定 `CheckpointObservation` 元数据载体：按真实祖先�
 
 需要等待恢复点时：先 create，保存准确子引用，再 call.invoke；需要在返回后单独检查或写入时保留 run/accept。waiting 关系不保证子已有首份 CP/最终交付；缺少续接依据必须拒绝，不能退化为重新发起。结构的成员顺序、点名、reception 注册顺序或状态解释变动，需要提升相应父契约版本。
 
-200 会话下的同步成本、完整镜像重复处理及连接时序调查见 [CP 容量问题调查](checkpoint-capacity-investigation.md)。该调查不改变本文的保存／恢复契约；减少恢复点、修改 Frame 表达或后台提交仍需独立设计。
+200 会话下的同步成本、完整镜像重复处理及连接时序调查见 [CP 容量问题调查](../../capix-lab/docs/checkpoint-capacity-investigation.md)。该调查不改变本文的保存／恢复契约；减少恢复点、修改 Frame 表达或后台提交仍需独立设计。

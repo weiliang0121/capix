@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 
 test('checkpoint values and storage expose independent value and storage-adapter entries without running-host dependencies', async () => {
-  const directory = fileURLToPath(new URL('../server/checkpoint/', import.meta.url));
+  const directory = fileURLToPath(new URL('../packages/checkpoint/', import.meta.url));
   const manifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'));
   assert.equal(manifest.name, '@weiliang0121/capix-checkpoint');
   assert.deepEqual(Object.keys(manifest.exports), ['.', './storage']);

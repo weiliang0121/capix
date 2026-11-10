@@ -1,0 +1,62 @@
+{
+  "name": "@weiliang0121/capix-protocol",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./content": {
+      "types": "./dist/content/index.d.ts",
+      "import": "./dist/content/index.js"
+    },
+    "./invocation": {
+      "types": "./dist/invocation/index.d.ts",
+      "import": "./dist/invocation/index.js"
+    },
+    "./conversation": {
+      "types": "./dist/conversation/index.d.ts",
+      "import": "./dist/conversation/index.js"
+    },
+    "./recording": {
+      "types": "./dist/recording/index.d.ts",
+      "import": "./dist/recording/index.js"
+    },
+    "./observer": {
+      "types": "./dist/observer/index.d.ts",
+      "import": "./dist/observer/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@weiliang0121/capix-contracts": "workspace:*"
+  },
+  "description": "Serializable client/server protocol types for CAPiX.",
+  "license": "MIT",
+  "author": "wei.liang (https://github.com/weiliang0121)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weiliang0121/capix.git",
+    "directory": "packages/protocol"
+  },
+  "engines": {
+    "node": ">=22.23.2"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
+}

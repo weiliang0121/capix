@@ -1,10 +1,10 @@
 # 记录机制与特化处理
 
-记录实体由 `@weiliang0121/capix-records`（`server/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@weiliang0121/capix-records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`server/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。
+记录实体由 `@weiliang0121/capix-records`（`packages/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@weiliang0121/capix-records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`packages/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。
 
-Runtime 的 `@weiliang0121/capix-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `server/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 提供事实到记录的映射。实体包不依赖 Runtime、结构或内容实体包。
+Runtime 的 `@weiliang0121/capix-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `packages/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 提供事实到记录的映射。实体包不依赖 Runtime、结构或内容实体包。
 
-Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 RecordClock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 `server/records/src/tree/`，具体关系规则位于 `tree/relation.ts`，不处理 Context、业务正文或 ExecutionRecordSnapshot。
+Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 RecordClock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 `packages/records/src/tree/`，具体关系规则位于 `tree/relation.ts`，不处理 Context、业务正文或 ExecutionRecordSnapshot。
 
 通用基类使用 BaseRecord，树形记录共用 CompositeRecord；RecordingRootRecord 表达一次记录安装的跨调用范围，InvocationRecord 统一调用正文与状态，CallableRecord 承载 Scene、Group、Node 的实际调用，ResourceRecord 表达正式资源访问事实。RecordingRootRecord 当前只保留创建时间与下级引用；不把记录登记、某次调用结束或驱动者释放占用等同于整个记录范围结束。
 
@@ -51,7 +51,7 @@ BaseRecord.parentId 表达直接产生位置，构造后不可改写；没有调
 
 Recorder.tree 提供 children(id)、descendants(id) 与 root(id)，直接沿 Book 中记录的 childIds 查询，不扫描整个 Book，也不维护第二份节点或边集合。root 沿直接 parentId 查到根并核对下级引用，不维护额外的结构成员表。后代查询按深度优先返回归属顺序，不能作为事件发生顺序。父级引用写入和关系提交使用包内能力，不对业务公开 attach/reparent 方法。Book.add 仍是底层存储操作，正式业务登记必须经过 Recorder.add。
 
-RecordRegistration 只覆盖一次记录登记，既不包含整个 Callable 调用，也不回滚 Transcript 或 Memories 已经落实的业务变化。它不承担异步事务、执行恢复、重试或补偿。服务通过变化出口另行保存记录，见 [持久化](persistence.md)。
+RecordRegistration 只覆盖一次记录登记，既不包含整个 Callable 调用，也不回滚 Transcript 或 Memories 已经落实的业务变化。它不承担异步事务、执行恢复、重试或补偿。服务通过变化出口另行保存记录，见 [持久化](../../capix-lab/docs/persistence.md)。
 
 ## 调用记录
 
@@ -63,7 +63,7 @@ RecordRegistration 只覆盖一次记录登记，既不包含整个 Callable 调
 
 RecordingRootRecord 描述跨调用范围，CallableRecord 描述其中一次调用。记录根由环境的记录安装持有，Runner 不持有 Recorder。一次根调用及其全部后代共用该根调用的单调计时起点；InvocationBoundaryRecord 的 scopeId 指向该根调用，scope='work'。任务子树详情可以省略兄弟调用的边界，因此 sequence 允许有间隙。墙钟只作展示，不用于判定父子先后，也不把工作成功边界冒充实际成功交付。
 
-记录可以是主动分析的一次采集，不必伴随宿主常驻。新对话服务的 `ConversationRecording` 用现有安装端口实现 idle / recording / stopping / stopped：根入口选择一次采集目标、后代继承；停止仅拒绝新入口，原入口收尾后结果仍可查看、清空。每次开始创建新的记录载体，未开启不创建条目或执行描述。采集策略属于宿主预设，RecordBook 不需要因此新增自动淘汰、Invocation 不增加记录开关。静态 `bindRecording` 仍服务于显式全程采集的宿主；具体用法见 [主动记录](conversation-web.md#主动记录)。
+记录可以是主动分析的一次采集，不必伴随宿主常驻。新对话服务的 `ConversationRecording` 用现有安装端口实现 idle / recording / stopping / stopped：根入口选择一次采集目标、后代继承；停止仅拒绝新入口，原入口收尾后结果仍可查看、清空。每次开始创建新的记录载体，未开启不创建条目或执行描述。采集策略属于宿主预设，RecordBook 不需要因此新增自动淘汰、Invocation 不增加记录开关。静态 `bindRecording` 仍服务于显式全程采集的宿主；具体用法见 [主动记录](../../capix-lab/docs/conversation-web.md#主动记录)。
 
 InvocationRecordHelper 只复用载体更新。旧调用索引及全局 Context 反查均已退出；记录句柄只存在于记录预设局部绑定中，归属查询由 RecordTree 提供，Book 是记录的存储。
 
@@ -109,7 +109,7 @@ Service ChangeConsumer 独占共享 ChangeBuffer 的 take；RecordSource 与 fee
 
 ExecutionRecordSnapshot 保留 Observer 的业务查询名称，内容为所选 execution、其通用 calls 子树、可选 rootCall、中间 ancestors、boundaries、resources、transcripts 和 memories。它不是整棵记录树，不包含根调用的其他任务子树。旧载体由服务只读规范化为这个形状，原载体身份不变；历史中断记录没有起始时间时保留未知。parentId/childIds 可以引用未装载的历史正文。对话由 Runner.run 独立交付，不从记录生成回答。消息正文通过集合 UID 独立加载和持续同步，客户端 binding 将资源定位与消息副本组合；原文未加载不等于空正文。
 
-没有新增 Recorder 子类、插件注册、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。RecordBook.exportState / restore 提供历史载入，具体结构检查位于 `server/records/src/restoration/`；恢复的具体记录类型和 ID 保留，historical 记录不可修改，也不能附加新的子记录。该入口不重放登记、通知或调用。实体拆包保留既有类名、wire kind 和历史格式，不用重命名载体来表达新的包边界。
+没有新增 Recorder 子类、插件注册、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。RecordBook.exportState / restore 提供历史载入，具体结构检查位于 `packages/records/src/restoration/`；恢复的具体记录类型和 ID 保留，historical 记录不可修改，也不能附加新的子记录。该入口不重放登记、通知或调用。实体拆包保留既有类名、wire kind 和历史格式，不用重命名载体来表达新的包边界。
 
 ## 局部顺序与索引迁移进度
 
@@ -135,4 +135,4 @@ InvocationRecord 表达一次调用的正文机制，新实时载体为 Callable
 
 `@capix/conversation-service/recording` 在 build 前调用 `createConversationRecording(scene, recorder, options?)`，为实际结构树登记服务输入/输出/接收摘要，并复用 `bindRecording`。调用材料保留来源身份、版本、索引和数量，正文长度与数组条数替代反复复制；特殊非 JSON 返回值转成描述。正式消息范围、记忆变更和资源事实继续由已有预设按真实调用归属记录，业务节点没有额外 Recorder 依赖。
 
-CLI `--records PATH` 为宿主选项，未启用不创建记录安装；启用后在内存记录，并在本地入口与独立发送结束后导出完整性标记和 RecordBook 快照。isolate 的 invalidate 使该份来源永久 incomplete，严格失败仍依既有 propagate 处理。单次摘要有界不代表记录总量有界，退出导出也不代表崩溃可恢复。具体文件生命周期与使用见 [对话服务宿主](conversation-host.md)。
+CLI `--records PATH` 为宿主选项，未启用不创建记录安装；启用后在内存记录，并在本地入口与独立发送结束后导出完整性标记和 RecordBook 快照。isolate 的 invalidate 使该份来源永久 incomplete，严格失败仍依既有 propagate 处理。单次摘要有界不代表记录总量有界，退出导出也不代表崩溃可恢复。具体文件生命周期与使用见 [对话服务宿主](../../capix-lab/docs/conversation-host.md)。

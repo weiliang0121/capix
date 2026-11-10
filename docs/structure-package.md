@@ -1,6 +1,6 @@
 # 结构包：配置、组合与运行端口契约
 
-状态：2026-10-25。`@weiliang0121/capix-structure` 位于 `server/structure`，沿用已经确定的 Scene / Group / Node 模型。分包明确结构与执行的归属，保留原对象身份、作者写法和运行语义。
+状态：2026-10-25。`@weiliang0121/capix-structure` 位于 `packages/structure`，沿用已经确定的 Scene / Group / Node 模型。分包明确结构与执行的归属，保留原对象身份、作者写法和运行语义。
 
 作者先构造结构、配置处理函数和申请资源，再通过 Runner 完成装配与运行。结构包可以独立用于构造和检查结构；它不会在构造、add 或声明恢复点时执行处理函数。
 
@@ -14,7 +14,7 @@
 
 Work 是业务取得的操作接口。结构根据 kind、资源申请和成员组合准确类型，Runtime 在本次活动中兑现端点；共同契约不依赖任一实现。
 
-结构包只依赖 contracts/resources，不依赖 Runtime 或 protocol。资源申请沿用资源包的单一身份，资源方法与子调用的 result/delta 接收共享 contracts 中的形状；`@weiliang0121/capix-resources/operation` 继续提供接收实现和同源类型出口。包依赖、类型晋级和协议维护规则见 [契约与协议](contracts-protocol.md)。
+结构包只依赖 packages/contracts/resources，不依赖 Runtime 或 protocol。资源申请沿用资源包的单一身份，资源方法与子调用的 result/delta 接收共享 packages/contracts 中的形状；`@weiliang0121/capix-resources/operation` 继续提供接收实现和同源类型出口。包依赖、类型晋级和协议维护规则见 [契约与协议](contracts-protocol.md)。
 
 ## 最小例子
 

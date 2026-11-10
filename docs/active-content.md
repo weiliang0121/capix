@@ -122,10 +122,10 @@ prepareContext 返回：
 
 ## 保存与恢复边界
 
-Observer 的当前数据库保存 active_content。源消息追加、新记忆创建及新活跃成员在同一事务中成立；显式索引决定也先同步持久化再安装内存。旧库不迁移或据当前内容推断旧索引。源写入失败不会留下只更新了一半的索引。详见 [持久化](persistence.md)。
+Observer 的当前数据库保存 active_content。源消息追加、新记忆创建及新活跃成员在同一事务中成立；显式索引决定也先同步持久化再安装内存。旧库不迁移或据当前内容推断旧索引。源写入失败不会留下只更新了一半的索引。详见 [持久化](../../capix-lab/docs/persistence.md)。
 
 普通重启恢复索引，供新的工作捕获。旧工作 CP 恢复则使用已保存材料，不用当前活跃索引重建原输入。Observer 的 Scene/任务 Group 契约为 version 5/7，CP 使用 Frame v6；旧格式和旧声明版本明确拒绝；宿主暂拒自定义维护的恢复，需先有稳定的策略配置与实现版本契约。
 
 维护预设具有局部 waiting（子策略有 CP 时）、accepted 和 completed 点，准备预设具有等待和固定结果点。当前 ActiveView.apply 没有固定效果凭据：若索引已落实但 completed 尚未保存，较早 accepted 点发现依据变化就拒绝，不根据目标成员相同猜测完成；completed 续接直接使用已保存结果。局部预设支持不等于任意时刻、任意自定义策略都能恢复。详见 [Checkpoint](checkpoints.md)。
 
-本轮没有增加活跃索引的 HTTP 管理/UI、后台压缩、召回、通用超限调度、跨工作并行写入或新恢复平台。类型因式分解的其他维度继续讨论，见 [讨论及实施记录](codex-type-factorization.md#14-p02-最小闭环的实施结果)。
+本轮没有增加活跃索引的 HTTP 管理/UI、后台压缩、召回、通用超限调度、跨工作并行写入或新恢复平台。类型因式分解的其他维度继续讨论，见 [讨论及实施记录](../../capix-lab/docs/codex-type-factorization.md#14-p02-最小闭环的实施结果)。

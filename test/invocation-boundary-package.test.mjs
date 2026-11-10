@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const invocationDirectory = resolve(root, 'server/invocation');
+const invocationDirectory = resolve(root, 'packages/invocation');
 const dependencies = ['@weiliang0121/capix-diagnostics', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-changes', '@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', 'es-toolkit'];
 
 test('invocation package exposes its call mechanism with only lower dependencies', async () => {
@@ -90,7 +90,7 @@ test('public invocation types and execution stay independent of Runtime and Stru
     const program = ts.createProgram([fixture], options);
     const diagnostics = ts.getPreEmitDiagnostics(program);
     assert.equal(diagnostics.length, 0, ts.formatDiagnosticsWithColorAndContext(diagnostics, { getCurrentDirectory: () => directory, getCanonicalFileName: (file) => file, getNewLine: () => '\n' }));
-    const excludedRoots = await Promise.all(['server/runtime', 'server/structure'].map((path) => realpath(resolve(root, path))));
+    const excludedRoots = await Promise.all(['packages/runtime', 'packages/structure'].map((path) => realpath(resolve(root, path))));
     for (const source of program.getSourceFiles()) {
       const path = await realpath(source.fileName);
       assert.ok(!excludedRoots.some((excluded) => path === excluded || path.startsWith(`${excluded}${sep}`)), `Invocation declarations loaded an excluded workspace source: ${path}`);

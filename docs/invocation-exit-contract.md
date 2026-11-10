@@ -113,7 +113,7 @@ Scene 发起一个资源操作但未等待，然后抛出 `bodyFailure`；资源
 
 修复前只保留 `ResourcePortError → cleanupFailure`。现在交付 AggregateError，保留正文原错误与清理错误；正文为 `throw undefined` 也凭 Outcome 判别字段保留，不把它当成“没有失败”。
 
-原问题来自 [Work 适配](../server/runtime/src/binding/work.ts) 的 finally。现在具体 close 返回 Outcome，正文与关闭分别由 [InvocationExecution](../server/invocation/src/invocation/execution.ts) 处理；普通／恢复路径均有双失败专项。
+原问题来自 [Work 适配](../packages/runtime/src/binding/work.ts) 的 finally。现在具体 close 返回 Outcome，正文与关闭分别由 [InvocationExecution](../packages/invocation/src/invocation/execution.ts) 处理；普通／恢复路径均有双失败专项。
 
 ### B. 资源关闭失败跳过 CP 占用释放
 
@@ -125,7 +125,7 @@ Scene 发起一个资源操作但未等待，然后抛出 `bodyFailure`；资源
 - Context 已固定为 succeeded，`invocation.failure` 准确记录后续交付失败。
 - 同一个 Store／Context ID 的诊断探针可以进入，证明本地占用已释放。
 
-在 [Invocation.deliver](../server/invocation/src/invocation/invocation.ts) 中，剩余关闭现在返回 Outcome 并进入交付处理；CP release 与宿主可抛错端口分离。Context 已成功不会被倒改为失败。
+在 [Invocation.deliver](../packages/invocation/src/invocation/invocation.ts) 中，剩余关闭现在返回 Outcome 并进入交付处理；CP release 与宿主可抛错端口分离。Context 已成功不会被倒改为失败。
 
 探针复用 Context ID 只是核验排他释放，不是业务重跑建议。本例没有保存恢复点，不证明存在一个可恢复的业务执行。另有多窗口专项验证 closeAllResult 耗尽全部窗口，以及部分资源构造／暴露失败时原错误不会被清理错误覆盖。
 
@@ -146,7 +146,7 @@ interface InvocationWork<I, O, Context> {
 }
 ```
 
-上例省略了泛型约束和 output/checkpoint 字段，准确类型见 [InvocationWork](../server/invocation/src/invocation/work.ts)。close 缺省表示无额外 Work 关闭动作；提供了端口却抛错、返回非法值或 Promise，则转换为机制失败。迟到 Promise 拒绝被消费，不等待非法异步关闭，也不宣称撤销其已经开始的工作。
+上例省略了泛型约束和 output/checkpoint 字段，准确类型见 [InvocationWork](../packages/invocation/src/invocation/work.ts)。close 缺省表示无额外 Work 关闭动作；提供了端口却抛错、返回非法值或 Promise，则转换为机制失败。迟到 Promise 拒绝被消费，不等待非法异步关闭，也不宣称撤销其已经开始的工作。
 
 正文捕获保留单层 await/try，封口紧贴同一续体；Runtime 普通／恢复入口和 CP.resume 不增加纯 async 包装，微任务专项核验迟到 delta 已关闭。已有同步资源 closeAll 保持抛错形式，InvocationResources.closeAllResult 为内部退出协作返回 Outcome。
 
@@ -162,7 +162,7 @@ interface InvocationWork<I, O, Context> {
 - [退出故障矩阵](../test/invocation-exit-failures.test.mjs)：普通／恢复双失败、子来源、非法 close、关闭故障不可降级、CP／观察失败与本地占用释放。
 - [资源退出专项](../test/invocation-resource-exit.test.mjs)：多窗口耗尽、单错误身份、构造／暴露和关闭双失败、同步及不可重开。
 - [资源访问](../test/resource-access.test.mjs)：关闭后晚到结果不可接纳、异步接收过程中端点失效。
-- [交互消费](../test/conversation-interaction.test.mjs)、[过程反馈](../test/conversation-interaction-progress.test.mjs)：局部取消／窗口关闭不终止独立发送，后续调用仍可读取同一反馈。
+- [交互消费](../../capix-lab/test/conversation-interaction.test.mjs)、[过程反馈](../../capix-lab/test/conversation-interaction-progress.test.mjs)：局部取消／窗口关闭不终止独立发送，后续调用仍可读取同一反馈。
 - [入口回归](../test/runtime-entry.test.mjs)、[Work 适配](../test/runtime-work-adapter.test.mjs)：宿主释放、严格观察故障、原始返回与接纳事实。
 
 这些验证不证明任意宿主清理函数都会及时返回，也不承诺强制终止任意 Promise、跨实体回滚或完整进程恢复。

@@ -18,7 +18,7 @@ export async function json(path) {
 }
 
 export async function packages() {
-  const directories = ['contracts', 'protocol', ...(await readdir(join(root, 'server'))).sort().map((name) => `server/${name}`)];
+  const directories = ['packages/contracts', 'packages/protocol', 'packages/changes', 'packages/checkpoint', 'packages/diagnostics', 'packages/interaction', 'packages/invocation', 'packages/measurement', 'packages/memory', 'packages/model-exchanges', 'packages/model-provider', 'packages/records', 'packages/resources', 'packages/runtime', 'packages/structure', 'packages/transcript', 'packages/view'];
   const result = await Promise.all(directories.map(async (directory) => ({ directory, path: join(root, directory), manifest: await json(join(root, directory, 'package.json')) })));
   const byName = new Map(result.map((entry) => [entry.manifest.name, entry]));
   assert.equal(byName.size, result.length, 'Duplicate release package names');
@@ -40,9 +40,16 @@ export async function packages() {
       }
     }
   }
-  for (const parent of ['services', 'client', 'apps']) {
+  for (const parent of ['packages']) {
     for (const name of await readdir(join(root, parent))) {
-      const manifest = await json(join(root, parent, name, 'package.json'));
+      if (directories.includes(`${parent}/${name}`)) continue;
+      let manifest;
+      try {
+        manifest = await json(join(root, parent, name, 'package.json'));
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
       assert.equal(manifest.private, true, `${manifest.name}: outside the release scope`);
     }
   }

@@ -37,11 +37,11 @@ flowchart TD
   Protocol --> Contracts
 ```
 
-`contracts` 没有工作区依赖，不导入结构、Invocation、资源实体、Store、Node API 或传输实现。`structure` 只依赖 contracts 和 resources。`invocation` 消费固定工作入口、供给与机制端口，维护单次活动；不依赖 Runtime 或 structure。Runtime 连接两者，依据已固定声明签发 Work；结构包无需反向认识 Invocation。
+`packages/contracts` 没有工作区依赖，不导入结构、Invocation、资源实体、Store、Node API 或传输实现。`structure` 只依赖 packages/contracts 和 resources。`invocation` 消费固定工作入口、供给与机制端口，维护单次活动；不依赖 Runtime 或 structure。Runtime 连接两者，依据已固定声明签发 Work；结构包无需反向认识 Invocation。
 
 `checkpoint` 的工作区依赖只有 contracts；它持有 Frame/Image/Head/Delivery、格式核验及同步 Store。InvocationIdentity 的 contextId/kind/parentContextId 是保存方与运行方共同遵守的单次身份值，晋级共同契约避免复制身份形状或反向依赖 Runtime。CheckpointFact 中的运行观测、安装端口、Context 和实际续接归 invocation；point/resume 的声明解算与作者 Work 适配归 Runtime。
 
-资源包仍显式依赖 protocol 的内容事件类型，这是已有的内容适配边界；本轮不借分包建立另一套内容协议或通用插件系统。
+资源包仍显式依赖 packages/protocol 的内容事件类型，这是已有的内容适配边界；本轮不借分包建立另一套内容协议或通用插件系统。
 
 ## 契约包的组织
 
@@ -55,10 +55,10 @@ flowchart TD
 | `work.ts`                      | 输入、资源、signal、业务注释及可组合端口          | 结构组合 CallableWork/ResumeWork；Runtime 签发                              |
 | `output.ts` / `observation.ts` | 输出声明、接收和写入端口，业务事件                | 发布、窗口、消费故障处理在 invocation，安装在 Runtime                       |
 | `checkpoint/`                  | Codec、点的所有者签名、保存端口、refs、已核实事实 | point/resume 在 structure，Frame/Store 在 checkpoint，调用续接在 invocation |
-| `diagnostic.ts`                | 可序列化错误与失败归属事实                        | 故障控制在 invocation，传输解析在 protocol                                  |
+| `diagnostic.ts`                | 可序列化错误与失败归属事实                        | 故障控制在 invocation，传输解析在 packages/protocol                         |
 | `errors.ts`                    | RuntimeError 的唯一诊断类实现                     | 各包共享同一错误身份，具体故障策略由对应机制解释                            |
 
-契约可以描述方法，它们是进程内的协作端口，不等于可序列化 DTO。协议入口不会整包重导这些方法。只有真实共享的纯值词汇（如 CallableKind、RuntimeErrorValue、InvocationFailureFact）由 protocol 显式重导其单一来源；原协议字段和接纳器不变。
+契约可以描述方法，它们是进程内的协作端口，不等于可序列化 DTO。协议入口不会整包重导这些方法。只有真实共享的纯值词汇（如 CallableKind、RuntimeErrorValue、InvocationFailureFact）由 packages/protocol 显式重导其单一来源；原协议字段和接纳器不变。
 
 契约包的运行时出口包括 `callableKinds`、`RuntimeError` 与 `stableValue` / `StableValueError`。`RuntimeError` 为资源、内容、变化捕获和调用提供同一诊断类身份；这不把异常处理或执行状态放进契约包。`stableValue` 隔离并深固定普通数据，以私有证据复用已经固定的值，没有公开的任意信任注册入口；它不持有 Context 或持久化状态。`RuntimeError` 实例仍不是可交付的稳定数据或协议值。
 

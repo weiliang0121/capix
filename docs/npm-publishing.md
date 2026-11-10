@@ -4,13 +4,13 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-首发公开范围为 `contracts`、`protocol` 和全部 15 个 `server/*` 包，共 17 个包。品牌为 **CAPiX**，npm scope 为用户已持有的 **`@weiliang0121`**。根包及六个 `services/*`、`client/*`、`apps/*` workspace 保持 `private: true`，本轮保留其现有 `@capix/*` 工作区身份。所有公开包属于同一个 Changesets fixed 组，任何包的发布变更都会推进整个组到相同版本；依赖仍用 `workspace:*`，打包时转换成准确发布版本。
+公开范围为 `packages/` 中的 17 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；目录迁移未改包名、版本或公开出口。`packages/client-runtime`、`client-http`、`observer-content` 与根包仍为私有，不能因同在 packages 下而自动发布。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
 
-公开包统一使用 `@weiliang0121/capix-<职责>`：`contracts`、`protocol` 对应 `capix-contracts`、`capix-protocol`，`server/<目录>` 对应同名后缀，其中 `server/runtime` 为 `@weiliang0121/capix-runtime`。完整包名见根 [README](../README.md#包与公开入口)。私有 workspace 的 `@capix/*` 仅用于仓库内解析，不是本次 npm 发布目标。不要从其他项目取得 npm 凭证。
+公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。完整职责见根 [README](../README.md#包与公开入口)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
 后续包名仍按可复用职责确定，必要限定词放在主体之前；不把 `server`、`services`、`apps` 等源码目录自动映射成发布名称。预设、集成与 UI 只有在职责和公开边界确定后才单独命名，参考装配不直接变成产品包。
 
-仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用后续可按边界拆到独立仓库。此次发布未迁移目录或仓库；首发名单不代表仓库今后的全部可复用能力范围。
+仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用后续可按边界拆到独立仓库。0.1.0 首发之后，现有包已统一至 packages，参考装配与实验已交接到本地 capix-lab。首发名单不代表今后所有可复用能力。
 
 2026-11-09 已完成 17 个公开包的 `0.1.0` 首发。官方 registry 的版本、latest 标签及 tarball SHA-512 均与验收产物一致；仓库外从 npm 安装后，29 个公开出口、类型检查、资源与调用、身份一致性和 CP 冷恢复验证通过。
 
@@ -61,3 +61,9 @@ pnpm release:publish
 ```
 
 执行前确认工作区干净，拉取后核对准备发布的提交。`release:publish` 会再次执行产物验收；npm 登录和 2FA 仍由维护者在终端完成。
+
+## 实验仓库的候选分发
+
+`pnpm integration:pack` 干净构建现有 20 包，只生成本地 `.capix/integration` tarball 批次，不发布。manifest 记录基线提交、dirty 标记、实际源文件摘要和每个产物的 SHA256。三个私有包仍带 private 身份，文件白名单只含编译产物、声明、README 和可用许可文件。
+
+在 capix-lab 中显式运行 `pnpm candidate:import --directory /absolute/path/to/capix/.capix/integration`，校验完整批次并复制到本仓本地 vendor，根 overrides 固定全部传递依赖到同批产物；执行 install 更新并审查独立锁文件，再 frozen install 与 check。没有相邻源码软链。该路径是本地验证分发，不代表三个私有包已经公开，也不自动修改 npm 发布清单。

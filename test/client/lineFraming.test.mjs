@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ConversationHttpTransport, HttpTransportError } from '@capix/client-http';
 import { TranscriptConnectionError } from '@capix/client-runtime';
 import { transcriptSnapshot } from './fixtures.mjs';
-import { readLines } from '../../client/http/dist/stream.js';
+import { readLines } from '../../packages/client-http/dist/stream.js';
 
 test('fragmented long lines scan only newly decoded characters and preserve UTF-8 and final lines', async (t) => {
   const baseline = { type: 'baseline', snapshot: transcriptSnapshot([{ role: 'user', content: '消息🙂'.repeat(8000) }], 'transcript') };

@@ -1,6 +1,6 @@
 # Scene、Group、Node 与共同调用
 
-状态：2026-10-25，统一操作模型、独立结构包与共同契约。结构持有配置，`run` 组织操作，Invocation 协调本次活动与真实交付。当前契约替代此前的 setter、独立接纳阶段及调用级异常声明，迁移范围见 [全仓迁移](callable-operation-migration.md)，包边界见 [结构包](structure-package.md)。
+状态：2026-10-25，统一操作模型、独立结构包与共同契约。结构持有配置，`run` 组织操作，Invocation 协调本次活动与真实交付。当前契约替代此前的 setter、独立接纳阶段及调用级异常声明，迁移范围见 [全仓迁移](../../capix-lab/docs/callable-operation-migration.md)，包边界见 [结构包](structure-package.md)。
 
 ## 对象与切面
 

@@ -4,7 +4,7 @@
 
 ## 仓库边界与工作方式
 
-- CAPiX 是独立的 C/S 可观测 Agent 框架。仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用可在后续独立任务中按边界迁出，本轮不迁移目录或仓库。仓库内 Observer 和 Conversation 是验证内核的参考服务，业务策略不自动上升为内核规则。
+- CAPiX 是独立的 C/S 可观测 Agent 框架。仓库承载框架、可复用集成、预设、策略及 UI；可复用包统一位于 packages/。实验、Observer／Conversation 参考服务及应用已交接到独立的 capix-lab；未来产品另建仓库。参考业务策略不自动上升为内核规则。
 - **外部业务装配项目可以只读参考 CAPiX 的代码、文档和公开包，不能因业务任务自行修改 CAPiX 的源码、测试、配置、文档或 AGENTS.md。** 发现内核缺口时先在业务项目记录复现与建议，由用户在 CAPiX 的任务中明确决定并授权变更。业务装配任务的授权不包含回写框架。
 - 外部业务项目的凭证、环境路径、交付规则与工作约定留在各自仓库，不写入 CAPiX，不作为框架依赖。不读取其他项目凭证，不从外部配置或 Git 历史取得隐式运行环境。CAPiX 自身配置正常维护。
 - 相邻 capix-explorations 只在用户需要时只读参考；不复制旧工程的整套模块或治理配置，不作为运行依赖或当前设计约束。
@@ -15,25 +15,25 @@
 
 ## 包与依赖边界
 
-品牌保持 CAPiX，首批 npm 公开包为 `contracts`、`protocol` 和全部 15 个 `server/*`，统一使用用户已持有的 `@weiliang0121` scope 与 `capix-` 前缀；`server/runtime` 的包名为 `@weiliang0121/capix-runtime`。六个 `client/*`、`services/*`、`apps/*` workspace 暂时保留现有 `@capix/*` 私有身份，不纳入首发。发布契约见 [npm 发布](docs/npm-publishing.md)。
+品牌保持 CAPiX，packages/ 中 17 个公开包统一使用 @weiliang0121 scope 和 capix- 前缀，名称与 0.1.0 首发不变；packages/client-runtime、client-http、observer-content 保持 @capix/* 私有身份。capix-lab 通过明确的 20 包 tarball 批次验证，不能读取相邻框架私有源码。发布契约见 [npm 发布](docs/npm-publishing.md)。
 
 一个根 pnpm Workspace 与锁文件。包按职责划分，跨包只使用公开出口，不导入其他包的 src/dist 私有路径；包独立不意味着新增实体生命周期。
 
-| 包／目录                                     | 职责与边界                                                                                                           | 当前文档                                                                                   |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| contracts、protocol                          | contracts 是进程内共同契约及唯一 RuntimeError；protocol 只显式提供真实跨端纯值，不整包暴露端口，无 Node/HTTP/UI 实现 | [契约与协议](docs/contracts-protocol.md)                                                   |
-| server/resources                             | Resource、Offer、Request、登记、固定绑定与单次访问；不依赖 Runtime、结构、调用实现                                   | [资源](docs/resources-package.md)                                                          |
-| server/structure                             | Callable/Scene/Group/Node、配置与成员、作者类型、Sequence/Dynamic；只依赖 resources/contracts                        | [结构](docs/structure-package.md)                                                          |
-| server/invocation                            | 单次 Context/Invocation、Control/Execution、关系、接收、输出、窗口及 CP 活动；不依赖结构、Runtime、记录、内容实体    | [运行边界](docs/runtime-boundaries.md)                                                     |
-| server/checkpoint                            | Frame v6、固定值块、增量关系/选择认证、Store；不持有活调用或资源                                                     | [Checkpoint](docs/checkpoints.md)                                                          |
-| server/runtime                               | 结构绑定、资源范围、运行装配、Runner、作者 Work 适配；不建立平行 Bound 树                                            | [可调用结构](docs/callable-structures.md)                                                  |
-| server/interaction                           | 固定请求、独立发送、持久反馈、局部等待及可选有界过程流；不依赖 Invocation/Runtime                                    | [交互](docs/interactions.md)                                                               |
-| server/transcript、memory、view、measurement | 独立消息、记忆、视图与使用计数及资源契约；不反向依赖 Runtime                                                         | [实体包](docs/content-entities-packages.md)、[View](docs/view-package.md)                  |
-| server/records、changes、diagnostics         | 记录实体；变化捕获/转交；PersistenceError 与有界诊断。真实故障归属仍由 Invocation 决定                               | [记录](docs/recording.md)、[异常](docs/exceptions.md)                                      |
-| server/model-provider、model-exchanges       | 原生模型协议适配；完整回复、工具反馈槽位及固定接纳凭据实体。模型只是资源能力之一                                     | [工具接入](docs/native-tool-integration.md)                                                |
-| services/observer-content                    | 内容组合、ActiveView 默认策略及变化分发；不依赖 Runtime、Observer 服务或 SQLite                                      | [活跃材料](docs/active-content.md)                                                         |
-| services/conversation、observer              | 参考业务装配、宿主持久化、HTTP/CLI、恢复资格；SQLite 和业务策略留在服务                                              | [Conversation](services/conversation/README.md)、[Observer 装配](docs/service-assembly.md) |
-| client/runtime、client/http、apps/observer   | 无 UI 的会话/消费生命周期；HTTP 接纳；React 投影与展示。服务端与客户端不互相依赖                                     | [客户端](docs/client-runtime.md)、[协议](docs/protocol.md)                                 |
+| 包／目录                                                               | 职责与边界                                                                                                           | 当前文档                                                                                                             |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| packages/contracts、packages/protocol                                  | contracts 是进程内共同契约及唯一 RuntimeError；protocol 只显式提供真实跨端纯值，不整包暴露端口，无 Node/HTTP/UI 实现 | [契约与协议](docs/contracts-protocol.md)                                                                             |
+| packages/resources                                                     | Resource、Offer、Request、登记、固定绑定与单次访问；不依赖 Runtime、结构、调用实现                                   | [资源](docs/resources-package.md)                                                                                    |
+| packages/structure                                                     | Callable/Scene/Group/Node、配置与成员、作者类型、Sequence/Dynamic；只依赖 resources/contracts                        | [结构](docs/structure-package.md)                                                                                    |
+| packages/invocation                                                    | 单次 Context/Invocation、Control/Execution、关系、接收、输出、窗口及 CP 活动；不依赖结构、Runtime、记录、内容实体    | [运行边界](docs/runtime-boundaries.md)                                                                               |
+| packages/checkpoint                                                    | Frame v6、固定值块、增量关系/选择认证、Store；不持有活调用或资源                                                     | [Checkpoint](docs/checkpoints.md)                                                                                    |
+| packages/runtime                                                       | 结构绑定、资源范围、运行装配、Runner、作者 Work 适配；不建立平行 Bound 树                                            | [可调用结构](docs/callable-structures.md)                                                                            |
+| packages/interaction                                                   | 固定请求、独立发送、持久反馈、局部等待及可选有界过程流；不依赖 Invocation/Runtime                                    | [交互](docs/interactions.md)                                                                                         |
+| packages/transcript、memory、view、measurement                         | 独立消息、记忆、视图与使用计数及资源契约；不反向依赖 Runtime                                                         | [实体包](docs/content-entities-packages.md)、[View](docs/view-package.md)                                            |
+| packages/records、changes、diagnostics                                 | 记录实体；变化捕获/转交；PersistenceError 与有界诊断。真实故障归属仍由 Invocation 决定                               | [记录](docs/recording.md)、[异常](docs/exceptions.md)                                                                |
+| packages/model-provider、model-exchanges                               | 原生模型协议适配；完整回复、工具反馈槽位及固定接纳凭据实体。模型只是资源能力之一                                     | [工具接入](docs/native-tool-integration.md)                                                                          |
+| packages/observer-content                                              | 内容组合、ActiveView 默认策略及变化分发；不依赖 Runtime、Observer 服务或 SQLite                                      | [活跃材料](docs/active-content.md)                                                                                   |
+| capix-lab/services/conversation、observer                              | 参考业务装配、宿主持久化、HTTP/CLI、恢复资格；SQLite 和业务策略留在服务                                              | [Conversation](../capix-lab/services/conversation/README.md)、[Observer 装配](../capix-lab/docs/service-assembly.md) |
+| packages/client-runtime、packages/client-http；capix-lab/apps/observer | 无 UI 的会话/消费生命周期；HTTP 接纳；React 投影与展示。服务端与客户端不互相依赖                                     | [客户端](docs/client-runtime.md)、[协议](docs/protocol.md)                                                           |
 
 共同类型按实际协作需要从包内晋级 contracts；进入 protocol 还需明确序列化、接纳和版本。源码目录先表达对象或能力归属，不等同于创建者或持有者。
 

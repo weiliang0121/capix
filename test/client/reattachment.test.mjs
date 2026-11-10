@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientSubmission, SubmissionContractError, SubmissionUnavailableError } from '@capix/client-runtime';
-import { ConversationQueue } from '../../client/runtime/dist/queue.js';
+import { ConversationQueue } from '../../packages/client-runtime/dist/queue.js';
 
 const identity = { conversationId: 'conversation', submissionId: 'existing-submission' };
 const transcriptId = 'transcript';

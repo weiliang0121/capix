@@ -11,12 +11,12 @@ import { Memory, Memories, MemoryResource } from '@weiliang0121/capix-memory';
 import { ActiveView, ActiveViewResource, ConversationContent } from '@capix/observer-content';
 
 const packages = [
-  { path: 'server/changes', name: '@weiliang0121/capix-changes', exports: ['ChangeBuffer', 'ChangeCaptureError', 'ProgressChannel'] },
-  { path: 'server/transcript', name: '@weiliang0121/capix-transcript', exports: ['Transcript', 'MessageRef', 'TranscriptRangeRef', 'TranscriptResource', 'TranscriptViewSource'] },
-  { path: 'server/memory', name: '@weiliang0121/capix-memory', exports: ['Memory', 'Memories', 'MemoryResource', 'MemoryViewSource'] },
-  { path: 'server/view', name: '@weiliang0121/capix-view', exports: ['View', 'openView', 'openViewManager'] },
-  { path: 'server/measurement', name: '@weiliang0121/capix-measurement', exports: ['MessageUsage', 'MessageUsageResource'] },
-  { path: 'services/observer-content', name: '@capix/observer-content', exports: ['ConversationContent', 'ActiveView', 'ActiveViewResource', 'ChangeConsumer', 'TranscriptFeed'] },
+  { path: 'packages/changes', name: '@weiliang0121/capix-changes', exports: ['ChangeBuffer', 'ChangeCaptureError', 'ProgressChannel'] },
+  { path: 'packages/transcript', name: '@weiliang0121/capix-transcript', exports: ['Transcript', 'MessageRef', 'TranscriptRangeRef', 'TranscriptResource', 'TranscriptViewSource'] },
+  { path: 'packages/memory', name: '@weiliang0121/capix-memory', exports: ['Memory', 'Memories', 'MemoryResource', 'MemoryViewSource'] },
+  { path: 'packages/view', name: '@weiliang0121/capix-view', exports: ['View', 'openView', 'openViewManager'] },
+  { path: 'packages/measurement', name: '@weiliang0121/capix-measurement', exports: ['MessageUsage', 'MessageUsageResource'] },
+  { path: 'packages/observer-content', name: '@capix/observer-content', exports: ['ConversationContent', 'ActiveView', 'ActiveViewResource', 'ChangeConsumer', 'TranscriptFeed'] },
 ];
 
 const create = (content) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
@@ -53,7 +53,7 @@ test('content packages load through public roots without importing callable stru
 test('generic view has no transcript, memory or Observer active-membership policy', async () => {
   const exported = await import('@weiliang0121/capix-view');
   for (const name of ['Transcript', 'Memories', 'TranscriptViewSource', 'MemoryViewSource', 'ActiveView', 'ActiveViewResource', 'initialActiveView', 'appendActiveView', 'freezeActiveView']) assert.equal(name in exported, false, `@weiliang0121/capix-view must not own ${name}`);
-  const manifest = JSON.parse(await readFile(new URL('../server/view/package.json', import.meta.url), 'utf8'));
+  const manifest = JSON.parse(await readFile(new URL('../packages/view/package.json', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-resources']);
 });
 

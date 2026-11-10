@@ -1,136 +1,99 @@
 # CAPiX
 
-CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服务端运行能力、无 UI 的客户端运行能力与传输适配。仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用后续可按边界拆到独立仓库，本轮不迁移目录或仓库。**Observer 是同仓库的参考服务与应用**：装配对话能力、可选记录预设和观测交付，用真实使用验证内核。
+CAPiX 是可组合、可观测的 Agent 框架：用 Scene / Group / Node 组织处理逻辑，通过资源契约访问独立能力，由 Runner 建立每次调用并协调接纳、取消、输出和有限恢复。模型是可接入的资源能力之一；运行一个场景不需要启动 HTTP 服务。
 
-本仓库原名 `capix-observer`，现在是 CAPiX 的实现主线。原 `capix` 已移至相邻的 `capix-explorations`，保留独立 Git 历史和概念探索；不合并其 Graph/TRS 实现，也不把探索方案作为本内核的约束。
+当前公开包为 **0.x**，采用 [MIT](LICENSE) 许可。执行内核在 Node.js 上验证；目录统一为 `packages/` 不代表已支持浏览器或 Edge 执行。
 
-## 从哪里开始
+## 快速开始
 
-- [文档导航](docs/README.md)：当前契约、使用说明与历史实验分别查阅。
-- [npm 发布](docs/npm-publishing.md)：17 个内核包的 MIT 分发范围、产物验证、Changesets 和手动发布设置。
-- [项目组织与命名](docs/organization.md)：框架、应用、实体和记录的定位；对象角色、公开入口与本轮迁移表。
-- [可调用结构](docs/callable-structures.md)：Scene / Group / Node、Callable / Composite、绑定与驱动的职责。
-- [运行边界](docs/runtime-boundaries.md)：统一调用、资源窗口、父子接纳与恢复。
-- [异常与错误](docs/exceptions.md)：统一操作接收与不可被 fallback 清除的机制故障。
-- [记录机制](docs/recording.md)、[增量观测](docs/observation-increments.md)：可选记录预设、变化生产、来源完整性与交付。
-- [跨端协议](docs/protocol.md)、[客户端运行能力](docs/client-runtime.md)：独立对话交付、实体同步、观测接收、应用绑定与 Store。
-- [消息与分段](docs/transcript.md)、[运行记忆](docs/memory.md)、[活跃材料与维护](docs/active-content.md)：内容实体、单次材料与维护边界。
-- [对话身份与切换](docs/conversations.md)：新建、历史、明确提交目标与资源归属。
-- [对话持久化](docs/persistence.md)：内容提交、历史记录与重启边界。
-- [外部交互](docs/interactions.md)：独立请求与反馈、Node 的本地等待、再次读取和持久化边界。
+需要 Node.js **22.23.2** 或更新版本。在空目录中安装三个公开包：
 
-`docs/review.md` 和 `docs/observation.md` 保留设计推演过程，文首明确标为历史材料；当前契约以以上专题文档和实现为准。
+```sh
+npm init -y
+npm install @weiliang0121/capix-resources @weiliang0121/capix-structure @weiliang0121/capix-runtime
+```
 
-[Callable Checkpoint 与执行恢复设计](docs/checkpoints.md) 说明可选 CP 声明、父子续接、消息固定写入及恢复观测。Observer 的新调用默认保存 CP，现有对话、决策、文件与记忆声明提供有限的宿主显式续接，并通过进程中断验证；没有自动恢复旧 QA 或旧提交反馈。[恢复机制研究](docs/recovery.md) 保留外部机制对照与早期候选路径，不作为当前 API。
+保存以下内容为 `dictionary.mjs`，然后执行 `node dictionary.mjs`。例子使用内存字典，离线运行，不需要模型密钥或数据库。
 
-## 对象与活动
+```js
+import { Node, Scene } from '@weiliang0121/capix-structure';
+import { Resources, Runner } from '@weiliang0121/capix-runtime';
+import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
-“运行时”表示系统实际协作的活动状态。Scene、Group、Node 是可复用结构的角色；三者都遵守共同的 Callable 契约，Scene 和 Group 另有成员组合能力。
+const dictionary = new Resource(new Map([['hello', '你好']]));
+const lookup = new ResourceOffer({
+  methods: {
+    translate(entries, word) {
+      return entries.get(word) ?? word;
+    },
+  },
+});
+const translate = new Node({ deps: { dictionary: lookup.request() }, run: (work) => work.resources.dictionary.translate(work.input) });
+const scene = new Scene(translate);
+const runner = new Runner(scene, new Resources().register(dictionary, lookup)).build();
+console.log(await runner.run('hello'));
+```
+
+预期输出：
 
 ```text
-独立实体：Transcript、Memories、MessageUsage、模型供给、记录容器……
-                      │ 通过资源契约提供受控访问
-结构：Scene / Group / Node = Callable + 可选 Composite
-                      │ runner.build：解算接线、安装调用构造能力
-                 原结构（身份不变）
-                      │ Runner 启动一次调用
-                Invocation ↔ CallableContext
-                      │ 当前阶段 Work
-                业务处理与显式子调用
-                      │ 发布已经发生的事实
-           变化捕获                 宿主安装的观测
-               │                   ├─ 记录预设
-               │                   └─ 其他同步消费者
-               └──────── 环境消费与服务交付
+你好
 ```
 
-- `new Node/Group/Scene` 直接构造结构；普通 `*Definition` 配置可经构造器传入，也可在 build 前逐项赋值。结构保留 `deps/run/output/checkpoint`，业务正常/失败接收在操作处用 `result` 表达，观测消费者由宿主安装。
-- Scene / Group 通过 `add` 注册可用的 Group / Node，组合体自己的处理函数选择、调用、接纳成员。Node 不具有成员调用端口。
-- `new Runner(scene, resources, interactions?).build()` 在原结构上完成一次构建，返回运行器本身；构建后拒绝结构修改。每个成员只属于一个父结构，处理逻辑与资源实体可以复用。每个 Runner 固定一个场景并管理其入口占用，每次运行建立新的 Invocation 和 CallableContext。
-- `Invocation` 统一协调调用阶段、直接子关系与交付；Context 保存本次现场。业务作者只取得本阶段 Work、具名资源与受控动作，见 [可调用结构](docs/callable-structures.md)。
-- 独立实体由宿主建立，结构绑定其访问形式。资源捕获边界按准确声明身份配置，不因结构叫 Group 就自动重新捕获。
-- 观测消费类型化事实，记录是内置的可选结果形式。没有记录，业务调用与内容变化仍然成立。
+同一用法在仓库内拆成 [dictionary.mjs](examples/dictionary.mjs) 和 [runner.mjs](examples/runner.mjs)。构建后可以运行 `node examples/runner.mjs`。
 
-新记录为 `RecordingRootRecord → CallableRecord` 的真实调用树，保存 `structureKind` 和直接父子关系。Observer 用明确的 `conversation-task` 角色识别对话任务；不是所有 Group 都是一个 QA。任务详情沿用服务契约名 `ExecutionRecordSnapshot`，内部使用通用 `calls` 列表。Checkpoint 使用 **Frame v6**，稳定调用事实只在成立时固定，保存采用增量事实和显式引用选择；当前只接收 v6，不迁移或读取旧 CP 格式。宿主只打开当前数据库格式，旧库保留原文件并明确拒绝，需显式选择新数据库路径。
-
-## 同一个服务中的两种职责
-
-```text
-services/observer/src/
-  conversation/    scene/conversation、group/node 声明、模型契约、资源绑定、消息同步
-  files/           可选工作目录实体与受控文本读写资源
-  observation/     记录来源、查询投影、观测交付
-  persistence/     多对话的 SQLite 存储与历史记录保存
-  assembly/        独立实体、供给、配置与共享变化消费的装配
-  http/            对话、实体、观测端点与静态资源
-```
-
-`ConversationScene` / `ConversationGroup` 组织对话，`createConversationStructure` 返回宿主需要的明确节点引用；`initializeObserver` 装配单个对话的运行环境，`ObserverConversations` 管理参考服务中的对话目录与按对话装配。`TranscriptFeed` 同步消息实体，`ObservationFeed` 交付观测，它们可以独立连接和关闭。对话使用 `ConversationRequest`，不把它当成通用 Callable 输入契约。
-
-```ts
-import { initializeObserver } from '@capix/observer-service/assembly';
-
-const environment = initializeObserver(provider);
-const output = await environment.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal, progress });
-```
-
-上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@weiliang0121/capix-runtime`：先构造 Scene 并向 Resources 注册供给，再 `const runner = new Runner(scene, resources).build()`，最后 `runner.run(input, options)`。可选 Interactions 作为第三参数接入；无需持有另一个已绑定场景，也不必使用 Observer 的装配。可运行入口见 [examples/runner.mjs](examples/runner.mjs)，完整资源与具名子调用例子见 [examples/dictionary.mjs](examples/dictionary.mjs)。
-
-回答在正式追加消息后交付，随后处理记忆。启用持久化时，正式追加先提交到数据库。后处理失败保留已成立的回答。当前只有生成回答业务显式组织的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或默认服务未完成调用恢复。
-
-模型请求通过独立 Interaction 发出。请求模型 Group 接纳首个 Node 的有限等待结果，必要时建立新的 Node 调用读取同一交互；不会因为本地等待结束而重发。反馈先保存再交给业务解释，已保存反馈可按 ID 再次读取，与恢复旧调用分开。
+Scene 是入口结构，Group 组合成员，Node 执行具体处理；Resources 登记独立资源与其供给，`deps` 声明本阶段的访问需求。`build()` 固定结构和接线，每次 `run(input)` 才建立独立调用。外部请求和持久反馈可通过可选的 Interactions 接入，不是启动 Runner 的前提。
 
 ## 包与公开入口
 
-首批 npm 发布范围为 `contracts`、`protocol` 和全部 15 个 `server/*` 包，共 17 个包，品牌保持 **CAPiX**，统一使用用户已持有的 **`@weiliang0121`** scope 和 `capix-` 包名前缀。六个参考服务、客户端与应用 workspace 不在首发范围，继续保留现有 `@capix/*` 私有工作区身份；上面的服务装配示例需在本仓库使用。发布步骤见 [npm 发布](docs/npm-publishing.md)。
+17 个公开包统一使用 **`@weiliang0121/capix-`** 前缀，源码位于 `packages/<后缀>`，npm 名称保持不变。它们属于同一个 Changesets fixed 版本组；内部依赖从 `workspace:*` 转换成准确发布版本。新增候选能力不会自动加入该组。
 
-| 包或分组                                                                                                                                                                                            | 当前职责                                                   |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `@weiliang0121/capix-contracts`、`@weiliang0121/capix-protocol`                                                                                                                                     | 进程内共同契约与稳定数据；真实跨端纯值契约                 |
-| `@weiliang0121/capix-resources`、`@weiliang0121/capix-structure`                                                                                                                                    | 资源定义和受控访问；Scene / Group / Node 及作者契约        |
-| `@weiliang0121/capix-invocation`、`@weiliang0121/capix-checkpoint`、`@weiliang0121/capix-interaction`                                                                                               | 单次调用与接纳；固定事实保存和有限恢复；独立外部请求与反馈 |
-| `@weiliang0121/capix-runtime`                                                                                                                                                                       | 结构绑定、资源装配、Runner、作者端口适配及可选记录安装     |
-| `@weiliang0121/capix-transcript`、`@weiliang0121/capix-memory`、`@weiliang0121/capix-view`、`@weiliang0121/capix-measurement`、`@weiliang0121/capix-records`、`@weiliang0121/capix-model-exchanges` | 独立内容、视图、计量、记录和模型交换实体及其资源访问       |
-| `@weiliang0121/capix-changes`、`@weiliang0121/capix-diagnostics`、`@weiliang0121/capix-model-provider`                                                                                              | 变化交付、故障诊断、模型协议适配                           |
-| 私有：`@capix/observer-content`、`@capix/observer-service`、`@capix/conversation-service`                                                                                                           | 内容策略组合、Observer 参考服务、新内核典型对话装配        |
-| 私有：`@capix/client-runtime`、`@capix/client-http`、`@capix/observer-app`                                                                                                                          | 无 UI 的客户端协作、HTTP 适配、React 参考应用              |
+| 包后缀                                        | 职责与入口                                                                    |
+| --------------------------------------------- | ----------------------------------------------------------------------------- |
+| `contracts`、`protocol`                       | [进程内共同契约与真实跨端纯值](docs/contracts-protocol.md)                    |
+| `resources`                                   | [资源声明、固定供给与受控访问](docs/resources-package.md)                     |
+| `structure`、`runtime`                        | [Scene / Group / Node、绑定、Runner 与作者 Work](docs/callable-structures.md) |
+| `invocation`                                  | [单次调用、关系、接纳与退出](docs/runtime-boundaries.md)                      |
+| `checkpoint`                                  | [固定事实、Store 端口与显式有限恢复](docs/checkpoints.md)                     |
+| `interaction`                                 | [独立外部请求、反馈及局部等待](docs/interactions.md)                          |
+| `transcript`、`memory`、`view`、`measurement` | [消息、记忆、视图、使用计数及资源契约](docs/content-entities-packages.md)     |
+| `records`、`changes`、`diagnostics`           | [可选记录、变化交付与故障诊断](docs/recording.md)                             |
+| `model-provider`、`model-exchanges`           | [原生模型协议适配、回复与工具反馈实体](docs/native-tool-integration.md)       |
 
-内容实体从各自包导入，Runtime 不提供 `/content`。Runtime 的 `/recording`、`/construction` 分别提供可选记录安装和底层构造入口。服务包的 `/conversation`、`/observation`、`/assembly`、`/http` 对应装配职责。所有跨包导入经过公开出口，完整职责见 [项目组织](docs/organization.md)。资源基础对象从 `@weiliang0121/capix-resources` 导入，操作契约从 `@weiliang0121/capix-resources/operation` 导入；场景资源登记 `Resources` 留在 Runtime，边界见 [资源包](docs/resources-package.md)。
+跨包只使用各包公开出口，不导入 `src` / `dist` 私有路径。Runtime 不转发所有能力；例如内容实体从各自包导入，可选记录安装使用 `@weiliang0121/capix-runtime/recording`。完整清单与分发验证见 [npm 发布](docs/npm-publishing.md)。
 
-服务端与客户端不互相依赖；HTTP 适配依赖客户端端口；UI 通过应用绑定将客户端状态投影到 Store。实体实例、网络契约和 UI 读模型不互相替代。
+## 能力范围与版本边界
 
-## 本地启动与检查
+| 状态                      | 范围                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 已有公开包与当前契约      | 结构、资源、调用、稳定值、有限 CP 恢复、交互、内容实体、记录及原生模型协议适配                                                  |
+| 私有 workspace / 参考装配 | `@capix/client-runtime`、`@capix/client-http`、`@capix/observer-content`；Conversation / Observer 宿主、ToolLoop 组合与参考页面 |
+| 设计候选                  | 独立工具循环预设、通用 SQLite CP 适配、可嵌入观测 UI；尚未形成新的公开包                                                        |
+| 当前未实现的产品能力      | MCP 接入、操作系统沙箱、动态调度、外部权限平台                                                                                  |
 
-只体验新内核的典型对话装配，可以在 `pnpm build` 后运行 `pnpm conversation --demo`：连续输入、流式回答、消息／记忆／View 保存及重启续用均走公开能力。浏览器入口用 `pnpm conversation:web --demo`，打开 `http://127.0.0.1:4318`。默认离线且使用独立演示库；真实模型需显式 `--live`，可用 `--records /path/to/new.json` 导出本进程调用记录。目录、宿主生命周期与保存边界见 [新对话服务](services/conversation/README.md)。以下命令仍启动原 Observer 界面与 API。
+资源访问窗口约束框架内的受控操作，不提供操作系统隔离。模型协议支持范围和预算以对应包契约为准；参考宿主的性能和恢复实验不构成任意业务装配的保证。
 
-固定工具链：Node **22.23.2**、pnpm **10.7.1**、TypeScript **6.0.3**。所有包共用一个根 Workspace 和锁文件，按独立职责组织。
+CP 只恢复显式声明的 point 和完整依据，不恢复 JavaScript 栈、任意草稿或未知外部效果。取消会等待已经启动的子调用真实退出；保存、交付与外部效果分别成立，不构成统一事务。详情见 [退出契约](docs/invocation-exit-contract.md)、[稳定事实与 CP](docs/checkpoints.md)。
+
+当前处于 0.x 开发阶段，公开契约和格式变化必须记录版本依据。只打开当前数据库和 **Frame v6** CP 格式；不自动升级、清空或降级读取旧数据。拒绝旧库不修改原文件，请显式使用新路径或由数据所有者决定重置。当前格式的重启载入、交互读取和显式 CP 恢复仍是正式能力。
+
+## 参考装配与实验
+
+完整 Conversation / Observer 服务、页面和大型实验由相邻的 **capix-lab** 承接。当前使用本地交接位置 [../capix-lab/README.md](../capix-lab/README.md)，没有在此假定其远端仓库地址；GitHub 上的源码读者需要另行取得该仓库。这些参考装配不随上述三个 npm 包安装。
+
+离线对话、真实模型配置、宿主数据库与页面启动命令以 capix-lab 的 README 为准。CAPiX 不读取相邻仓库的凭证、配置或源码来运行；跨仓候选验证使用明确的一批打包产物。迁移位置和适用基线见 [仓库拆分设计](docs/repository-split-design.md)。
+
+## 本地开发与贡献
+
+仓库工具链固定为 Node **22.23.2**、pnpm **10.7.1**、TypeScript **6.0.3**，只有一个根 workspace 和锁文件。
 
 ```sh
 pnpm install --frozen-lockfile
-cp .env.example .env
-# 在本机填写服务需要的模型配置，不提交凭证。
 pnpm build
-pnpm start
-```
-
-默认服务为 `http://127.0.0.1:4317`，提供构建后的界面和 API。开发时先在另一个终端运行 `PORT=4320 pnpm start`，再运行 `pnpm dev`；Vite 的 API 代理可通过 `OBSERVER_API_ORIGIN` 调整。服务端更改后需要重新构建和重启。
-
-`pnpm start` 默认把各对话的消息、记忆、记录和独立模型交互保存到 `.capix/observer.sqlite`，目录已被 Git 忽略。可用 `CAPIX_DATA_DIR` 指定其他目录；它必须位于模型文件工作区之外。同一数据库只允许一个服务进程写入。当前格式的数据库重启后恢复内容与历史记录，并建立新运行环境；不会继续旧 QA、重发模型或文件操作，也不恢复旧提交身份。旧格式数据库不自动升级、清空或覆盖，需保留原库并明确选用新的数据目录；新对话服务对应使用 `--db` 指定新路径。程序化 `initializeObserver(provider)` 仍默认为内存模式，接入方式见 [持久化](docs/persistence.md)。
-
-设置 `CAPIX_FILES_ROOT` 为一个已存在、由宿主管理的本地工作目录可启用文件任务。可在对话中直接说明相对路径和读写要求，也可展开文件任务输入，填写来源和/或结果路径。当前支持最多 64 KiB 的 UTF-8 普通文本，按实际执行时的内容读取；结果仅新建，目录需预先存在。自然语言通过请求理解 Group 提出普通回答、文件、澄清或不支持候选，对话任务接纳后选择已声明的分支；显式文件任务跳过理解。路径缺失时在当前 QA 提问，下一轮重新理解；不以“继续”自动重放历史写入。支持读文件、读后保存、直接生成后保存。明确回答先追加为正式消息，然后才保存；保存失败保留回答。
-
-`WorkspaceFiles` 是独立服务实体，通过 read/create 资源端点提供访问；绑定层在所选 Group 调用建立时按输入收窄到具体路径，资源自行检查不可扩大既有约束。文件能力未启用时普通对话不受影响。发布回执独立于本轮结果：后续取消或记忆失败仍保留已创建文件；反馈断线只恢复同一提交，不重做文件操作。这不是持久化或通用工具平台。
-
-文件目录须由宿主控制。实现检查路径、符号链接、目录身份并独占发布完整文件，但不是对抗其他进程恶意替换目录的操作系统沙箱，也不承诺网络文件系统或进程崩溃后的恢复。临时文件清理是尽力执行；不确定发布结果会明确报告，不能依据调用失败认定文件未创建。
-
-```sh
+node examples/runner.mjs
 pnpm check
 ```
 
-检查覆盖包构建/类型、运行和 HTTP 回归、跨包公开入口、客户端接收、UI 纯逻辑与格式。普通检查使用注入的模型返回，不访问真实模型。真实模型场景是单独显式运行的 `test/live/memory.mjs`。
+普通检查不调用真实模型；首次安装依赖可能联网。发布产物另用 `pnpm release:check` 验证，它可能访问 registry，但不会发布 npm。GitHub 执行 CI 和版本 PR，npm 发布由维护者在本地明确执行。
 
-## Observer 的阅读方式
-
-问答导航固定宽度、独立滚动；主图各轮等宽，密度仅影响主图。默认按直接归属与同级顺序展示可折叠调用树，耗时是独立辅助视图。上下文行展示选中历史、可见记忆和变化关联；全文属于对话或详情。搜索使用客户端已同步的完整消息。
-
-来源完整性、交付顺序和实体版本分别表达。当前记录来源不完整时明确停止观测交付，不能用重新拉快照伪装成修复；消息同步和对话仍独立。重启后以历史归档展示旧来源及其完整性；未结束的旧记录显示“未取得结束记录”，不会一直显示运行中。回答与文档正文已支持有限流式预览，正式消息仍在完整校验和接纳后追加；候选来源、正式消息定位与内容一致性分别确认。有限 checkpoint 恢复是可选内核能力，尚未接入旧对话自动恢复；没有外部能力平台或动态能力注册。
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，漏洞报告边界见 [SECURITY.md](SECURITY.md)。[文档导航](docs/README.md) 区分当前契约与历史研究；[项目组织](docs/organization.md) 说明包边界与对象职责。

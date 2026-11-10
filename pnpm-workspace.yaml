@@ -1,7 +1,2 @@
 packages:
-  - contracts
-  - protocol
-  - server/*
-  - client/*
-  - services/*
-  - apps/*
+  - packages/*

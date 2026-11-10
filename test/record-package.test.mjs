@@ -22,7 +22,7 @@ function writerAccess(recorder) {
 }
 
 test('record entities have independent public entries and no callable or memory implementation dependency', async () => {
-  const directory = fileURLToPath(new URL('../server/records/', import.meta.url));
+  const directory = fileURLToPath(new URL('../packages/records/', import.meta.url));
   const manifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'));
   const forbidden = ['@weiliang0121/capix-runtime', '@weiliang0121/capix-structure', '@weiliang0121/capix-memory', '@capix/observer-service'];
   assert.equal(manifest.name, '@weiliang0121/capix-records');

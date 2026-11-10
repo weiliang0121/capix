@@ -132,7 +132,7 @@ test('structure checkpoint and reception contracts reconnect to runtime recovery
 });
 
 test('structure declarations have no reverse runtime dependency or private cross-package imports', async () => {
-  const root = new URL('../server/structure/', import.meta.url);
+  const root = new URL('../packages/structure/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
   assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@weiliang0121/capix-contracts', '@weiliang0121/capix-resources']);
   assert.equal(manifest.peerDependencies?.['@weiliang0121/capix-runtime'], undefined);

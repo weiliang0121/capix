@@ -4,7 +4,7 @@
 
 状态：生产契约与首版工具循环已实现，2026-11-05。下文保留设计和离线验证的来由，当前落地范围见末节；协议样本不代表真实模型质量或多厂商兼容认证。
 
-Provider 的现行接口见 [ModelProvider](../server/model-provider/README.md)，工具作者接口见[工具预设](../services/conversation/src/tools/README.md)，宿主使用见[服务 README](../services/conversation/README.md)。本文旧文本交互只读和旧库迁移安排已撤销，详见文首兼容约定。
+Provider 的现行接口见 [ModelProvider](../packages/model-provider/README.md)，工具作者接口见[工具预设](../../capix-lab/services/conversation/src/tools/README.md)，宿主使用见[服务 README](../../capix-lab/services/conversation/README.md)。本文旧文本交互只读和旧库迁移安排已撤销，详见文首兼容约定。
 
 ## 1. 目标与范围
 
@@ -18,16 +18,16 @@ Provider 的现行接口见 [ModelProvider](../server/model-provider/README.md)�
 
 ## 2. 实施前基线与接缝
 
-| 位置                                                                                                             | 当前事实                                        | 本轮需要处理                                      |
-| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------- |
-| [model-provider/types.ts](../server/model-provider/src/types.ts)                                                 | 三种文本消息角色；ModelReply 只有 text 等字段   | 工具声明、规范化有序输出、完整续接材料            |
-| [provider.ts](../server/model-provider/src/provider.ts)                                                          | 请求消息重新投影为 role/content                 | 完整编码工具请求和对应历史，明确支持的参数        |
-| [response.ts](../server/model-provider/src/response.ts)、[stream.ts](../server/model-provider/src/stream.ts)     | 文本接纳；流式拒绝 tool_calls，reasoning 不保留 | JSON/SSE 等价接纳、交错工具片段聚合、原生材料保真 |
-| [completion-contract.ts](../services/conversation/src/model/completion-contract.ts)                              | 严格文本请求/回复 Schema，交互契约 v1           | 新形状的严格接纳及持久兼容                        |
-| [model-codecs.ts](../services/conversation/src/recovery/model-codecs.ts)                                         | CP 复用服务模型 Schema                          | 声明版本与原始模型材料的恢复校验                  |
-| [Dynamic](../server/structure/src/composition/dynamic.ts)                                                        | 单项选择、逐步调用，无自身 CP 声明              | 不直接扩为工具循环；另建普通 Group 预设           |
-| [子引用契约](../server/structure/src/definition/checkpoint.ts)                                                   | childReferences 支持同一成员的多个引用          | 为固定工具目录建立准确的多引用槽                  |
-| [对话 Scene](../services/conversation/src/scene.ts)、[提交预览](../services/conversation/src/http/submission.ts) | string delta，当前 Web 按单一 generation 追加   | 多次模型回复的候选身份、结束与最终回答映射        |
+| 位置                                                                                                                                       | 当前事实                                        | 本轮需要处理                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------- |
+| [model-provider/types.ts](../packages/model-provider/src/types.ts)                                                                         | 三种文本消息角色；ModelReply 只有 text 等字段   | 工具声明、规范化有序输出、完整续接材料            |
+| [provider.ts](../packages/model-provider/src/provider.ts)                                                                                  | 请求消息重新投影为 role/content                 | 完整编码工具请求和对应历史，明确支持的参数        |
+| [response.ts](../packages/model-provider/src/response.ts)、[stream.ts](../packages/model-provider/src/stream.ts)                           | 文本接纳；流式拒绝 tool_calls，reasoning 不保留 | JSON/SSE 等价接纳、交错工具片段聚合、原生材料保真 |
+| [completion-contract.ts](../../capix-lab/services/conversation/src/model/completion-contract.ts)                                           | 严格文本请求/回复 Schema，交互契约 v1           | 新形状的严格接纳及持久兼容                        |
+| [model-codecs.ts](../../capix-lab/services/conversation/src/recovery/model-codecs.ts)                                                      | CP 复用服务模型 Schema                          | 声明版本与原始模型材料的恢复校验                  |
+| [Dynamic](../packages/structure/src/composition/dynamic.ts)                                                                                | 单项选择、逐步调用，无自身 CP 声明              | 不直接扩为工具循环；另建普通 Group 预设           |
+| [子引用契约](../packages/structure/src/definition/checkpoint.ts)                                                                           | childReferences 支持同一成员的多个引用          | 为固定工具目录建立准确的多引用槽                  |
+| [对话 Scene](../../capix-lab/services/conversation/src/scene.ts)、[提交预览](../../capix-lab/services/conversation/src/http/submission.ts) | string delta，当前 Web 按单一 generation 追加   | 多次模型回复的候选身份、结束与最终回答映射        |
 
 目前没有发现必须增加 Invocation 模式或修改 CP Frame 的依据。实际缺口集中在模型协议、材料实体和服务投影；这仍需后续验证，不能用“可以写成 Group”代替证明。
 
@@ -58,7 +58,7 @@ flowchart TD
 | Interaction    | 可选的独立发送、反馈保存、局部等待与再次读取         | 模型循环、远端幂等、任意调用恢复                        |
 | 宿主           | 实体、Provider/MCP Client、持久端口、结构装配与关闭  | 根据记录猜测业务效果                                    |
 
-共同模型类型先归 `@weiliang0121/capix-model-provider`，不因被多个包使用就晋级到通用 contracts 或跨端 protocol。模型交换实体独立放在 `@weiliang0121/capix-model-exchanges`；它消费模型纯值及 resources/view/changes 等公开端口，不依赖 Invocation 或 Runtime。其持久存储仍由宿主实现。
+共同模型类型先归 `@weiliang0121/capix-model-provider`，不因被多个包使用就晋级到通用 packages/contracts 或跨端 protocol。模型交换实体独立放在 `@weiliang0121/capix-model-exchanges`；它消费模型纯值及 resources/view/changes 等公开端口，不依赖 Invocation 或 Runtime。其持久存储仍由宿主实现。
 
 ToolLoop 先在服务的独立 tools 目录实现，通过 example 验证；稳定后再决定公共预设包。不要放入 `@weiliang0121/capix-structure`，以免通用结构包反向依赖模型协议。MCP 客户端适配也独立于模型 Provider。
 
@@ -357,10 +357,10 @@ MCP 只提供发现资料，模型接口可能只支持其 Schema 的子集。�
 候选目录：
 
 ```text
-server/model-provider/src/
+packages/model-provider/src/
   types.ts                  共同模型纯值和 Provider 契约
   <具体适配器相关文件>      wire 编解码、续接 codec、流式接纳
-server/model-exchanges/     候选独立实体包：集合、固定写入、资源、ViewSource
+packages/model-exchanges/     候选独立实体包：集合、固定写入、资源、ViewSource
 services/conversation/src/tools/
   <工具配置与循环预设>      使用公开结构/资源端口
 services/conversation/src/model/
@@ -423,7 +423,7 @@ examples/native-tools/      离线闭环、真实模型显式入口、故障验�
 
 ## 14. 本轮离线落地与边界
 
-[examples/native-tools](../examples/native-tools/README.md) 已提供第一、二步的可执行验证，生产包不依赖该目录：
+[examples/native-tools](../../capix-lab/examples/native-tools/README.md) 已提供第一、二步的可执行验证，生产包不依赖该目录：
 
 - DeepSeek 形状的 JSON/SSE 样本接纳到共同回复与受限原生补充，完整反馈按工具 ID 重新编码；另有混合块反例检查顺序、重复与遗漏。普通正文/工具请求读取不依赖原生编码器。
 - 目录使用稳定 JSON 摘要，成员位置及 CP 契约对应实际登记节点；恢复还核对固定预算、原输入和引用依据。类型用例直接关联现有 Node I/O，包含错误 Schema、结果处理和反馈身份的编译拒绝。
@@ -433,7 +433,7 @@ examples/native-tools/      离线闭环、真实模型显式入口、故障验�
 
 这个验证没有新增生产 ModelExchanges 包、修改 ModelProvider、迁移服务持久格式或改变 CP Frame v5。Store 提交前缀是进程内离线复现，不等于完成真实进程崩溃、SQLite 与网络共同故障的认证；严格协议 fixture 也不等于多厂商兼容验证。下一步生产迁移仍需按 §11 同时处理 Provider、正文消费者、交互/CP 编解码和旧数据资格。
 
-独立的宿主传输修复已经接入新服务 CLI/Web。200 会话 direct/yield 各两次对照中，模型失败由每组 198/800 降至 0/800；CPU 和最大事件循环停顿未明显下降。完整配置、数据与限制见 [容量调查 §8](checkpoint-capacity-investigation.md#8-宿主发送前让出执行权)。这项结果不能作为工具循环容量认证。
+独立的宿主传输修复已经接入新服务 CLI/Web。200 会话 direct/yield 各两次对照中，模型失败由每组 198/800 降至 0/800；CPU 和最大事件循环停顿未明显下降。完整配置、数据与限制见 [容量调查 §8](../../capix-lab/docs/checkpoint-capacity-investigation.md#8-宿主发送前让出执行权)。这项结果不能作为工具循环容量认证。
 
 ## 15. 依据
 
@@ -444,7 +444,7 @@ examples/native-tools/      离线闭环、真实模型显式入口、故障验�
 - [DeepSeek Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)：带 tools 时的 reasoning_content 回传要求，包含零工具回复。
 - [Claude Handle tool calls](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls)：tool_use/tool_result 内容块、关联与错误表达。
 - [MCP Architecture](https://modelcontextprotocol.io/docs/learn/architecture)、[MCP Tools](https://modelcontextprotocol.io/specification/latest/server/tools)：外部发现与调用接缝；本轮查询的 latest 指向 2026-07-28。
-- 仓库：[模型 Provider](../server/model-provider/README.md)、[资源包](resources-package.md)、[结构包](structure-package.md)、[交互](interactions.md)、[Checkpoint](checkpoints.md)、[操作失败](exceptions.md)、[退出契约](invocation-exit-contract.md)。
+- 仓库：[模型 Provider](../packages/model-provider/README.md)、[资源包](resources-package.md)、[结构包](structure-package.md)、[交互](interactions.md)、[Checkpoint](checkpoints.md)、[操作失败](exceptions.md)、[退出契约](invocation-exit-contract.md)。
 
 ## 16. 首版生产落地
 
@@ -460,4 +460,4 @@ examples/native-tools/      离线闭环、真实模型显式入口、故障验�
 
 生产使用示例见 `examples/tool-conversation.mjs`。集成测试通过 localhost HTTP、SQLite 重开及新进程 CP 续接验证，不调用真实模型。目录生成器升级和纯映射仍受前文契约约束。MCP、多协议实现、并行工具、候选预览及默认 Web 工具模式不在首版范围。
 
-后续宿主闭环已于 2026-11-06 接入 CLI/Web 的可选工具模式、多集合存储、入口门槛及完整工具根恢复；该阶段工具完成 CP 更新为 v3，SQLite 更新为 v5。随后的 SQLite v6 将 CP 保留收敛为每个调用的当前镜像正文，旧镜像身份继续保留拒重；这不改变 Frame v5 或工具恢复契约。默认 Web 仍为材料模式。当前范围见 [原生工具调用的宿主接入](native-tool-host-integration.md)，容量与真实模型结果见 [宿主验证报告](native-tool-host-validation.md)。
+后续宿主闭环已于 2026-11-06 接入 CLI/Web 的可选工具模式、多集合存储、入口门槛及完整工具根恢复；该阶段工具完成 CP 更新为 v3，SQLite 更新为 v5。随后的 SQLite v6 将 CP 保留收敛为每个调用的当前镜像正文，旧镜像身份继续保留拒重；这不改变 Frame v5 或工具恢复契约。默认 Web 仍为材料模式。当前范围见 [原生工具调用的宿主接入](../../capix-lab/docs/native-tool-host-integration.md)，容量与真实模型结果见 [宿主验证报告](../../capix-lab/docs/native-tool-host-validation.md)。

@@ -46,7 +46,7 @@ flowchart TD
   Selection[measurement] --> Resources
 ```
 
-图只展开内容和记录协作关系；各包还按需依赖 `protocol` 的纯数据、`contracts` 的共同契约和诊断。Runtime 安装资源端点与可选记录预设，实体包不调用 Runtime。`observeMemory` 由 `@weiliang0121/capix-records` 提供，通过 `transcript.id` 与 `values()` 的只读结构契约组合协议值和记忆记录，不依赖 `@weiliang0121/capix-memory`。
+图只展开内容和记录协作关系；各包还按需依赖 `packages/protocol` 的纯数据、`packages/contracts` 的共同契约和诊断。Runtime 安装资源端点与可选记录预设，实体包不调用 Runtime。`observeMemory` 由 `@weiliang0121/capix-records` 提供，通过 `transcript.id` 与 `values()` 的只读结构契约组合协议值和记忆记录，不依赖 `@weiliang0121/capix-memory`。
 
 ## 包内组织与公开出口
 
@@ -54,13 +54,13 @@ flowchart TD
 
 | 包                          | 主要文件与公开能力                                                                                                                                                                                                                                                                                                                                    |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/transcript`         | `transcript.ts`：集合及接纳；`ref.ts`：`MessageRef/TranscriptRangeRef`；`append.ts`：固定追加依据和凭据；`persistence.ts`：状态与同步提交；`resource.ts`：`TranscriptResource/TranscriptRangeReader`；`progress.ts`：追加进展值；`view.ts`：TranscriptViewSource；`presets.ts`：可选相邻配对算法                                                      |
-| `server/memory`             | `memory.ts/memories.ts`：单项与集合；`change.ts/apply.ts`：变更和固定批次；`persistence.ts`：状态与提交；`resource.ts`：`MemoryResource/CapturedMemories`；来源核验留在包内 `source.ts`；`view.ts`：MemoryViewSource                                                                                                                                  |
-| `server/view`               | `view.ts`：通用成员状态与一致读取；`source.ts/types.ts`：来源与数据契约；`access.ts`：按资源窗口打开端点                                                                                                                                                                                                                                              |
-| `server/measurement`        | `usage.ts`：按对象计数；`resource.ts`：受窗口控制的记录端点                                                                                                                                                                                                                                                                                           |
-| `server/records`            | `record.ts/book.ts/recorder.ts`：记录载体与登记；`tree/`：直接归属与树查询；`restoration/`：只读历史恢复；`resource.ts`：普通快照 read/write；`construction.ts`：宿主记录构造；`memory/observe.ts`：结构兼容的记忆投影辅助                                                                                                                            |
-| `services/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步；`view/active.ts`：ActiveView 来源同步与正式操作；`view/state.ts`：状态契约与校验；`view/default-policy.ts`：默认纳入预设；`view/resource.ts`：read/manage Offer |
-| `server/changes`            | `capture.ts/buffer.ts`：必要捕获与批次转交；`publish.ts/consumer.ts`：发布端口；`error.ts`：捕获错误及故障合并；`progress.ts`：被动进度通知                                                                                                                                                                                                           |
+| `packages/transcript`       | `transcript.ts`：集合及接纳；`ref.ts`：`MessageRef/TranscriptRangeRef`；`append.ts`：固定追加依据和凭据；`persistence.ts`：状态与同步提交；`resource.ts`：`TranscriptResource/TranscriptRangeReader`；`progress.ts`：追加进展值；`view.ts`：TranscriptViewSource；`presets.ts`：可选相邻配对算法                                                      |
+| `packages/memory`           | `memory.ts/memories.ts`：单项与集合；`change.ts/apply.ts`：变更和固定批次；`persistence.ts`：状态与提交；`resource.ts`：`MemoryResource/CapturedMemories`；来源核验留在包内 `source.ts`；`view.ts`：MemoryViewSource                                                                                                                                  |
+| `packages/view`             | `view.ts`：通用成员状态与一致读取；`source.ts/types.ts`：来源与数据契约；`access.ts`：按资源窗口打开端点                                                                                                                                                                                                                                              |
+| `packages/measurement`      | `usage.ts`：按对象计数；`resource.ts`：受窗口控制的记录端点                                                                                                                                                                                                                                                                                           |
+| `packages/records`          | `record.ts/book.ts/recorder.ts`：记录载体与登记；`tree/`：直接归属与树查询；`restoration/`：只读历史恢复；`resource.ts`：普通快照 read/write；`construction.ts`：宿主记录构造；`memory/observe.ts`：结构兼容的记忆投影辅助                                                                                                                            |
+| `packages/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步；`view/active.ts`：ActiveView 来源同步与正式操作；`view/state.ts`：状态契约与校验；`view/default-policy.ts`：默认纳入预设；`view/resource.ts`：read/manage Offer |
+| `packages/changes`          | `capture.ts/buffer.ts`：必要捕获与批次转交；`publish.ts/consumer.ts`：发布端口；`error.ts`：捕获错误及故障合并；`progress.ts`：被动进度通知                                                                                                                                                                                                           |
 
 实体包通过显式根出口提供实体、访问和持久契约；消息包另以 `@weiliang0121/capix-transcript/presets` 提供可选算法。内部校验、消息事件构造、单项记忆写入不因文件独立就成为公开 API。内容状态和持久端口归对应实体包；它们不会仅因可序列化就全部搬入跨端协议。
 
@@ -166,4 +166,4 @@ MessageUsage 当前生产路径通过服务的 `ConversationMaterialUsageResourc
 
 observer-content 的 ChangeConsumer 仍消费 ObserverChange 并维护在途调用事件，用于宿主观测交付；这超出纯内容持有，后续应单独整理归属，不借此次命名变化建立新的通用事件平台。
 
-具体行为与回归依据仍见 [原文与分段](transcript.md)、[记忆](memory.md)、[活跃材料](active-content.md)、[持久化](persistence.md)、[服务装配](service-assembly.md) 和 [观测增量](observation-increments.md)。
+具体行为与回归依据仍见 [原文与分段](transcript.md)、[记忆](memory.md)、[活跃材料](active-content.md)、[持久化](../../capix-lab/docs/persistence.md)、[服务装配](../../capix-lab/docs/service-assembly.md) 和 [观测增量](observation-increments.md)。

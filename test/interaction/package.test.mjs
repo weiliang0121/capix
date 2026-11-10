@@ -8,10 +8,10 @@ import { test } from 'node:test';
 import ts from 'typescript';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const interactionDirectory = resolve(root, 'server/interaction');
+const interactionDirectory = resolve(root, 'packages/interaction');
 const dependencies = ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-diagnostics', 'es-toolkit'];
 const excludedPackages = ['@weiliang0121/capix-runtime', '@weiliang0121/capix-invocation', '@weiliang0121/capix-structure', '@weiliang0121/capix-resources'];
-const excludedDirectories = ['server/runtime', 'server/invocation', 'server/structure', 'server/resources'];
+const excludedDirectories = ['packages/runtime', 'packages/invocation', 'packages/structure', 'packages/resources'];
 
 test('interaction package exposes external exchanges with only lower dependencies', async () => {
   const manifest = JSON.parse(await readFile(resolve(interactionDirectory, 'package.json'), 'utf8'));

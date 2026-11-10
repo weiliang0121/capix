@@ -55,7 +55,7 @@ Runner 在构造／build 时固定 Scene、Resources、可选 Interactions 和�
 
 **“被动消费”只描述接收器的权限，不自动包含创建接收器的整个装配过程。** 当前这两层失败混在同一组 hooks 中，是下一轮值得收敛的地方。
 
-依据：[hooks](../server/runtime/src/binding/hooks.ts)、[调用构造](../server/runtime/src/construction/invocation.ts)、[Runner](../server/runtime/src/runner.ts)。
+依据：[hooks](../packages/runtime/src/binding/hooks.ts)、[调用构造](../packages/runtime/src/construction/invocation.ts)、[Runner](../packages/runtime/src/runner.ts)。
 
 ### 2.2 业务处理与最终结果
 
@@ -64,7 +64,7 @@ Runner 在构造／build 时固定 Scene、Resources、可选 Interactions 和�
 - `work.output.emit` 使用当前调用窗口；资源或子调用的 delta 只有经过明确转发才成为父层输出。不能自动汇总整棵树的增量，否则内容来源与整体结果语义会混淆。
 - `runner.cancel` 请求当前运行合作停止，不提前释放仍在运行的代码，不撤销已落实效果，不取消独立 Interaction。下一次运行有新的取消归属。
 
-依据：[输出段](../server/invocation/src/output/section.ts)、[操作失败](exceptions.md)、[Runner 取消](../server/runtime/src/runner/cancellation.ts)。
+依据：[输出段](../packages/invocation/src/output/section.ts)、[操作失败](exceptions.md)、[Runner 取消](../packages/runtime/src/runner/cancellation.ts)。
 
 ## 3. 消费侧：相似的 subscribe / observe 不意味着相同契约
 
@@ -83,7 +83,7 @@ Runner 在构造／build 时固定 Scene、Resources、可选 Interactions 和�
 
 `ObservationInstallation` 是 build 时安装的能力：它可以检查声明、提供观察所需资源、建立局部观察者并选择失败策略。`runner.observation.subscribe` 不获得这些权限。Runtime 的单次反馈接线只携带接收器，不能替换已安装 Store、严格观察或资源供给。**安装能力和消费出口并存，各自命名。**
 
-依据：[输出契约](../contracts/src/output.ts)、[根订阅](../server/runtime/src/runner/output.ts)、[进度](../server/invocation/src/invocation/progress.ts)、[调用事实](../server/invocation/src/observation/facts.ts)、[观测安装](../server/runtime/src/binding/observation.ts)、[CP 事实](../server/invocation/src/checkpoint/contract.ts)。
+依据：[输出契约](../packages/contracts/src/output.ts)、[根订阅](../packages/runtime/src/runner/output.ts)、[进度](../packages/invocation/src/invocation/progress.ts)、[调用事实](../packages/invocation/src/observation/facts.ts)、[观测安装](../packages/runtime/src/binding/observation.ts)、[CP 事实](../packages/invocation/src/checkpoint/contract.ts)。
 
 ## 4. 独立实体：Runner 不接管所有保存与通知
 
@@ -98,7 +98,7 @@ Runner 在构造／build 时固定 Scene、Resources、可选 Interactions 和�
 
 `ChangeCapture` 是必要同步捕获契约，可能只是写缓冲，不等同于持久化。捕获、可选观察与底层持久成功必须分别命名。已完成实体提交后通知失败，可以让当前调用失败，但不能据此猜测实体未写入并重做。
 
-依据：[变化发布](../server/changes/src/publish.ts)、[内容实体](content-entities-packages.md)、[View](view-package.md)、[交互](interactions.md)、[CP](checkpoints.md)、[Recorder](../server/records/src/recorder.ts)。
+依据：[变化发布](../packages/changes/src/publish.ts)、[内容实体](content-entities-packages.md)、[View](view-package.md)、[交互](interactions.md)、[CP](checkpoints.md)、[Recorder](../packages/records/src/recorder.ts)。
 
 ## 5. 时序验证：相同的“完成”指向不同事实
 
@@ -148,7 +148,7 @@ sequenceDiagram
 
 这不是三种名称相似的被动订阅。这里混有可配置严格的机制观察，且最后一个点有明确的提交后保护。当前普通订阅与 CP feedback 均独立隔离；是否继续保留所有严格观察位置，需要单独讨论，不能借出口接线改变。
 
-依据：[调用交付](../server/invocation/src/invocation/invocation.ts)、[入口释放](../server/runtime/src/entry.ts)、[CP 保存与最终提交](../server/invocation/src/checkpoint/invocation.ts)。
+依据：[调用交付](../packages/invocation/src/invocation/invocation.ts)、[入口释放](../packages/runtime/src/entry.ts)、[CP 保存与最终提交](../packages/invocation/src/checkpoint/invocation.ts)。
 
 ## 6. 身份、顺序与数据寿命
 
@@ -170,7 +170,7 @@ Runner 只读观测出口在同步投影后交付，遵守以下边界：
 - 恢复观测沿用 CP 的活动身份与 installed 基线；不能伪造普通调用重新 started。
 - 选择保存／跨端消费时，再形成明确的纯值协议与容量规则；不能直接序列化原始观察对象。
 
-已有 [Observer CP 投影](../services/observer/src/observation/checkpoints.ts) 可作为实例参考：它保存有界元数据和诊断，不把整个 Frame 暴露给客户端。这不是要求 Runtime 复刻 Observer 的业务投影。
+已有 [Observer CP 投影](../../capix-lab/services/observer/src/observation/checkpoints.ts) 可作为实例参考：它保存有界元数据和诊断，不把整个 Frame 暴露给客户端。这不是要求 Runtime 复刻 Observer 的业务投影。
 
 ## 7. 已确定的心智：Runner 兑现场景的运行契约
 
@@ -225,9 +225,9 @@ Runner 复用现有 Progress 对普通调用事实的轻量投影，没有重建
 
 ### 本轮实施落点
 
-1. **Runner 入口与输出。** [Runner](../server/runtime/src/runner.ts) 为每次 run/resume 固定反馈关联，[输出订阅](../server/runtime/src/runner/output.ts) 在交付时添加 entryId；必要收尾之后发布真实 settled。
-2. **只读观测与按次接线。** [事件契约](../server/runtime/src/runner/observation-contract.ts)、[同步投影](../server/runtime/src/runner/observation-projection.ts) 和[单次反馈](../server/runtime/src/runner/feedback.ts) 分开；[构造反馈](../server/runtime/src/construction/feedback.ts) 只连接接收器，不提供替换 Store 或必要机制的入口。
-3. **CP 独立反馈。** [CP 发布](../server/invocation/src/checkpoint/invocation.ts) 同一事实分别交付被动 feedback 与原 observation；[恢复转发](../server/invocation/src/checkpoint/observation.ts) 不再因严格观察故障连带关闭被动事实。恢复建立前的失败也经独立反馈交付。
+1. **Runner 入口与输出。** [Runner](../packages/runtime/src/runner.ts) 为每次 run/resume 固定反馈关联，[输出订阅](../packages/runtime/src/runner/output.ts) 在交付时添加 entryId；必要收尾之后发布真实 settled。
+2. **只读观测与按次接线。** [事件契约](../packages/runtime/src/runner/observation-contract.ts)、[同步投影](../packages/runtime/src/runner/observation-projection.ts) 和[单次反馈](../packages/runtime/src/runner/feedback.ts) 分开；[构造反馈](../packages/runtime/src/construction/feedback.ts) 只连接接收器，不提供替换 Store 或必要机制的入口。
+3. **CP 独立反馈。** [CP 发布](../packages/invocation/src/checkpoint/invocation.ts) 同一事实分别交付被动 feedback 与原 observation；[恢复转发](../packages/invocation/src/checkpoint/observation.ts) 不再因严格观察故障连带关闭被动事实。恢复建立前的失败也经独立反馈交付。
 
 普通根输出订阅已不需要 output hook；必要登记与校验保持独立。对照服务可直接消费 Runner 出口，原 Observer 的特定 Group 接线只有在整体输出和登记职责真正迁移后才能删除。本轮没有据此删改旧服务的必要登记。
 
@@ -324,7 +324,7 @@ subscribe / unsubscribe 只改变末端消费者
 
 原始 `feedback` 不承诺纯数据：其中可能有 Frame、借用 IO、错误或资源 describe。Runner 在同步边界将其投影成固定元数据，不保留这些原对象。这里实现的是已有 CP 事实的独立交付接缝，Runner 不代理 Store，不建立第二套恢复过程。普通安装的可选严格策略继续由机制安装承担；新订阅只消费。
 
-依据：[普通／恢复安装分界](../server/runtime/src/construction/invocation.ts)、[CP 观察会话](../server/invocation/src/checkpoint/invocation.ts)、[恢复建立](../server/invocation/src/checkpoint/restoration.ts)。
+依据：[普通／恢复安装分界](../packages/runtime/src/construction/invocation.ts)、[CP 观察会话](../packages/invocation/src/checkpoint/invocation.ts)、[恢复建立](../packages/invocation/src/checkpoint/restoration.ts)。
 
 ### 9.4 无人订阅、迟到订阅与取消
 
