@@ -3,14 +3,14 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { command, files, json, packages, root } from '../release/packages.mjs';
+import { command, files, isDistributionFile, json, packages, root } from '../release/packages.mjs';
 
 const privateDirectories = ['packages/client-http', 'packages/client-runtime', 'packages/observer-content'];
 const output = join(root, '.capix/integration');
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
 async function sourceSnapshot(entries) {
-  const paths = ['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'tsconfig.base.json', 'scripts/integration/pack.mjs', 'scripts/release/packages.mjs'];
+  const paths = ['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'tsconfig.base.json', 'scripts/release/packages.mjs'];
   async function visit(directory) {
     for (const entry of (await readdir(join(root, directory), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
       if (['node_modules', 'dist', '.test-dist', '.DS_Store'].includes(entry.name) || entry.name.endsWith('.tsbuildinfo')) continue;
@@ -21,6 +21,8 @@ async function sourceSnapshot(entries) {
     }
   }
   for (const entry of entries) await visit(entry.directory);
+  await visit('scripts/integration');
+  await visit('scripts/release/fixtures');
   const sources = await Promise.all(paths.sort().map(async (path) => ({ path, sha256: sha256(await readFile(join(root, path))) })));
   return { sha256: sha256(JSON.stringify(sources)), files: sources };
 }
@@ -66,7 +68,7 @@ export async function pack() {
       for (const path of await files(directory)) {
         const name = relative(directory, path).split('\\').join('/');
         present.add(name);
-        assert.ok(['package.json', 'LICENSE', 'README.md'].includes(name) || /^dist\/.+\.(?:js|d\.ts)$/.test(name), `${file}: unexpected file ${name}`);
+        assert.ok(isDistributionFile(name), `${file}: unexpected file ${name}`);
       }
       for (const target of Object.values(packed.exports)) {
         for (const kind of ['import', 'types']) assert.ok(present.has(target[kind]?.replace(/^\.\//, '')), `${file}: missing ${kind} export`);

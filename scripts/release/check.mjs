@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { build } from './build.mjs';
-import { banner, command, files, json, registry, releaseDirectory, root } from './packages.mjs';
+import { banner, command, files, isDistributionFile, json, registry, releaseDirectory, root } from './packages.mjs';
 
 export async function check() {
   const entries = await build();
@@ -38,7 +38,7 @@ export async function check() {
       for (const file of await files(directory)) {
         const path = relative(directory, file).split('\\').join('/');
         present.add(path);
-        assert.ok(['package.json', 'LICENSE', 'README.md'].includes(path) || /^dist\/.+\.(?:js|d\.ts)$/.test(path), `${packed.name}: unexpected published file ${path}`);
+        assert.ok(isDistributionFile(path), `${packed.name}: unexpected published file ${path}`);
         if (path.endsWith('.js')) {
           const code = await readFile(file, 'utf8');
           assert.ok(code.startsWith(banner), `${packed.name}: JS was not prepared for release: ${path}`);

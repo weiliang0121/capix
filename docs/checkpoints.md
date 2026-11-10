@@ -208,7 +208,7 @@ Observer 默认绑定 `CheckpointObservation` 元数据载体：按真实祖先�
 
 ## 验证与剩余范围
 
-新增 [checkpoint/feedback](../test/checkpoint/feedback.test.mjs) 定向覆盖事实对象／活动／序号一致、被动消费抛错与异步错误隔离、严格 captured/saved/finishing/finished 的提交边界、恢复 activity/resource 故障后的真实收尾，以及 Invocation 建立前失败的独立交付。[runner-observation](../test/runner-observation.test.mjs) 覆盖入口关联、恢复活动区分、订阅隔离和实际入口结局。这里列出实施覆盖范围，不据此声称本轮全仓验证完成。
+新增 [checkpoint/feedback](../packages/invocation/test/checkpoint/feedback.test.mjs) 定向覆盖事实对象／活动／序号一致、被动消费抛错与异步错误隔离、严格 captured/saved/finishing/finished 的提交边界、恢复 activity/resource 故障后的真实收尾，以及 Invocation 建立前失败的独立交付。[runner-observation](../packages/runtime/test/runner-observation.test.mjs) 覆盖入口关联、恢复活动区分、订阅隔离和实际入口结局。这里列出实施覆盖范围，不据此声称本轮全仓验证完成。
 
 `test/checkpoint/coverage.test.mjs` 使用真实 ObserverConversations、SQLite、WorkspaceFiles 与声明链，只有 Provider 为 mock。子进程在材料准备、理解、决策、预检、读取、模型反馈、消息追加、文件创建、记忆提交与父层接纳等位置退出，新进程从宿主恢复。断言模型次数、输入/回答数量、文件凭据、记忆身份与顺序，以及恢复活动归属；澄清和第二次生成另有覆盖。`fixedEffects`、`fixedAppend`、内核历史关系与宿主内容检查测试覆盖事务失败、重复消费、未知窗口及数据冲突。
 

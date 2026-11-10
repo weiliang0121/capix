@@ -19,7 +19,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node ../../scripts/test/run.mjs --package ."
   },
   "dependencies": {
     "@weiliang0121/capix-protocol": "workspace:*",
@@ -56,5 +57,13 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org"
+  },
+  "devDependencies": {
+    "@weiliang0121/capix-transcript": "workspace:*",
+    "@weiliang0121/capix-memory": "workspace:*",
+    "@capix/observer-content": "workspace:*",
+    "@weiliang0121/capix-measurement": "workspace:*",
+    "@weiliang0121/capix-view": "workspace:*",
+    "@weiliang0121/capix-model-provider": "workspace:*"
   }
 }

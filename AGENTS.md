@@ -5,6 +5,7 @@
 ## 仓库边界与工作方式
 
 - CAPiX 是独立的 C/S 可观测 Agent 框架。仓库承载框架、可复用集成、预设、策略及 UI；可复用包统一位于 packages/。实验、Observer／Conversation 参考服务及应用已交接到独立的 capix-lab；未来产品另建仓库。参考业务策略不自动上升为内核规则。
+- **CAPiX 独立维护并验证自身契约，capix-lab 是实验与参考装配仓，不是框架测试仓。** 不将 Lab 检出、测试、夹具或候选验收设为 CAPiX 构建、合入与发布的前置条件。Lab 发现的框架违约应提炼为 CAPiX 自身可执行的回归；具体宿主实现与实验仍维护自己的验证。
 - **外部业务装配项目可以只读参考 CAPiX 的代码、文档和公开包，不能因业务任务自行修改 CAPiX 的源码、测试、配置、文档或 AGENTS.md。** 发现内核缺口时先在业务项目记录复现与建议，由用户在 CAPiX 的任务中明确决定并授权变更。业务装配任务的授权不包含回写框架。
 - 外部业务项目的凭证、环境路径、交付规则与工作约定留在各自仓库，不写入 CAPiX，不作为框架依赖。不读取其他项目凭证，不从外部配置或 Git 历史取得隐式运行环境。CAPiX 自身配置正常维护。
 - 相邻 capix-explorations 只在用户需要时只读参考；不复制旧工程的整套模块或治理配置，不作为运行依赖或当前设计约束。
@@ -15,7 +16,7 @@
 
 ## 包与依赖边界
 
-品牌保持 CAPiX，packages/ 中 17 个公开包统一使用 @weiliang0121 scope 和 capix- 前缀，名称与 0.1.0 首发不变；packages/client-runtime、client-http、observer-content 保持 @capix/* 私有身份。capix-lab 通过明确的 20 包 tarball 批次验证，不能读取相邻框架私有源码。发布契约见 [npm 发布](docs/npm-publishing.md)。
+品牌保持 CAPiX，packages/ 中 17 个公开包统一使用 @weiliang0121 scope 和 capix- 前缀，名称与 0.1.0 首发不变；packages/client-runtime、client-http、observer-content 保持 @capix/* 私有身份。capix-lab 可通过明确的 20 包 tarball 批次开展实验，不能读取相邻框架私有源码；候选分发不形成两仓测试依赖。发布契约见 [npm 发布](docs/npm-publishing.md)。
 
 一个根 pnpm Workspace 与锁文件。包按职责划分，跨包只使用公开出口，不导入其他包的 src/dist 私有路径；包独立不意味着新增实体生命周期。
 
@@ -85,6 +86,7 @@
 
 ## 编码与验证
 
+- 测试按被维护的契约跟随包；跨包组合归真实协调者，不能因使用多个包就放入全局。公共测试工具可放根目录，但不得隐式装配 Runtime 或反向引入上层包；包之间不导入彼此测试夹具。根部仅保留必要的 workspace／测试发现／分发检查。20 包测试位于 packages/*/test，公共工具位于 testing/support，仓库检查位于 testing/repository。单包 test 构建依赖后运行；全仓 check 只构建一次，空测试范围、缺产物或未声明依赖不能静默通过。归属与命令见 [包内测试与框架自证设计](docs/testing-organization-design.md)。
 - Node22.23.2、pnpm10.7.1、TypeScript6.0.3；外部依赖精确版本、内部workspace:*。Prettier printWidth1000，不为窄行宽拆散签名。
 - 每条变量声明一个变量。循环直接表达继续/结束条件，不用while(true)再内部break；流异常或提前结束也释放资源。
 - 类自身ID直接生成，不为ID造无意义别名；不为一次new建立空壳Builder，不为每次检查建立包装层。真实构造协调与对象不变量保留明确归属。

@@ -9,6 +9,16 @@ export const registry = 'https://registry.npmjs.org';
 export const releaseDirectory = join(root, '.capix', 'release');
 export const banner = '/*! MIT License | Copyright (c) 2026 wei.liang | See LICENSE */';
 
+/** The same production-only allowlist applies to public and private tarballs. */
+export function isDistributionFile(path) {
+  if (typeof path !== 'string' || path.includes('\\') || path.split('/').some((part) => !part || part === '.' || part === '..')) return false;
+  if (['package.json', 'LICENSE', 'README.md'].includes(path)) return true;
+  if (!/^dist\/.+\.(?:js|d\.ts)$/.test(path)) return false;
+  const parts = path.slice('dist/'.length).split('/');
+  if (parts.some((part) => /^(?:__tests__|tests?|fixtures?|benchmarks?)(?:\.(?:js|d\.ts))?$/.test(part))) return false;
+  return !/\.(?:test|spec)\.(?:js|d\.ts)$/.test(parts.at(-1));
+}
+
 export function command(file, args, options = {}) {
   return execFileSync(file, args, { cwd: root, stdio: 'inherit', ...options });
 }

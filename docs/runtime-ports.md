@@ -237,17 +237,17 @@ Runner 复用现有 Progress 对普通调用事实的轻量投影，没有重建
 
 首轮盘点未改实现；针对当前工作区运行了 9 个既有测试，全部通过：
 
-| 测试文件／选中用例                                                                                                        | 验证边界                                         |
-| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| [output/contract](../test/output/contract.test.mjs)：consumer failure、invalid delta、fallback violating final type，3 个 | 消费失败隔离；生产校验没有消费者也不能略过       |
-| [progress](../test/progress.test.mjs)：strict observation、commit progress、resource returned observation，3 个           | 进度或实体效果已经成立后，严格观察仍可使交付失败 |
-| [transcript/fixed](../test/transcript/fixed.test.mjs)：post-commit change failure，1 个                                   | 凭据可确认，不重复落实或发布                     |
-| [transcript/changes](../test/transcript/changes.test.mjs)：capture failure reports committed facts，1 个                  | 捕获失败与内容已提交同时成立                     |
-| [content-persistence](../test/content-persistence.test.mjs)：memory publication failure，1 个                             | 已提交整批记忆的通知故障不隐藏其他成员事实       |
+| 测试文件／选中用例                                                                                                                         | 验证边界                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| [output/contract](../packages/runtime/test/output/contract.test.mjs)：consumer failure、invalid delta、fallback violating final type，3 个 | 消费失败隔离；生产校验没有消费者也不能略过       |
+| [progress](../packages/runtime/test/progress.test.mjs)：strict observation、commit progress、resource returned observation，3 个           | 进度或实体效果已经成立后，严格观察仍可使交付失败 |
+| [transcript/fixed](../packages/transcript/test/fixed.test.mjs)：post-commit change failure，1 个                                           | 凭据可确认，不重复落实或发布                     |
+| [transcript/changes](../packages/transcript/test/changes.test.mjs)：capture failure reports committed facts，1 个                          | 捕获失败与内容已提交同时成立                     |
+| [memory/persistence](../packages/memory/test/persistence.test.mjs)：memory publication failure，1 个                                       | 已提交整批记忆的通知故障不隐藏其他成员事实       |
 
-首轮另用不落文件的 Runner / MemoryCheckpointStore 探针验证 4 个场景：strict saved、strict finishing、strict finished、isolate saved，均符合第 5.2 节。当时尚未成为持久回归；本轮新增的 [CP feedback 测试](../test/checkpoint/feedback.test.mjs) 已覆盖独立消费与严格提交边界。
+首轮另用不落文件的 Runner / MemoryCheckpointStore 探针验证 4 个场景：strict saved、strict finishing、strict finished、isolate saved，均符合第 5.2 节。当时尚未成为持久回归；本轮新增的 [CP feedback 测试](../packages/invocation/test/checkpoint/feedback.test.mjs) 已覆盖独立消费与严格提交边界。
 
-已有 [Runner 端口测试](../test/runner-ports.test.mjs) 覆盖订阅重入、取消归属与恢复等前轮改动。新增 [Runner 观测测试](../test/runner-observation.test.mjs) 覆盖入口身份、输出完成后的严格 released 失败、恢复关联、迟到订阅与消费者隔离。2026-10-28 实施后执行 `pnpm check`，构建、类型检查、2060 项测试及格式检查全部通过；本地 conversation 与 runner-output 示例也执行通过，未调用真实模型。
+已有 [Runner 端口测试](../packages/runtime/test/runner-ports.test.mjs) 覆盖订阅重入、取消归属与恢复等前轮改动。新增 [Runner 观测测试](../packages/runtime/test/runner-observation.test.mjs) 覆盖入口身份、输出完成后的严格 released 失败、恢复关联、迟到订阅与消费者隔离。2026-10-28 实施后执行 `pnpm check`，构建、类型检查、2060 项测试及格式检查全部通过；本地 conversation 与 runner-output 示例也执行通过，未调用真实模型。
 
 普通订阅保持被动隔离，现有严格机制安装保留原语义。本轮补足出口关联与接线，未更换 output 名称。
 

@@ -158,11 +158,11 @@ interface InvocationWork<I, O, Context> {
 
 ## 验证入口
 
-- [调用退出专项](../test/invocation-exit-contract.test.mjs)：普通／恢复接纳期间的资源可用性、输出封口、正文失败后的真实效果、取消等待及低层子调用等待。
-- [退出故障矩阵](../test/invocation-exit-failures.test.mjs)：普通／恢复双失败、子来源、非法 close、关闭故障不可降级、CP／观察失败与本地占用释放。
-- [资源退出专项](../test/invocation-resource-exit.test.mjs)：多窗口耗尽、单错误身份、构造／暴露和关闭双失败、同步及不可重开。
-- [资源访问](../test/resource-access.test.mjs)：关闭后晚到结果不可接纳、异步接收过程中端点失效。
+- [调用退出专项](../packages/runtime/test/invocation-exit-contract.test.mjs)：普通／恢复接纳期间的资源可用性、输出封口、正文失败后的真实效果、取消等待及低层子调用等待。
+- [调用退出故障](../packages/invocation/test/invocation-exit-failures.test.mjs)与[装配退出故障](../packages/runtime/test/invocation-exit-failures.test.mjs)：普通／恢复双失败、子来源、非法 close、关闭故障不可降级、CP／观察失败与本地占用释放。
+- [调用资源退出](../packages/invocation/test/invocation-resource-exit.test.mjs)与[资源活动退出](../packages/resources/test/invocation-resource-exit.test.mjs)：多窗口耗尽、单错误身份、构造／暴露和关闭双失败、同步及不可重开。
+- [资源访问](../packages/resources/test/resource-access.test.mjs)：关闭后晚到结果不可接纳、异步接收过程中端点失效。
 - [交互消费](../../capix-lab/test/conversation-interaction.test.mjs)、[过程反馈](../../capix-lab/test/conversation-interaction-progress.test.mjs)：局部取消／窗口关闭不终止独立发送，后续调用仍可读取同一反馈。
-- [入口回归](../test/runtime-entry.test.mjs)、[Work 适配](../test/runtime-work-adapter.test.mjs)：宿主释放、严格观察故障、原始返回与接纳事实。
+- [入口回归](../packages/runtime/test/runtime-entry.test.mjs)、[Work 适配](../packages/runtime/test/runtime-work-adapter.test.mjs)：宿主释放、严格观察故障、原始返回与接纳事实。
 
 这些验证不证明任意宿主清理函数都会及时返回，也不承诺强制终止任意 Promise、跨实体回滚或完整进程恢复。

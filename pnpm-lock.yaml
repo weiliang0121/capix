@@ -8,24 +8,12 @@ importers:
 
   .:
     devDependencies:
-      '@capix/client-http':
-        specifier: workspace:*
-        version: link:packages/client-http
-      '@capix/client-runtime':
-        specifier: workspace:*
-        version: link:packages/client-runtime
-      '@capix/observer-content':
-        specifier: workspace:*
-        version: link:packages/observer-content
       '@changesets/cli':
         specifier: 3.0.3
         version: 3.0.3
       '@types/node':
         specifier: 22.19.11
         version: 22.19.11
-      '@weiliang0121/capix-changes':
-        specifier: workspace:*
-        version: link:packages/changes
       '@weiliang0121/capix-checkpoint':
         specifier: workspace:*
         version: link:packages/checkpoint
@@ -35,27 +23,12 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:packages/diagnostics
-      '@weiliang0121/capix-interaction':
-        specifier: workspace:*
-        version: link:packages/interaction
       '@weiliang0121/capix-invocation':
         specifier: workspace:*
         version: link:packages/invocation
-      '@weiliang0121/capix-measurement':
-        specifier: workspace:*
-        version: link:packages/measurement
       '@weiliang0121/capix-memory':
         specifier: workspace:*
         version: link:packages/memory
-      '@weiliang0121/capix-model-exchanges':
-        specifier: workspace:*
-        version: link:packages/model-exchanges
-      '@weiliang0121/capix-model-provider':
-        specifier: workspace:*
-        version: link:packages/model-provider
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:packages/protocol
       '@weiliang0121/capix-records':
         specifier: workspace:*
         version: link:packages/records
@@ -157,6 +130,10 @@ importers:
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
+    devDependencies:
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
 
   packages/invocation:
     dependencies:
@@ -300,6 +277,10 @@ importers:
       '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../protocol
+    devDependencies:
+      '@weiliang0121/capix-changes':
+        specifier: workspace:*
+        version: link:../changes
 
   packages/runtime:
     dependencies:
@@ -336,6 +317,25 @@ importers:
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
+    devDependencies:
+      '@capix/observer-content':
+        specifier: workspace:*
+        version: link:../observer-content
+      '@weiliang0121/capix-measurement':
+        specifier: workspace:*
+        version: link:../measurement
+      '@weiliang0121/capix-memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@weiliang0121/capix-model-provider':
+        specifier: workspace:*
+        version: link:../model-provider
+      '@weiliang0121/capix-transcript':
+        specifier: workspace:*
+        version: link:../transcript
+      '@weiliang0121/capix-view':
+        specifier: workspace:*
+        version: link:../view
 
   packages/structure:
     dependencies:

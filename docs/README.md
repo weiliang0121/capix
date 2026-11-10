@@ -32,6 +32,7 @@ CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer �
 - [包命名与开源准备](open-source-preparation.md)：统一 `packages/` 的长期布局、保留真实客户端职责、已发布包身份，以及公共入口、贡献说明与公开历史的逐步准备。已落实公开入口与包目录；未改变仓库可见性。
 
 - [拆库实施记录](repository-split-implementation.md)：实际两仓边界、完整产物交接、回归与待办。
+- [包内测试与框架自证设计](testing-organization-design.md)：测试随包、全局公共基础与有限仓库检查；CAPiX 独立验收，Lab 仅承担实验与参考装配。已迁移包内测试与命令；[实施与清单](testing-migration.md)。
 - [本地内容审阅](open-source-content-audit.md)：Git 历史／当前树的审阅范围和未确认的公开事项。
 
 ## 实验与实施记录

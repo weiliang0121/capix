@@ -19,9 +19,30 @@ pnpm check
 
 ```sh
 pnpm release:check
+pnpm integration:check
 ```
 
-该命令重建并检查 tarball，在临时仓库外消费者中验证安装和公开出口，可能访问 npm registry；不会发布 npm。完整参考宿主的离线集成验证由 capix-lab 承接，跨仓改动需交代验证版本与同批候选产物，不能用源码软链代替分发物验收。
+按顺序运行：`release:check` 验证 17 个公开包的压缩发布物，`integration:check` 验证全部 20 个包的候选分发。两者都重建 tarball、在临时仓库外消费者中验证安装和公开出口，可能访问 npm registry，不会发布 npm；不要与读取 dist 的测试并行。CAPiX 的正式验收由本仓完成，不要求检出或运行 capix-lab。Lab 可以消费明确版本或同批候选开展独立实验，实验结果不代替框架回归，也不构成所有贡献者必须完成的隐藏门槛。
+
+## 测试归属
+
+测试跟随维护其契约的包，类型用例和必要夹具一起维护。跨包调用和资源／CP 装配属于实际协调者的测试，不因涉及多个包就归全局。公共基础只提供异步控制、临时目录、子进程和类型编译等工具，不借公共 fixture 引入上层业务依赖，也不导入另一个包的 test 目录。
+
+测试位于 `packages/<包>/test/`，类型探针与 worker 跟随包；`testing/support` 仅放无框架装配的工具，`testing/repository` 检查 workspace、依赖边界、发现规则及分发脚本。具体归属见[包内测试设计](docs/testing-organization-design.md)和[迁移清单](docs/testing-migration.md)。保留类型负例、故障反例、跨进程验证及计算范围断言，不用增加 skip 或减少承诺清理测试。
+
+```sh
+# 单包：先构建该包及依赖，再运行其运行、类型和进程用例。
+pnpm --filter @weiliang0121/capix-resources --fail-if-no-match test
+# 全仓：只构建一次。
+pnpm test
+# 已构建后的两类入口，不重复构建。
+pnpm test:packages
+pnpm test:repository
+```
+
+新增包必须有可发现的测试和 test 脚本；空目录、缺少产物或未知包都报错。测试用到的框架依赖在本包明确声明，不能靠根 node_modules 偶然解析。各包可共同使用根目录固定的 Node/TypeScript 工具。`--list` 可列出执行范围，例如 `node scripts/test/run.mjs --packages --list`。
+
+Lab 或外部装配发现框架问题时，先保留复现；在 CAPiX 任务中将框架缺陷提炼为本仓独立回归并修复。实验、适配器和业务选择有自己的验证范围，不能据此自动修改框架契约。外部贡献者只需本仓代码和依赖即可完成框架正式验收。
 
 ## 实现与评审
 
