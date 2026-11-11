@@ -1,4 +1,7 @@
-import { ResourceBindings } from '../fixtures/resources.mjs';
+import { ResourceBindings, bindResources } from '../fixtures/resources.mjs';
+
+import { TranscriptResource } from '@weiliang0121/capix-transcript';
+import { MemoryResource } from '@weiliang0121/capix-memory';
 
 import { createEnvironment } from '../fixtures/environment.mjs';
 
@@ -24,8 +27,12 @@ test('live nested calls and content sources use their bound records without Cont
   let outer;
   let nested;
   let leaf;
+  const append = { append: TranscriptResource.append.request() };
+  const apply = { apply: MemoryResource.apply.request() };
   const root = runtime.executionInvocationBuilder.create('root', {
     context: { settings: {} },
+    deps: append,
+    resources: bindResources(append, [TranscriptResource.append.provide(() => transcript)])(undefined),
     work: {
       maxRounds: 1,
       async execute(context, invocation) {
@@ -45,11 +52,13 @@ test('live nested calls and content sources use their bound records without Cont
                     leaf = runtime.attemptInvocationBuilder.create(invocation, {
                       input: 'leaf',
                       description: attempt,
+                      deps: apply,
+                      resources: bindResources(apply, [MemoryResource.apply.provide(() => memories)])(undefined),
                       work: {
                         maxRounds: 1,
                         execute(context, invocation) {
                           assert.equal(invocation.context, context);
-                          memories.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }], { origin: invocation.origin, observation: invocation.observation.memory });
+                          context.resources.values.apply.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }]);
                           return 'done';
                         },
                         accept(context, output, invocation) {
@@ -68,7 +77,7 @@ test('live nested calls and content sources use their bound records without Cont
           },
         });
         const output = await outer.run();
-        transcript.appendFrom([{ role: 'assistant', content: output }], { origin: invocation.origin, observation: invocation.observation.transcript });
+        context.resources.values.append.append([{ role: 'assistant', content: output }]);
         return output;
       },
     },

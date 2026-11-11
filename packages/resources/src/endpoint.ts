@@ -1,5 +1,4 @@
 import { ResourcePortError } from './errors.js';
-import type { ResourceEventConsumer } from './facts.js';
 import type { ResourceActivity, ResourceOperationDescription } from './activity.js';
 import type { ResourceOperation } from './methods.js';
 import type { OperationOptions, OperationResult } from '@weiliang0121/capix-contracts';
@@ -40,12 +39,6 @@ export class ResourceEndpointActivity {
       this.rejectPort(error, 'Resource reception provenance failed');
     }
   }
-  get transcriptObservation() {
-    return this.contentConsumer(this.activity.owner?.transcript);
-  }
-  get memoryObservation() {
-    return this.contentConsumer(this.activity.owner?.memory);
-  }
   bound(): void {
     this.activity.publish(this.source, 'bound', () => null);
   }
@@ -58,24 +51,11 @@ export class ResourceEndpointActivity {
   operate<Output, Delta = never, const Options extends OperationOptions<Output, unknown, unknown, Delta> = {}>(action: string, detail: ResourceOperationDescription<Output>, execute: (operation: ResourceOperation<Delta>) => Output | PromiseLike<Output>, options?: Options): Promise<OperationResult<Output, Options>> {
     return this.activity.operate(this.source, action, detail, execute, options);
   }
-  runSync<Output>(action: string, detail: ResourceOperationDescription<Output>, execute: () => Output): Output {
+  runSync<Output>(action: string, detail: ResourceOperationDescription<NoInfer<Output>>, execute: (operation: ResourceOperation) => Output): Output {
     return this.activity.runSync(this.source, action, detail, execute);
   }
   runAsync<Output>(action: string, detail: ResourceOperationDescription<Output>, execute: () => Promise<Output>): Promise<Output> {
     return this.activity.operate(this.source, action, detail, execute);
-  }
-  private contentConsumer<Event>(consumer?: ResourceEventConsumer<Event>): ResourceEventConsumer<Event> | undefined {
-    if (!consumer) return undefined;
-    return Object.freeze({
-      publish: (event: Event) => {
-        try {
-          const error = consumer.publish(event);
-          if (error !== undefined) throw error;
-        } catch (error) {
-          this.rejectPort(error, 'Required content publication failed');
-        }
-      },
-    });
   }
   private rejectPort(error: unknown, message: string): never {
     this.activity.rejectPort(error, message);

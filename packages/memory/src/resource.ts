@@ -1,3 +1,4 @@
+import { MemoryFacts } from './event.js';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { Memories } from './memories.js';
@@ -43,22 +44,22 @@ export const MemoryResource = Object.freeze({
     expose: (memories: Memories, activity) =>
       Object.freeze({
         apply(changes: readonly MemoryChange[], expected?: MemoryBasis): MemoryApplication {
-          return activity.runSync('apply', { input: () => ({ count: changes.length }), output: (result) => ({ memoriesId: result.memoriesId, startSequence: result.startSequence, endSequence: result.sequence, memoryIds: result.items.map((memory) => memory.id) }) }, () => {
+          return activity.runSync('apply', { input: () => ({ count: changes.length }), output: (result) => ({ memoriesId: result.memoriesId, startSequence: result.startSequence, endSequence: result.sequence, memoryIds: result.items.map((memory) => memory.id) }) }, (operation) => {
             if (expected !== undefined) checkBasis(memories, expected, memories.sequence);
             const startSequence = memories.sequence;
-            const applied = memories.apply(changes, { origin: activity.origin, observation: activity.memoryObservation });
+            const applied = memories.apply(changes, { origin: operation.origin, observation: operation.facts(MemoryFacts) });
             return Object.freeze({ memoriesId: memories.id, transcriptId: memories.transcript.id, startSequence, sequence: memories.sequence, items: Object.freeze(applied.map((memory) => Object.freeze(memory.toJSON()))) });
           });
         },
         applyFixed(input: { readonly position: string; readonly changes: readonly MemoryChange[] }, expected?: MemoryBasis) {
-          return activity.runSync('applyFixed', { input: () => ({ position: input.position, count: input.changes.length }), output: (receipt) => receipt }, () => {
+          return activity.runSync('applyFixed', { input: () => ({ position: input.position, count: input.changes.length }), output: (receipt) => receipt }, (operation) => {
             if (!activity.origin) throw new Error('Fixed memory application requires a calling identity');
             const request: MemoryFixedApply = { contract: { key: 'memories.apply', version: 1 }, operation: { contextId: activity.origin.contextId, position: input.position }, memoriesId: memories.id, changes: input.changes };
             // A confirmed effect belongs to its original basis, even after later writes.
             // Only an absent receipt permits a new write against the current version.
             const confirmed = memories.confirmFixed(request);
             if (expected !== undefined) checkBasis(memories, expected, confirmed?.startSequence ?? memories.sequence);
-            return confirmed ?? memories.applyFixed(request, { origin: activity.origin, observation: activity.memoryObservation });
+            return confirmed ?? memories.applyFixed(request, { origin: operation.origin, observation: operation.facts(MemoryFacts) });
           });
         },
       }),

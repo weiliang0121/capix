@@ -33,7 +33,7 @@ export type InvocationFact = InvocationChange & {
   readonly monotonicTime: number;
 };
 
-export type { ResourceObservation } from '@weiliang0121/capix-resources';
+export type { ResourceObservation, ResourceFact } from '@weiliang0121/capix-resources';
 
 export type { BusinessEvent } from '@weiliang0121/capix-contracts';
 

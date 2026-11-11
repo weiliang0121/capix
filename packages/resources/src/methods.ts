@@ -1,9 +1,14 @@
-import type { OperationOptions, OperationResult } from '@weiliang0121/capix-contracts';
+import type { FactType } from '@weiliang0121/capix-changes';
+import type { ResourceEventConsumer } from './facts.js';
+import type { InvocationOrigin, OperationOptions, OperationResult } from '@weiliang0121/capix-contracts';
 import type { ResourceEndpointActivity } from './endpoint.js';
 
 /** A producer endpoint belonging to one resource operation, sealed when that operation returns. */
 export interface ResourceOperation<Delta = never> {
   readonly signal: AbortSignal | undefined;
+  readonly origin: InvocationOrigin | undefined;
+  /** The typed publisher belongs to this operation and closes before result reception. */
+  facts<Event>(type: FactType<Event>): ResourceEventConsumer<Event> | undefined;
   emit(delta: Delta): void;
   /** Synchronous cleanup when this operation finishes, its window closes, or its signal aborts. */
   onClose(cleanup: (reason: unknown) => void): () => void;

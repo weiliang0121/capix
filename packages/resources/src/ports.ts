@@ -1,5 +1,4 @@
-import type { TranscriptEvent, MemoryEvent } from '@weiliang0121/capix-protocol';
-import type { ResourceEventConsumer, ResourceObservation } from './facts.js';
+import type { ResourceEventConsumer, ResourceObservation, ResourceFact } from './facts.js';
 import { synchronous } from './internal/synchronous.js';
 
 /** A host classifies its own failures without exporting runtime error types. */
@@ -17,8 +16,7 @@ export interface ResourceOwner {
   readonly reception?: () => Readonly<{ parentContextId: string; childContextId: string }>;
   readonly nextSequence?: () => number;
   readonly observation?: ResourceEventConsumer<ResourceObservation>;
-  readonly transcript?: ResourceEventConsumer<TranscriptEvent>;
-  readonly memory?: ResourceEventConsumer<MemoryEvent>;
+  readonly facts?: ResourceEventConsumer<ResourceFact>;
   readonly validate: () => void;
   readonly error?: (error: unknown, allowException?: boolean) => void;
 }
@@ -55,8 +53,7 @@ export function captureResourceOwner(owner?: ResourceOwner): ResourceOwner | und
     reception: reception ? () => synchronous(reception(), 'Resource reception provenance') : undefined,
     nextSequence: nextSequence ? () => synchronous(nextSequence(), 'Resource observation sequence') : undefined,
     observation: captureConsumer(owner.observation),
-    transcript: captureConsumer(owner.transcript),
-    memory: captureConsumer(owner.memory),
+    facts: captureConsumer(owner.facts),
   });
 }
 

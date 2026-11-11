@@ -6,7 +6,7 @@ import type { CallableFeedback } from '../construction/feedback.js';
 import type { EntryChange } from '../entry.js';
 import { RunnerObservationSubscriptions } from './observation.js';
 import type { RunnerEntryFact } from './observation-contract.js';
-import { projectInvocation, projectResource, projectBusiness, projectCheckpoint, projectDiagnostic } from './observation-projection.js';
+import { projectInvocation, projectResource, projectFact, projectBusiness, projectCheckpoint, projectDiagnostic } from './observation-projection.js';
 
 type EntryUpdate = Exclude<EntryChange, { kind: 'established' }> | { kind: 'requested'; mode: 'run' | 'resume'; requestedContextId?: string } | { kind: 'attached'; identity: InvocationIdentity } | { kind: 'settled'; status: 'succeeded' | 'failed' | 'cancelled'; error?: unknown };
 
@@ -52,6 +52,11 @@ export class RunnerEntryFeedback {
       resource: {
         receive: (fact: Parameters<typeof projectResource>[0]): undefined => {
           if (this.subscriptions.active) this.subscriptions.publish({ runnerId: this.runnerId, entryId: this.id, source: 'resource', fact: projectResource(fact) });
+        },
+      },
+      fact: {
+        receive: (fact: Parameters<typeof projectFact>[0]): undefined => {
+          if (this.subscriptions.active) this.subscriptions.publish({ runnerId: this.runnerId, entryId: this.id, source: 'fact', fact: projectFact(fact) });
         },
       },
       business: {

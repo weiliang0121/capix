@@ -3,22 +3,24 @@ import type { InvocationObservationSetup, ObservationInstallation } from '../../
 import type { ObservationDeclarationScope } from '../../definition/observation.js';
 import { ObservationError, type InvocationObserver } from '@weiliang0121/capix-invocation';
 import type { EventConsumer } from '@weiliang0121/capix-changes';
-import type { Recorder, RecordingRootRecord } from '@weiliang0121/capix-records';
+import { memoryRecord, transcriptRecord, recordContentFact, type Recorder, type RecordingRootRecord, type RecordChangeSource } from '@weiliang0121/capix-records';
 import { RecordWriterResource, type RecordWriter } from '@weiliang0121/capix-records/construction';
-import { Resource, Resources, type ResourceBinding } from '@weiliang0121/capix-resources';
+import { Resource, Resources, type ResourceBinding, type ResourceFact } from '@weiliang0121/capix-resources';
 import { InvocationRecordAccess, invocationRecording, type InvocationRecordDescription } from './declaration.js';
 import type { CallableInput, CallableOutput } from '@weiliang0121/capix-contracts';
 import { assertStructureConfigurable } from '@weiliang0121/capix-structure/construction';
 import { InvocationRecording } from './invocation.js';
-import { memoryRecord, transcriptRecord } from './mapping.js';
 
 export interface RecordingOptions {
   readonly failure?: 'isolate' | 'propagate';
+  /** Synchronous typed interpretation; defaults to the existing content record adapters. */
+  readonly fact?: (fact: ResourceFact, source: RecordChangeSource, writer: RecordWriter) => void;
   readonly invalidate?: (error: unknown) => void;
 }
 
 /** One optional record installation. Shared output does not share per-call state. */
 export class RecordingInstallation implements ObservationInstallation {
+  readonly #fact: (fact: ResourceFact, source: RecordChangeSource, writer: RecordWriter) => void;
   readonly #descriptions = new WeakMap<object, InvocationRecordDescription>();
   readonly root: RecordingRootRecord;
   /** Fixed entity supply; each observed fact opens its own synchronous window. */
@@ -31,6 +33,7 @@ export class RecordingInstallation implements ObservationInstallation {
     readonly recorder: Recorder,
     private readonly options: RecordingOptions = {},
   ) {
+    this.#fact = options.fact?.bind(options) ?? recordContentFact;
     this.records = new Resources().register(new Resource(recorder), RecordWriterResource).bind({ record: RecordWriterResource.request() });
     const access = this.records.open();
     try {
@@ -53,6 +56,13 @@ export class RecordingInstallation implements ObservationInstallation {
   bindInvocation(setup: InvocationObservationSetup, parent?: InvocationObserver): InvocationRecording {
     if (parent && !(parent instanceof InvocationRecording)) throw new Error('Recording parent belongs to another observation capability');
     return new InvocationRecording(this, setup, parent);
+  }
+  recordFact(fact: ResourceFact, source: RecordChangeSource, writer: RecordWriter): void {
+    const returned: unknown = this.#fact(fact, source, writer);
+    if (returned && typeof (returned as PromiseLike<unknown>).then === 'function') {
+      void Promise.resolve(returned).catch(() => undefined);
+      throw new TypeError('Fact recording must complete synchronously');
+    }
   }
   invalidate(error: unknown): void {
     this.options.invalidate?.(error);

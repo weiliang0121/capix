@@ -31,23 +31,20 @@ export interface RunnerBusinessFact {
 
 export type RunnerCheckpointChild = Readonly<{ identity: InvocationIdentity; round: number; order: number; key?: string } & ({ state: 'waiting' } | { state: 'returned'; reception: 'pending' | 'receiving' | 'accepted' | 'failed' } | { state: 'failed'; reception?: 'handled' })>;
 
-export interface RunnerTranscriptFact {
-  readonly transcriptId: string;
-  readonly revision: number;
-  readonly change: 'messages-appended' | 'segment-started';
-  readonly start: number;
-  readonly end: number;
-}
-
-export interface RunnerMemoryFact {
-  readonly memoriesId: string;
+/** Fact bodies remain with the producer; this port only exposes operation metadata. */
+export interface RunnerFact {
+  readonly contextId: string;
+  readonly offerId: string;
+  readonly access: string;
+  readonly supplyId: string;
+  readonly operationId: string;
   readonly sequence: number;
-  readonly action: 'create' | 'update';
-  readonly memoryId: string;
+  readonly occurredAt: string;
+  readonly name?: string;
 }
 
 /** Installed is a historical baseline; sequence orders this activity, not the restored call's past. */
-export type RunnerCheckpointFact = Readonly<{ activityId: string; contextId: string; owner: InvocationIdentity; recovering: boolean; sequence: number; occurredAt: string } & ({ kind: 'captured' | 'saved' | 'checking' | 'continued'; checkpointId: string; point: string } | { kind: 'installed'; checkpointId: string; point: string; baseline: Readonly<{ round: number; nextChildOrder: number; childCount: number }> } | { kind: 'child-restored'; child: RunnerCheckpointChild; mode: 'continuation' | 'delivery' } | { kind: 'activity'; fact: InvocationProgress } | { kind: 'resource'; fact: RunnerResourceFact } | { kind: 'transcript'; fact: RunnerTranscriptFact } | { kind: 'memory'; fact: RunnerMemoryFact } | { kind: 'failed'; stage: 'capture' | 'save' | 'restore' | 'finish'; diagnostic: RunnerDiagnostic; childContextId?: string } | { kind: 'finishing' | 'finished'; status: 'succeeded' | 'failed' | 'cancelled' })>;
+export type RunnerCheckpointFact = Readonly<{ activityId: string; contextId: string; owner: InvocationIdentity; recovering: boolean; sequence: number; occurredAt: string } & ({ kind: 'captured' | 'saved' | 'checking' | 'continued'; checkpointId: string; point: string } | { kind: 'installed'; checkpointId: string; point: string; baseline: Readonly<{ round: number; nextChildOrder: number; childCount: number }> } | { kind: 'child-restored'; child: RunnerCheckpointChild; mode: 'continuation' | 'delivery' } | { kind: 'activity'; fact: InvocationProgress } | { kind: 'resource'; fact: RunnerResourceFact } | { kind: 'fact'; fact: RunnerFact } | { kind: 'failed'; stage: 'capture' | 'save' | 'restore' | 'finish'; diagnostic: RunnerDiagnostic; childContextId?: string } | { kind: 'finishing' | 'finished'; status: 'succeeded' | 'failed' | 'cancelled' })>;
 
 /** Each producer keeps its own identity and order; entryId only correlates one Runner request. */
-export type RunnerObservationEvent = Readonly<{ runnerId: string; entryId: string } & ({ source: 'entry'; fact: RunnerEntryFact } | { source: 'invocation'; fact: InvocationProgress } | { source: 'resource'; fact: RunnerResourceFact } | { source: 'checkpoint'; fact: RunnerCheckpointFact } | { source: 'business'; fact: RunnerBusinessFact })>;
+export type RunnerObservationEvent = Readonly<{ runnerId: string; entryId: string } & ({ source: 'entry'; fact: RunnerEntryFact } | { source: 'invocation'; fact: InvocationProgress } | { source: 'resource'; fact: RunnerResourceFact } | { source: 'checkpoint'; fact: RunnerCheckpointFact } | { source: 'business'; fact: RunnerBusinessFact } | { source: 'fact'; fact: RunnerFact })>;

@@ -1,14 +1,14 @@
 import { InvocationResources, RuntimeErrorHelper, failureFact, type InvocationFact, type ResourceObservation, type InvocationObserver } from '@weiliang0121/capix-invocation';
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick } from 'es-toolkit/object';
-import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedRelationChange, InvocationOrigin } from '@weiliang0121/capix-protocol';
+import type { ProcessRecord, RecordedRelationChange } from '@weiliang0121/capix-protocol';
 import type { InvocationObservationSetup } from '../../binding/observation.js';
-import { ResourceSupply, resourceRequests } from '@weiliang0121/capix-resources';
+import { ResourceSupply, resourceRequests, type ResourceFact } from '@weiliang0121/capix-resources';
 import { CallableRecord, InvocationRecordHelper, ResourceRecord, type RecordChangeSource } from '@weiliang0121/capix-records';
 import type { RecordWriter } from '@weiliang0121/capix-records/construction';
 import { InvocationRecordAccess, type InvocationRecordDescription, type InvocationRecordWriter } from './declaration.js';
 import type { RecordingInstallation } from './installation.js';
-import { memoryRecord, recordedResult, transcriptRecord } from './mapping.js';
+import { recordedResult } from './mapping.js';
 
 /** A local handle, never registered by Context ID in a global collection. */
 export class InvocationRecording implements InvocationObserver {
@@ -60,24 +60,15 @@ export class InvocationRecording implements InvocationObserver {
       writer.add(new ResourceRecord({ parentId: record.id, access: fact.access, supplyId: fact.supplyId, sequence: fact.sequence, occurredAt: fact.occurredAt, phase: fact.phase, ...(fact.interactionId ? { interactionId: fact.interactionId } : {}) }, fact.describe()));
     });
   }
-  transcript(event: TranscriptEvent): void {
+  fact(fact: ResourceFact): void {
     this.protect((writer) => {
-      this.checkOrigin(event.origin);
-      writer.add(transcriptRecord(event, this.source()));
-    });
-  }
-  memory(event: MemoryEvent): void {
-    this.protect((writer) => {
-      this.checkOrigin(event.origin);
-      writer.add(memoryRecord(event, this.source()));
+      if (fact.contextId !== this.setup.identity.contextId) throw new Error('Entity fact belongs to another call');
+      this.installation.recordFact(fact, this.source(), writer);
     });
   }
   private requireRecord(): CallableRecord {
     if (!this.#record) throw new Error('The call recording has not started');
     return this.#record;
-  }
-  private checkOrigin(origin?: InvocationOrigin): void {
-    if (origin?.contextId !== this.setup.identity.contextId) throw new Error('Entity fact belongs to another call');
   }
   private source(): RecordChangeSource {
     const record = this.requireRecord();

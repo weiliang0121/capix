@@ -21,6 +21,8 @@
   "dependencies": {
     "@weiliang0121/capix-contracts": "workspace:*",
     "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-transcript": "workspace:*",
+    "@weiliang0121/capix-memory": "workspace:*",
     "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0",
     "@weiliang0121/capix-resources": "workspace:*"

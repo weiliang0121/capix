@@ -23,8 +23,7 @@ export function attachInvocationResources<Input, Output, Context extends Invocat
     nextSequence: () => invocation.nextResourceSequence(),
     validate: () => invocation.requireActive(),
     observation: invocation.observation?.resource,
-    transcript: invocation.observation?.transcript,
-    memory: invocation.observation?.memory,
+    facts: invocation.observation?.facts,
     error: (error, allowException) => invocation.reject(error, allowException),
   });
 }

@@ -6,3 +6,8 @@ export interface InvocationIdentity {
   readonly kind: CallableKind;
   readonly parentContextId?: string;
 }
+
+/** Identity of the call that caused a fact; not the identity of a resource operation. */
+export interface InvocationOrigin {
+  readonly contextId: string;
+}

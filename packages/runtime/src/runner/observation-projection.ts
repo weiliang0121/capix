@@ -1,8 +1,8 @@
 import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 import type { CheckpointChild } from '@weiliang0121/capix-checkpoint';
 import { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
-import { invocationProgress, type InvocationFact, type InvocationProgress, type ResourceObservation, type BusinessObservation, type CheckpointFact } from '@weiliang0121/capix-invocation';
-import type { RunnerDiagnostic, RunnerResourceFact, RunnerBusinessFact, RunnerCheckpointChild, RunnerCheckpointFact } from './observation-contract.js';
+import { invocationProgress, type InvocationFact, type InvocationProgress, type ResourceObservation, type ResourceFact, type BusinessObservation, type CheckpointFact } from '@weiliang0121/capix-invocation';
+import type { RunnerDiagnostic, RunnerResourceFact, RunnerFact, RunnerBusinessFact, RunnerCheckpointChild, RunnerCheckpointFact } from './observation-contract.js';
 
 /** Projection must happen during synchronous observation, while borrowed fields are valid. */
 export function projectInvocation(fact: InvocationFact, signal: AbortSignal): InvocationProgress {
@@ -11,6 +11,10 @@ export function projectInvocation(fact: InvocationFact, signal: AbortSignal): In
 
 export function projectResource(fact: ResourceObservation): RunnerResourceFact {
   return Object.freeze({ contextId: fact.contextId, offerId: fact.offerId, access: fact.access, supplyId: fact.supplyId, sequence: fact.sequence, occurredAt: fact.occurredAt, phase: fact.phase, ...(fact.interactionId !== undefined ? { interactionId: fact.interactionId } : {}) });
+}
+
+export function projectFact(fact: ResourceFact): RunnerFact {
+  return Object.freeze({ contextId: fact.contextId, offerId: fact.offerId, access: fact.access, supplyId: fact.supplyId, operationId: fact.operationId, sequence: fact.sequence, occurredAt: fact.occurredAt, ...(fact.fact.name !== undefined ? { name: fact.fact.name } : {}) });
 }
 
 export function projectBusiness(fact: BusinessObservation): RunnerBusinessFact {
@@ -42,13 +46,8 @@ export function projectCheckpoint(fact: CheckpointFact, signal: AbortSignal): Ru
       return Object.freeze({ ...base, kind: fact.kind, fact: projectInvocation(fact.fact, signal) });
     case 'resource':
       return Object.freeze({ ...base, kind: fact.kind, fact: projectResource(fact.fact) });
-    case 'transcript': {
-      const change = fact.fact.change;
-      const content = Object.freeze({ transcriptId: fact.fact.transcriptId, revision: fact.fact.revision, change: change.kind, start: change.start, end: change.kind === 'messages-appended' ? change.start + change.messages.length : change.end });
-      return Object.freeze({ ...base, kind: fact.kind, fact: content });
-    }
-    case 'memory':
-      return Object.freeze({ ...base, kind: fact.kind, fact: Object.freeze({ memoriesId: fact.fact.memoriesId, sequence: fact.fact.sequence, action: fact.fact.change.action, memoryId: fact.fact.change.memoryId }) });
+    case 'fact':
+      return Object.freeze({ ...base, kind: fact.kind, fact: projectFact(fact.fact) });
     case 'failed':
       return Object.freeze({ ...base, kind: fact.kind, stage: fact.stage, diagnostic: projectDiagnostic(fact.error), ...(fact.childContextId !== undefined ? { childContextId: fact.childContextId } : {}) });
     case 'finishing':

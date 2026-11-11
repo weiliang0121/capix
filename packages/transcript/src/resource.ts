@@ -1,7 +1,8 @@
+import { TranscriptFacts } from './event.js';
 import { Transcript } from './transcript.js';
 import type { Message, TranscriptRangeLocator } from '@weiliang0121/capix-protocol';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
-import type { ResourceEndpointActivity } from '@weiliang0121/capix-resources';
+import type { ResourceEndpointActivity, ResourceOperation } from '@weiliang0121/capix-resources';
 import { TranscriptRangeRef } from './ref.js';
 import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { TranscriptAppendProgress } from './progress.js';
@@ -65,7 +66,7 @@ export const TranscriptResource = Object.freeze({
       const progress = source instanceof Transcript || !source.progress ? undefined : new ProgressChannel(source.progress);
       return Object.freeze({
         applyFixed(input: { readonly position: string; readonly messages: readonly Message[] }) {
-          return activity.runSync('applyFixed', { input: () => ({ position: input.position, count: input.messages.length }), output: (receipt) => receipt }, () =>
+          return activity.runSync('applyFixed', { input: () => ({ position: input.position, count: input.messages.length }), output: (receipt) => receipt }, (operation) =>
             transcript.applyFixed(
               {
                 contract: { key: 'transcript.append', version: 1 },
@@ -73,14 +74,14 @@ export const TranscriptResource = Object.freeze({
                 transcriptId: transcript.id,
                 messages: input.messages,
               },
-              { origin: activity.origin, observation: activity.transcriptObservation, progress },
+              { origin: operation.origin, observation: operation.facts(TranscriptFacts), progress },
             ),
           );
         },
         append(messages: readonly Message[]) {
-          return activity.runSync('append', { input: () => ({ count: messages.length }), output: (result) => ({ transcriptId: transcript.id, indexes: result.map((item) => item.index), revision: transcript.revision }) }, () => {
+          return activity.runSync('append', { input: () => ({ count: messages.length }), output: (result) => ({ transcriptId: transcript.id, indexes: result.map((item) => item.index), revision: transcript.revision }) }, (operation: ResourceOperation) => {
             const start = transcript.length;
-            transcript.appendFrom(messages, { origin: activity.origin, observation: activity.transcriptObservation, progress });
+            transcript.appendFrom(messages, { origin: operation.origin, observation: operation.facts(TranscriptFacts), progress });
             return Object.freeze(messages.map((_, offset) => Object.freeze({ transcriptId: transcript.id, index: start + offset, message: transcript.get(start + offset)! })));
           });
         },
@@ -94,7 +95,7 @@ export const TranscriptResource = Object.freeze({
     expose: (transcript: Transcript, activity) =>
       Object.freeze({
         current: () => activity.runSync('current', { output: (reader) => reader.locate() }, () => new TranscriptRangeReader(new TranscriptRangeRef(transcript, transcript.activeStart, transcript.length), activity)),
-        start: (index: number) => activity.runSync('start', { input: () => ({ start: index }), output: () => ({ transcriptId: transcript.id, start: transcript.activeStart, end: transcript.length, revision: transcript.revision }) }, () => transcript.startSegment(index, { origin: activity.origin, observation: activity.transcriptObservation })),
+        start: (index: number) => activity.runSync('start', { input: () => ({ start: index }), output: () => ({ transcriptId: transcript.id, start: transcript.activeStart, end: transcript.length, revision: transcript.revision }) }, (operation) => transcript.startSegment(index, { origin: operation.origin, observation: operation.facts(TranscriptFacts) })),
       }),
     timing: 'access',
     describe: (transcript) => ({ transcriptId: transcript.id }),

@@ -68,16 +68,16 @@ Runner 在构造／build 时固定 Scene、Resources、可选 Interactions 和�
 
 ## 3. 消费侧：相似的 subscribe / observe 不意味着相同契约
 
-| 出口                  | 观察范围与数据                                                                                         | 当前消费性质                                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `Runner.output`       | Scene 根输出；带本次入口 entryId，以及 contextId、round、局部 sequence。子输出须显式转发               | 被动同步订阅，跨 run/resume 保留；不缓存、不回放；单个消费者失败即停用，其他消费者和运行不受影响                 |
-| `Runner.observation`  | `{ runnerId, entryId, source, fact }`，source 为 entry / invocation / resource / checkpoint / business | 固定元数据的被动同步订阅；不带业务 IO、Frame、资源 describe 或原始异常。恢复事实保留 CP 来源，不伪造普通调用事件 |
-| `InvocationProgress`  | started、process、relation、finished 的元数据，无 IO 或原始错误                                        | 被动投影；父层可转发后代进度，保留真实生产者；恢复路径不发布普通进度                                             |
-| `InvocationFact`      | 调用身份、过程与关系事实，含输入、输出、异常、描述等同步借用值                                         | 供机制安装同步观察；默认隔离，可配置严格传播；不能把原对象排队后再解释                                           |
-| `ResourceObservation` | 当前访问中的资源操作事实；含惰性 `describe()`                                                          | 同步观察；需要正文时在有效边界求值并投影，不默认读取描述                                                         |
-| `BusinessObservation` | `work.observation` 产生的业务注释，由内核补身份与时序                                                  | payload 为 unknown，不自动成为纯数据；不能冒充调用生命周期事实                                                   |
-| `DriverFact`          | Runner 入口的 established/acquired/released/rejected/entry-failed                                      | 现有协议仍叫 Driver；有独立序号，released 只说明入口释放；严格消费者可影响入口交付                               |
-| `CheckpointFact`      | 保存、检查、恢复安装、恢复活动与最终交付等 CP 事实                                                     | 独立 activityId；部分事件带 Frame、借用调用事实或原始错误，须按种类投影                                          |
+| 出口                  | 观察范围与数据                                                                                                | 当前消费性质                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Runner.output`       | Scene 根输出；带本次入口 entryId，以及 contextId、round、局部 sequence。子输出须显式转发                      | 被动同步订阅，跨 run/resume 保留；不缓存、不回放；单个消费者失败即停用，其他消费者和运行不受影响                 |
+| `Runner.observation`  | `{ runnerId, entryId, source, fact }`，source 为 entry / invocation / resource / fact / checkpoint / business | 固定元数据的被动同步订阅；不带业务 IO、Frame、资源 describe 或原始异常。恢复事实保留 CP 来源，不伪造普通调用事件 |
+| `InvocationProgress`  | started、process、relation、finished 的元数据，无 IO 或原始错误                                               | 被动投影；父层可转发后代进度，保留真实生产者；恢复路径不发布普通进度                                             |
+| `InvocationFact`      | 调用身份、过程与关系事实，含输入、输出、异常、描述等同步借用值                                                | 供机制安装同步观察；默认隔离，可配置严格传播；不能把原对象排队后再解释                                           |
+| `ResourceObservation` | 当前访问中的资源操作事实；含惰性 `describe()`                                                                 | 同步观察；需要正文时在有效边界求值并投影，不默认读取描述                                                         |
+| `BusinessObservation` | `work.observation` 产生的业务注释，由内核补身份与时序                                                         | payload 为 unknown，不自动成为纯数据；不能冒充调用生命周期事实                                                   |
+| `DriverFact`          | Runner 入口的 established/acquired/released/rejected/entry-failed                                             | 现有协议仍叫 Driver；有独立序号，released 只说明入口释放；严格消费者可影响入口交付                               |
+| `CheckpointFact`      | 保存、检查、恢复安装、恢复活动与最终交付等 CP 事实                                                            | 独立 activityId；部分事件带 Frame、借用调用事实或原始错误，须按种类投影                                          |
 
 当前 `Runner.output` 的事件封套冻结，Result/Delta 不因此深拷贝或深冻结。被动表示没有接纳决定权且回调故障隔离，不代表共享对象已经深度隔离；消费者应只读使用收到的值。它可用于本进程消费，但不是天然可以持久或跨端传输的 DTO；真正跨端的输出需要服务定义序列化与接纳。
 
@@ -305,7 +305,7 @@ type RunnerOutputEvent<Result, Delta> = InvocationOutputEvent<Result, Delta> & R
 
 ### 9.3 普通调用与恢复，需要两条生产接缝、一个宿主消费入口
 
-普通调用经 Runtime 的单次反馈绑定连接固定元数据投影；无需业务 deps、Recorder 或改写业务 Work。恢复明确跳过普通安装，进入 CP 事实出口。单次反馈只有 invocation/resource/business/checkpoint 接收器，不携带 Store、严格策略或资源供给；额外 CP 消费只能附着在已安装保存端口上，不能借订阅安装持久化。
+普通调用经 Runtime 的单次反馈绑定连接固定元数据投影；无需业务 deps、Recorder 或改写业务 Work。恢复明确跳过普通安装，进入 CP 事实出口。单次反馈只有 invocation/resource/fact/business/checkpoint 接收器，不携带 Store、严格策略或资源供给；额外 CP 消费只能附着在已安装保存端口上，不能借订阅安装持久化。
 
 ```text
 build 固定机制；每次入口固定接收器与 entryId
@@ -320,7 +320,7 @@ subscribe / unsubscribe 只改变末端消费者
 
 当前 `CheckpointInstallation.feedback?: ProgressReceiver<CheckpointFact>` 在 CP 生产边界接收原始同步事实。每份事实只建立一次，feedback 与原 observation 共享 activityId、sequence 和事实对象；被动接收通过 ProgressChannel 隔离故障，再执行原观察策略。`prepareCheckpointRestoration` 在 Invocation 建立前的失败也沿此规则交付。Store、恢复身份与严格保存语义不随出口变化。
 
-独立性覆盖完整转交链：恢复调用向 CP activity/resource 的桥接已改为只转交事实与保留错误包装的薄适配；停用状态由各消费会话持有。严格观察失败之后，真实失败收尾仍能送达被动端，不会重新启用失败观察者。恢复的 transcript/memory 变化也保持原有 CP 事实种类；业务注释原本没有这条恢复出口，本轮没有扩展。
+独立性覆盖完整转交链：恢复调用向 CP activity/resource 的桥接已改为只转交事实与保留错误包装的薄适配；停用状态由各消费会话持有。严格观察失败之后，真实失败收尾仍能送达被动端，不会重新启用失败观察者。领域事实统一以 CP `kind: fact` 转交；消息／记忆不再是两个特殊活动种类。Runner 正常 `source: fact` 和 CP 的 fact 子项均只暴露操作来源、序号、时间与可选类型名称，不暴露领域正文。业务注释原本没有这条恢复出口，本轮没有扩展。
 
 原始 `feedback` 不承诺纯数据：其中可能有 Frame、借用 IO、错误或资源 describe。Runner 在同步边界将其投影成固定元数据，不保留这些原对象。这里实现的是已有 CP 事实的独立交付接缝，Runner 不代理 Store，不建立第二套恢复过程。普通安装的可选严格策略继续由机制安装承担；新订阅只消费。
 

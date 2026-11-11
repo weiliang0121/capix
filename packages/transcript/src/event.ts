@@ -1,5 +1,9 @@
+import { FactType } from '@weiliang0121/capix-changes';
 import type { TranscriptEvent } from '@weiliang0121/capix-protocol';
 export type { TranscriptEvent } from '@weiliang0121/capix-protocol';
+
+/** One producer-owned type identity; its name is descriptive, not a routing key. */
+export const TranscriptFacts = new FactType<TranscriptEvent>('transcript');
 
 /** Messages have already been accepted and frozen by Transcript. */
 export function createTranscriptEvent(transcriptId: string, revision: number, change: TranscriptEvent['change'], origin?: { readonly contextId: string }): TranscriptEvent {

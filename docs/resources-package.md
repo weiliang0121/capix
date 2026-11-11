@@ -147,7 +147,34 @@ interface ResourceFailurePolicy {
 
 打开访问前校验并固定策略函数和 receiver；失效 owner 不能先触发材料捕获。策略判定抛错或返回非法值属于机制失败，保留原操作错误；非法异步判定的迟到拒绝也被消费。validate、故障报告、接纳来源和观测端口同样要求同步完成；保留 void 回调的普通同步返回值，异步返回会被拒绝并消费迟到拒绝。ResourceAccessClosed 和 ResourcePortError 在资源包及 Runtime 中均属于受保护故障，包含在 AggregateError 中也不能进入业务 fallback。Runtime 提供自己的策略，Runner 使用者不必配置它。
 
-无 owner 的独立访问没有调用归属，仍受本地窗口控制；它不能替其他宿主判断控制错误。`ResourceOwner` 的 transcript/memory 事实端口暂以 packages/protocol 类型保留，不为这两处关联新增通用事件注册机制。
+无 owner 的独立访问没有调用归属，仍受本地窗口控制；它不能替其他宿主判断控制错误。`ResourceOwner.facts` 只转交 `ResourceFact`，不认识消息、记忆或业务事件的字段；资源包依赖 contracts／changes，不再依赖 protocol。
+
+## 领域事实与准确操作
+
+实体拥有领域事件，changes 的 `FactType<Event>` 只提供进程内类型身份与固定正文。名称可省略，且只作说明；两个同名类型不会互相匹配。`create` 用 stableValue 固定普通数据，`match` 仅向准确类型的同步回调交付 `Stable<Event>`。它没有订阅表、全局注册、独立生命周期或持久身份。载体带有私有 symbol 标记，stableValue 会拒绝将它用于正式交付或 CP state，不能把它直接当作 wire DTO；需要保存时应由领域适配明确取出正文并编码。
+
+```ts
+const changed = new FactType<{ revision: number; content: string }>('note.changed');
+const offer = new ResourceOffer({
+  methods: {
+    replace(origin: Notes, input: string, operation: ResourceOperation) {
+      // Notes 自己检查、提交并发布事实；资源方法不从返回值猜测效果。
+      return origin.replace(input, {
+        origin: operation.origin,
+        observation: operation.facts(changed),
+      });
+    },
+  },
+});
+```
+
+`operation.facts(type)` 返回准确类型的同步 consumer；没有观察方时返回 undefined。它固定本次操作，而非端点上的可变“当前操作”。低层 `activity.runSync(action, detail, execute)` 的 execute 也取得同一类操作端口。正常结束在结果接收前关闭；窗口关闭、信号取消或结束后发布均被拒绝。宿主校验函数重入关闭时也不能在返回后放行发布。
+
+传出的 `ResourceFact` 包含 contextId、offerId、supplyId、access、本次 operationId、序号、时间及不透明事实。operationId 对应普通 ResourceObservation 的 interactionId；此名称不表示独立 Interaction。它证明事实经该操作转交，**不自动证明该操作造成事件所描述的变化**。确认旧效果、读取旧事实与新变化仍由生产者及适配解释；不会把 contextId 注入领域正文。
+
+实体在变化发生处调用自己的 publishFact，必要捕获与观察各自尝试。因此方法后来抛错，已经转交的真实变化仍保留；记录失败也不回滚实体。固定数据失败、异步必要端口及 strict 观察失败属于受保护故障，不能由普通 failed 回调接收。isolate 会停用坏消费者，继续向健康同伴转交。资源 Promise 没有因此变成子调用或事务。
+
+TranscriptFacts／MemoryFacts 是各自生产者公开的类型身份，专用资源适配在内部使用上述同一机制。新增业务实体无需修改资源、调用或 CP 的领域联合。
 
 ## 验证范围
 

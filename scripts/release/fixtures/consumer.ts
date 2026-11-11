@@ -9,6 +9,8 @@ import { CallableBuilder, type InvocationCapabilities } from '@weiliang0121/capi
 import { invocationRecording } from '@weiliang0121/capix-runtime/recording';
 import { z } from 'zod';
 import { Tool, type ToolMember } from '@weiliang0121/capix-tool';
+import { FactType } from '@weiliang0121/capix-changes';
+import type { ResourceEventConsumer } from '@weiliang0121/capix-resources';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 const dictionary = new ResourceOffer({
@@ -117,3 +119,21 @@ if (false) {
   new Runner(hoistedTool, new Resources());
 }
 void [hoistedTool, toolResult];
+
+const counterFacts = new FactType<{ count: number }>('counter');
+declare const factOperation: ResourceOperation;
+const counterPublisher = factOperation.facts(counterFacts);
+counterPublisher?.publish({ count: 1 });
+counterFacts.match(counterFacts.create({ count: 2 }), (event) => {
+  const count: number = event.count;
+  // @ts-expect-error domain fact bodies are stable values
+  event.count = 3;
+  void count;
+});
+if (false) {
+  // @ts-expect-error exact fact type cannot publish a different body
+  counterPublisher?.publish({ text: 'wrong' });
+  // @ts-expect-error typed publishers cannot be widened to bypass the fact type
+  const widened: ResourceEventConsumer<{ count: number } | { text: string }> | undefined = counterPublisher;
+  void widened;
+}

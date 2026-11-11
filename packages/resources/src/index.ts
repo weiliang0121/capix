@@ -10,4 +10,4 @@ export { ResourceSupply, type ResourceSupplyEntry } from './supply.js';
 export { ResourceActivity, type ResourceOperationDescription } from './activity.js';
 export { ResourceEndpointActivity } from './endpoint.js';
 export { captureResourceOwner, ResourceAccessClosed, ResourcePortError, type ResourceOwner, type ResourceFailurePolicy, type ResourceWindow } from './ports.js';
-export type { ResourceEventConsumer, ResourceObservation } from './facts.js';
+export type { ResourceEventConsumer, ResourceObservation, ResourceFact } from './facts.js';

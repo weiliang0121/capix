@@ -10,6 +10,9 @@ import * as construction from '@weiliang0121/capix-runtime/construction';
 import * as recording from '@weiliang0121/capix-runtime/recording';
 import { Resource, ResourceOffer, ResourceAccessClosed } from '@weiliang0121/capix-resources';
 import { receiveOperation } from '@weiliang0121/capix-resources/operation';
+import { FactType, publishFact } from '@weiliang0121/capix-changes';
+import { Transcript, TranscriptFacts, TranscriptResource } from '@weiliang0121/capix-transcript';
+import { RecordBook, Recorder } from '@weiliang0121/capix-records';
 import { z } from 'zod';
 import { Tool, ToolModelResource } from '@weiliang0121/capix-tool';
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
@@ -207,4 +210,43 @@ assert.equal(exchanges.snapshot().origins.length, 1);
 assert.equal(exchanges.snapshot().entries.length, 2);
 await interactions.settled();
 interactions.close();
-console.log('CAPiX installed consumer smoke passed (identity, resources, invocation, cold checkpoint restore, offline Tool)');
+// Typed domain facts cross the installed resource/invocation boundary without a domain union.
+const sampleFacts = new FactType('sample');
+const delivered = [];
+const sample = new ResourceOffer({
+  methods: {
+    read(_origin, input, operation) {
+      publishFact({ input }, undefined, operation.facts(sampleFacts));
+      return input;
+    },
+  },
+});
+const sampleScene = new Scene({ deps: { sample: sample.request() }, run: (work) => work.resources.sample.read(work.input) });
+const sampleRunner = new Runner(sampleScene, new Resources().register(new Resource(null), sample), undefined, {
+  observations: [
+    {
+      failure: 'propagate',
+      bindInvocation: () => ({
+        observe() {},
+        fact(envelope) {
+          sampleFacts.match(envelope.fact, (body) => delivered.push(body.input));
+        },
+      }),
+    },
+  ],
+}).build();
+assert.equal(await sampleRunner.run('typed-fact'), 'typed-fact');
+assert.deepEqual(delivered, ['typed-fact']);
+
+// Default content recording uses the same producer token as the standalone entity package.
+const transcript = new Transcript();
+const recorder = new Recorder(new RecordBook());
+const transcriptScene = new Scene({ deps: { messages: TranscriptResource.append.request() }, run: (work) => work.resources.messages.append([{ role: 'user', content: work.input }]) });
+const transcriptRunner = new Runner(transcriptScene, new Resources().register(new Resource(transcript), TranscriptResource.append), undefined, { observations: [runtime.bindRecording(recorder, { failure: 'propagate' })] }).build();
+await transcriptRunner.run('recorded');
+assert.ok([...recorder.book.values()].some((record) => record.kind === 'transcript' && record.contextId));
+assert.equal(
+  TranscriptFacts.match(sampleFacts.create({ input: 'other' }), () => assert.fail('wrong producer')),
+  false,
+);
+console.log('CAPiX installed consumer smoke passed (identity, resources, typed facts, invocation, cold checkpoint restore, offline Tool)');

@@ -1,5 +1,5 @@
 import { InvocationResources } from '../invocation/resource-access.js';
-import type { TranscriptEvent, MemoryEvent } from '@weiliang0121/capix-protocol';
+import type { ResourceFact } from '@weiliang0121/capix-resources';
 
 import type { InvocationFact, ResourceObservation, BusinessObservation } from './facts.js';
 
@@ -11,7 +11,6 @@ export interface InvocationObserver {
   observe(fact: InvocationFact): void;
   business?(fact: BusinessObservation): void;
   resource?(fact: ResourceObservation): void;
-  transcript?(event: TranscriptEvent): void;
-  memory?(event: MemoryEvent): void;
+  fact?(fact: ResourceFact): void;
   available?(): boolean;
 }

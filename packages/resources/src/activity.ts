@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { OperationOptions, OperationOutcome, OperationResult } from '@weiliang0121/capix-contracts';
 import { receiveOperation } from './operation/receive.js';
 import type { ResourceOperation } from './methods.js';
-import type { ResourceObservation } from './facts.js';
+import type { ResourceObservation, ResourceFact } from './facts.js';
+import type { FactType } from '@weiliang0121/capix-changes';
 import { ResourcePortError, type ResourceOwner, type ResourceWindow } from './ports.js';
 import type { ResourceSupplyEntry } from './supply.js';
 import { ResourceEndpointActivity, type ResourceOperationSource } from './endpoint.js';
@@ -104,32 +105,16 @@ export class ResourceActivity {
     this.validate();
     const lifetime = new ResourceOperationLifetime(this.window.signal);
     this.#operations.add(lifetime);
-    const operation: ResourceOperation<Delta> = Object.freeze({
-      signal: this.window.signal,
-      onClose: (cleanup: (reason: unknown) => void) => {
-        try {
-          return lifetime.onClose(cleanup);
-        } catch (error) {
-          this.reject(error);
-        }
-      },
-      emit: (delta: Delta) => {
-        try {
-          lifetime.assertOpen();
-        } catch (error) {
-          this.reject(error);
-        }
-        this.validate();
-        if (!consume) return;
-        try {
-          const returned: unknown = consume(delta);
-          void Promise.resolve(returned).catch(() => {
-            consume = undefined;
-          });
-        } catch {
+    const operation = this.operation<Delta>(source, operationId, lifetime, (delta) => {
+      if (!consume) return;
+      try {
+        const returned: unknown = consume(delta);
+        void Promise.resolve(returned).catch(() => {
           consume = undefined;
-        }
-      },
+        });
+      } catch {
+        consume = undefined;
+      }
     });
     let outcome: OperationOutcome<Output>;
     try {
@@ -161,21 +146,84 @@ export class ResourceActivity {
     return received;
   }
 
-  runSync<Output>(source: ResourceOperationSource, action: string, detail: ResourceOperationDescription<Output>, execute: () => Output): Output {
+  runSync<Output>(source: ResourceOperationSource, action: string, detail: ResourceOperationDescription<NoInfer<Output>>, execute: (operation: ResourceOperation) => Output): Output {
     this.validate();
     const operationId = randomUUID();
     this.publish(source, 'started', () => ({ action, input: detail.input?.() ?? null }), operationId);
     this.validate();
+    const lifetime = new ResourceOperationLifetime(this.window.signal);
+    this.#operations.add(lifetime);
+    const operation = this.operation<never>(source, operationId, lifetime, () => {});
     let outcome: OperationOutcome<Output>;
     try {
-      outcome = { status: 'succeeded', value: execute() };
+      outcome = { status: 'succeeded', value: execute(operation) };
     } catch (failure) {
       outcome = { status: 'failed', failure };
+    } finally {
+      lifetime.finish();
+      this.#operations.delete(lifetime);
     }
-    this.returned(source, action, detail, operationId, outcome);
+    try {
+      this.returned(source, action, detail, operationId, outcome);
+    } catch (error) {
+      if (lifetime.failure && error !== lifetime.failure) this.reject(new AggregateError([error, lifetime.failure], 'Resource observation and cleanup both failed', { cause: error }));
+      throw error;
+    }
+    if (lifetime.failure) outcome = { status: 'failed', failure: outcome.status === 'failed' && outcome.failure !== lifetime.failure ? new AggregateError([outcome.failure, lifetime.failure], 'Resource operation and cleanup both failed', { cause: outcome.failure }) : lifetime.failure };
     this.checkReception(outcome);
+    if (lifetime.interruption) this.reject(outcome.status === 'failed' && outcome.failure !== lifetime.interruption.reason ? new AggregateError([outcome.failure, lifetime.interruption.reason], 'Resource operation failed after local consumption ended', { cause: outcome.failure }) : lifetime.interruption.reason);
     if (outcome.status === 'failed') this.reject(outcome.failure, true);
     return outcome.value;
+  }
+
+  private operation<Delta>(source: ResourceOperationSource, operationId: string, lifetime: ResourceOperationLifetime, emit: (delta: Delta) => void): ResourceOperation<Delta> {
+    const owner = this.owner;
+    const origin = owner ? Object.freeze({ contextId: owner.contextId }) : undefined;
+    return Object.freeze({
+      signal: this.window.signal,
+      origin,
+      onClose: (cleanup: (reason: unknown) => void) => {
+        try {
+          return lifetime.onClose(cleanup);
+        } catch (error) {
+          this.reject(error);
+        }
+      },
+      emit: (delta: Delta) => {
+        this.assertOperation(lifetime);
+        emit(delta);
+      },
+      facts: <Event>(type: FactType<Event>) => {
+        this.assertOperation(lifetime);
+        if (!owner?.facts) return undefined;
+        return Object.freeze({
+          publish: (event: Event) => {
+            this.assertOperation(lifetime);
+            try {
+              const fact = type.create(event);
+              const publication: ResourceFact = Object.freeze({ ...source, contextId: owner.contextId, operationId, sequence: owner.nextSequence ? owner.nextSequence() : ++this.#sequence, occurredAt: new Date().toISOString(), fact });
+              // Fixing producer data or invoking a host port can synchronously close this window.
+              this.assertOperation(lifetime);
+              const error = owner.facts!.publish(publication);
+              if (error !== undefined) throw error;
+            } catch (error) {
+              this.rejectPort(error, 'Required fact publication failed');
+            }
+          },
+        });
+      },
+    });
+  }
+
+  private assertOperation(lifetime: ResourceOperationLifetime): void {
+    try {
+      lifetime.assertOpen();
+      this.window.assertOpen();
+      // A host validator may close the operation or abort its local signal synchronously.
+      lifetime.assertOpen();
+    } catch (error) {
+      this.reject(error);
+    }
   }
 
   private returned<Output>(source: ResourceOperationSource, action: string, detail: ResourceOperationDescription<Output>, operationId: string, outcome: OperationOutcome<Output>): void {

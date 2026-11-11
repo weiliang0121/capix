@@ -49,6 +49,7 @@
 - `Resources.register(new Resource(origin), offer)` 固定供给，Offer UUID 和准确对象身份用于区分，name 仅描述。Offer 使用 methods，特殊固定凭据、同步值或订阅清理可用低层 expose。Request 只表达类型化申请，不保存端点。
 - 本层 deps 与子树 supply 分开。显式 capture/refine 选择结构位置和输入，不由 kind 推断资源捕获边界。子树供给不扩大父 Work；收窄不能扩大授权，不影响兄弟及父供给，不是动态能力注册。
 - 资源绑定打开不可重开的访问窗口，各次操作保持局部状态。端点核验本地调用/阶段/固定信号，不递归查询祖先可变状态。业务不取得 origin、Invocation 或内部 Context；关闭观察不触发资源描述或惰性模型构造。
+- 领域事实使用 changes 的 FactType 精确匹配与稳定正文；operation.facts(type) 固定本次资源操作，关闭后不可发布。ResourceFact 的调用／操作来源证明转交关联，不自动证明造成效果；不把它作为 wire 或 CP 数据。Invocation 与 CP 活动只转交通用事实，记录解释由显式适配承担；strict/isolate 与已发生效果分别保留。
 - 普通资源与子调用共用 `delta/result:{succeeded?,failed?}` 操作接收结构。invoke 提供便捷调用，create→checkpoint→invoke、run/accept/open/facts 保留精细边界。returned 与 accepted/handled 分开，不自动接纳。
 - Invocation 协调正文、接纳排空、Work/资源关闭及最终交付；等待已启动子调用真实退出，不等待未启动关系或独立 Interaction，不自动停止兄弟。资源 Promise 不因未 await 自动成为子调用。
 - 取消只请求停止，不以 Promise.race 提前释放。收尾不恢复资源权限，纯计算接纳与访问已关闭资源的接纳可能结果不同。正文/关闭/持久故障分别保留，不能用普通 catch 清除已归属故障。详见 [退出契约](docs/invocation-exit-contract.md)。

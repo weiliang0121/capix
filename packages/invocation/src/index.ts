@@ -26,7 +26,7 @@ export { combineOutputReceivers } from './output/delivery.js';
 export { InvocationChangeEmitter } from './invocation/changes.js';
 export type { InvocationProgress } from './invocation/progress.js';
 export { invocationProgress } from './invocation/facts.js';
-export type { InvocationFact, InvocationChange, InvocationDescription, InvocationIdentity, InvocationRelationIdentity, InvocationRelationChange, ResourceObservation, BusinessObservation, BusinessEvent } from './observation/facts.js';
+export type { InvocationFact, InvocationChange, InvocationDescription, InvocationIdentity, InvocationRelationIdentity, InvocationRelationChange, ResourceObservation, ResourceFact, BusinessObservation, BusinessEvent } from './observation/facts.js';
 export type { InvocationObserver, EventConsumer } from './observation/observer.js';
 export { InvocationObservation } from './observation/invocation.js';
 export { ObserverSession, publishSessions } from './observation/session.js';

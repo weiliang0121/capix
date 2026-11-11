@@ -45,7 +45,9 @@ export class ResourceAccess<Resources extends object = object> implements Resour
   assertOpen(): void {
     if (this.#closed) throw this.#closed;
     this.#owner?.validate();
+    if (this.#closed) throw this.#closed;
     synchronous(this.#hooks.validate?.(), 'Resource access validation');
+    if (this.#closed) throw this.#closed;
   }
 
   /** All requests are checked before any endpoint is realized. Aliases share their window's endpoint. */

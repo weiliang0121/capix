@@ -1,7 +1,7 @@
 import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { RunnerObservationEvent } from './observation-contract.js';
 
-export type { RunnerDiagnostic, RunnerEntryFact, RunnerResourceFact, RunnerBusinessFact, RunnerCheckpointChild, RunnerCheckpointFact, RunnerObservationEvent } from './observation-contract.js';
+export type { RunnerDiagnostic, RunnerEntryFact, RunnerResourceFact, RunnerFact, RunnerBusinessFact, RunnerCheckpointChild, RunnerCheckpointFact, RunnerObservationEvent } from './observation-contract.js';
 
 export type RunnerObservationReceiver = ProgressReceiver<RunnerObservationEvent>;
 

@@ -1,4 +1,5 @@
 export { callableKinds, type CallableKind } from '@weiliang0121/capix-contracts';
+export type { InvocationOrigin } from '@weiliang0121/capix-contracts';
 /** Read-only vocabulary of historical REOA records. */
 export type LegacyInvocationLevel = 'runtime' | 'execution' | 'operation' | 'attempt';
 export const invocationProcessStages = ['execute', 'receive', 'handling', 'control'] as const;
@@ -13,8 +14,3 @@ export interface InvocationRelationIdentity {
   readonly key?: string;
 }
 export type InvocationRelationPhase = 'attached' | 'returned' | 'receiving' | 'accepted' | 'handled' | 'failed';
-
-/** Identity of the call that caused an entity change, at any REOA level. */
-export interface InvocationOrigin {
-  readonly contextId: string;
-}

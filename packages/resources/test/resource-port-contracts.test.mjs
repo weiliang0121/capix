@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Resources, Resource, ResourceOffer } from '@weiliang0121/capix-resources';
+import { FactType } from '@weiliang0121/capix-changes';
 import { spawnSync } from 'node:child_process';
 
 const policy = { isProtected: () => false, isCancellation: () => false, describe: () => null };
@@ -114,7 +115,8 @@ test('async host ports are rejected without leaking late rejection or losing the
   const source = `
     import assert from 'node:assert/strict';
     import { Resources, Resource, ResourceOffer } from '@weiliang0121/capix-resources';
-    const all = ['validate', 'error', 'publish', 'nextSequence', 'reception', 'describe', 'hookValidate', 'hookBound', 'hookAvailable', 'transcript', 'memory'];
+    const Facts = new (await import(${JSON.stringify(import.meta.resolve('@weiliang0121/capix-changes'))})).FactType('sample');
+    const all = ['validate', 'error', 'publish', 'nextSequence', 'reception', 'describe', 'hookValidate', 'hookBound', 'hookAvailable', 'facts'];
     for (const mode of all) {
       const original = new Error('operation failed');
       const rejected = new Error('late rejection ' + mode);
@@ -123,7 +125,7 @@ test('async host ports are rejected without leaking late rejection or losing the
       const owner = {
         contextId: mode, failures: policy, validate() {}, error() {}, reception: () => ({parentContextId:'parent',childContextId:'child'}),
         observation: { publish(fact) { fact.describe(); } },
-        transcript: { publish() {} }, memory: { publish() {} },
+        facts: { publish() {} },
       };
       const hooks = {};
       if (mode === 'validate' || mode === 'error' || mode === 'nextSequence' || mode === 'reception') owner[mode] = invalid;
@@ -135,12 +137,11 @@ test('async host ports are rejected without leaking late rejection or losing the
       else owner[mode].publish = invalid;
       let executed = 0;
       const offer = new ResourceOffer({ expose(_source, activity) { return {
-        read() { return activity.runSync('read', {}, () => {
+        read() { return activity.runSync('read', {}, (operation) => {
           executed++;
           if (mode === 'error' || mode === 'describe') throw original;
           if (mode === 'reception') return activity.reception();
-          if (mode === 'transcript') return activity.transcriptObservation.publish({});
-          if (mode === 'memory') return activity.memoryObservation.publish({});
+          if (mode === 'facts') return operation.facts(Facts).publish({});
           return 1;
         }); }
       }; } });
@@ -166,8 +167,9 @@ test('async host ports are rejected without leaking late rejection or losing the
 });
 
 test('provenance and required content port failures cannot enter a resource business fallback', async () => {
+  const Facts = new FactType('sample');
   const { ResourcePortError } = await import('@weiliang0121/capix-resources');
-  for (const mode of ['reception', 'async-reception', 'transcript', 'memory']) {
+  for (const mode of ['reception', 'async-reception', 'fact-throw', 'fact-return']) {
     const original = new Error('host port failed');
     const reports = [];
     const owner = {
@@ -179,13 +181,9 @@ test('provenance and required content port failures cannot enter a resource busi
         if (mode === 'async-reception') return Promise.reject(original);
         throw original;
       },
-      transcript: {
+      facts: {
         publish() {
-          throw original;
-        },
-      },
-      memory: {
-        publish() {
+          if (mode === 'fact-throw') throw original;
           return original;
         },
       },
@@ -197,9 +195,9 @@ test('provenance and required content port failures cannot enter a resource busi
             return activity.operate(
               'read',
               {},
-              () => {
+              (operation) => {
                 if (mode.includes('reception')) return activity.reception();
-                return activity[mode + 'Observation'].publish({});
+                return operation.facts(Facts).publish({});
               },
               options,
             );

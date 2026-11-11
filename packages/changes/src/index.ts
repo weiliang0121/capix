@@ -1,5 +1,6 @@
 /** Capture completed source facts, transfer pending batches and publish to passive consumers. */
 export type { ChangeCapture } from './capture.js';
+export { FactType, type Fact } from './fact.js';
 export { ChangeBuffer } from './buffer.js';
 export { ChangeCaptureError, combineFaults } from './error.js';
 export { captureChange, publishFact, type ChangeProvenance } from './publish.js';

@@ -1,9 +1,9 @@
-import type { MemoryEvent, TranscriptEvent } from '@weiliang0121/capix-protocol';
+import type { ResourceFact } from '@weiliang0121/capix-resources';
 import type { InvocationFact, ResourceObservation } from '../observation/facts.js';
 import { InvocationObservation } from '../observation/invocation.js';
 import { ObservationError } from '../observation/error.js';
 
-type CheckpointActivityEvent = { kind: 'activity'; fact: InvocationFact } | { kind: 'resource'; fact: ResourceObservation } | { kind: 'transcript'; fact: TranscriptEvent } | { kind: 'memory'; fact: MemoryEvent };
+type CheckpointActivityEvent = { kind: 'activity'; fact: InvocationFact } | { kind: 'resource'; fact: ResourceObservation } | { kind: 'fact'; fact: ResourceFact };
 
 /** Recovery forwards every actual fact. The checkpoint owns each consumer's failure lifetime. */
 export class CheckpointObservation extends InvocationObservation {
@@ -16,8 +16,7 @@ export class CheckpointObservation extends InvocationObservation {
   }
 
   override readonly resource = { publish: (fact: ResourceObservation): unknown | undefined => this.forward({ kind: 'resource', fact }) };
-  override readonly transcript = { publish: (fact: TranscriptEvent): unknown | undefined => this.forward({ kind: 'transcript', fact }) };
-  override readonly memory = { publish: (fact: MemoryEvent): unknown | undefined => this.forward({ kind: 'memory', fact }) };
+  override readonly facts = { publish: (fact: ResourceFact): unknown | undefined => this.forward({ kind: 'fact', fact }) };
 
   private forward(event: CheckpointActivityEvent): unknown | undefined {
     try {

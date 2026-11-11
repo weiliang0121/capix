@@ -6,3 +6,4 @@ export type { MemoryFixedApply, MemoryApplyReceipt, MemoryApplyState } from './a
 export type { MemoryState, MemoriesState, MemoriesCommit, MemoriesPersistence } from './persistence.js';
 export { MemoryResource, type CapturedMemories, type MemoryBasis, type MemoryApplication } from './resource.js';
 export { MemoryViewSource, type MemoryViewSummary } from './view.js';
+export { MemoryFacts, type MemoryEvent } from './event.js';

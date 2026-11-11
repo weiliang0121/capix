@@ -34,3 +34,4 @@ export { snapshotValue } from './value/snapshot.js';
 export type { RecordChangeSource } from './source.js';
 export { RecordingError, writeRecord } from './error.js';
 export { RecordResource, type RecordReader, type RecordCreator } from './resource.js';
+export { transcriptRecord, memoryRecord, recordContentFact } from './content.js';

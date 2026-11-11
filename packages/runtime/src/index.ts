@@ -24,7 +24,7 @@ export type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 
 // Live facts and observation installations, independent of the recording preset.
 export { InvocationChangeEmitter, InvocationObservation, ObservationError } from '@weiliang0121/capix-invocation';
-export type { InvocationRelationIdentity, InvocationDescription, InvocationRelationChange, InvocationChange, InvocationFact, ResourceObservation, BusinessEvent, BusinessObservation, InvocationObserver } from '@weiliang0121/capix-invocation';
+export type { InvocationRelationIdentity, InvocationDescription, InvocationRelationChange, InvocationChange, InvocationFact, ResourceObservation, ResourceFact, BusinessEvent, BusinessObservation, InvocationObserver } from '@weiliang0121/capix-invocation';
 export type { EventConsumer } from '@weiliang0121/capix-changes';
 export type { DriverFact, DriverObserver } from './observation/driver.js';
 

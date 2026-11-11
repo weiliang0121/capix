@@ -77,9 +77,6 @@ importers:
       '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
@@ -220,28 +217,30 @@ importers:
       '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@weiliang0121/capix-memory':
+        specifier: workspace:*
+        version: link:../memory
       '@weiliang0121/capix-protocol':
         specifier: workspace:*
         version: link:../protocol
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
+      '@weiliang0121/capix-transcript':
+        specifier: workspace:*
+        version: link:../transcript
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
 
   packages/resources:
     dependencies:
-      '@weiliang0121/capix-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
-    devDependencies:
       '@weiliang0121/capix-changes':
         specifier: workspace:*
         version: link:../changes
+      '@weiliang0121/capix-contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/runtime:
     dependencies:

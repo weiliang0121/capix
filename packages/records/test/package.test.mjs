@@ -25,10 +25,10 @@ function writerAccess(recorder) {
   return new ResourceBindings().register(new Resource(recorder), RecordWriterResource).bind({ writer: RecordWriterResource.request() }).open();
 }
 
-test('record entities have independent public entries and no callable or memory implementation dependency', async () => {
+test('record entities have independent public entries and no callable implementation dependency', async () => {
   const directory = fileURLToPath(new URL('../', import.meta.url));
   const manifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'));
-  const forbidden = ['@weiliang0121/capix-runtime', '@weiliang0121/capix-structure', '@weiliang0121/capix-memory', '@capix/observer-service'];
+  const forbidden = ['@weiliang0121/capix-runtime', '@weiliang0121/capix-structure', '@capix/observer-service'];
   assert.equal(manifest.name, '@weiliang0121/capix-records');
   assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './construction']);
   for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!forbidden.includes(dependency), `records cannot depend on ${dependency}`);

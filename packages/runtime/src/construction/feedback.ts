@@ -1,4 +1,4 @@
-import type { CheckpointInstallation, CheckpointFact, InvocationFact, ResourceObservation, BusinessObservation } from '@weiliang0121/capix-invocation';
+import type { CheckpointInstallation, CheckpointFact, InvocationFact, ResourceObservation, ResourceFact, BusinessObservation } from '@weiliang0121/capix-invocation';
 import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { ObservationInstallation } from '../binding/observation.js';
 
@@ -6,6 +6,7 @@ import type { ObservationInstallation } from '../binding/observation.js';
 export interface CallableFeedback {
   readonly invocation?: ProgressReceiver<InvocationFact>;
   readonly resource?: ProgressReceiver<ResourceObservation>;
+  readonly fact?: ProgressReceiver<ResourceFact>;
   readonly business?: ProgressReceiver<BusinessObservation>;
   readonly checkpoint?: ProgressReceiver<CheckpointFact>;
 }
@@ -19,6 +20,7 @@ export interface CallableFeedbackBinding {
 export function bindCallableFeedback(feedback: CallableFeedback): CallableFeedbackBinding {
   const invocation = fixedReceiver(feedback.invocation);
   const resource = fixedReceiver(feedback.resource);
+  const fact = fixedReceiver(feedback.fact);
   const business = fixedReceiver(feedback.business);
   const checkpoint = fixedReceiver(feedback.checkpoint);
   return Object.freeze({
@@ -27,10 +29,12 @@ export function bindCallableFeedback(feedback: CallableFeedback): CallableFeedba
       bindInvocation: () => {
         const calls = invocation ? new ProgressChannel(invocation) : undefined;
         const resources = resource ? new ProgressChannel(resource) : undefined;
+        const facts = fact ? new ProgressChannel(fact) : undefined;
         const annotations = business ? new ProgressChannel(business) : undefined;
         return {
           observe: (fact: InvocationFact) => calls?.publish(fact),
           resource: (fact: ResourceObservation) => resources?.publish(fact),
+          fact: (fact: ResourceFact) => facts?.publish(fact),
           business: (fact: BusinessObservation) => annotations?.publish(fact),
         };
       },

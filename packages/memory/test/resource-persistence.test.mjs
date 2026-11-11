@@ -12,7 +12,7 @@ import { Resource, Resources } from '@weiliang0121/capix-resources';
 
 import { Transcript } from '@weiliang0121/capix-transcript';
 
-import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { Memories, MemoryFacts, MemoryResource } from '@weiliang0121/capix-memory';
 
 const create = (content) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
 
@@ -94,9 +94,13 @@ test('post-commit capture failure retains shared error identity and can confirm 
   const reported = [];
   const access = memoryBinding(memories).open(
     owner({
-      memory: {
-        publish: (event) => {
-          observed.push(event);
+      facts: {
+        publish: (fact) => {
+          assert.equal(fact.contextId, 'content-host');
+          assert.equal(
+            MemoryFacts.match(fact.fact, (event) => observed.push(event)),
+            true,
+          );
         },
       },
       error: (error) => {
@@ -116,13 +120,15 @@ test('post-commit capture failure retains shared error identity and can confirm 
     );
     assert.ok(reported.includes(failure));
     assert.equal(failure.event, events[0]);
-    assert.equal(observed[0], events[0], 'optional observation still receives the committed fact');
+    assert.deepEqual(observed[0], events[0], 'optional observation still receives the fixed committed fact');
+    assert.ok(Object.isFrozen(observed[0].change.result));
     assert.equal(events[0].origin.contextId, 'content-host');
     assert.equal(memories.sequence, 1);
     const receipt = access.endpoints.memory.applyFixed(input);
     assert.equal(receipt, memories.confirmFixed(fixedRequest(memories, input)));
     assert.equal(writes.length, 1);
     assert.equal(events.length, 1);
+    assert.equal(observed.length, 1, 'confirming an old effect does not publish a second change');
     const restoredTranscript = Transcript.restore(transcript.exportState());
     const restored = Memories.restore(memories.exportState(), restoredTranscript, {
       persistence: {

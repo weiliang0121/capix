@@ -1,4 +1,4 @@
-import type { TranscriptEvent, MemoryEvent } from '@weiliang0121/capix-protocol';
+import type { ResourceFact } from '@weiliang0121/capix-resources';
 import type { InvocationFact, ResourceObservation, BusinessObservation } from './facts.js';
 import type { EventConsumer } from '@weiliang0121/capix-changes';
 import type { InvocationObserver } from './observer.js';
@@ -31,8 +31,7 @@ export class InvocationObservation {
   }
   readonly resource: EventConsumer<ResourceObservation> = { publish: (event) => this.dispatch((observer) => observer.resource?.(event)) };
   readonly business: EventConsumer<BusinessObservation> = { publish: (event) => this.dispatch((observer) => observer.business?.(event)) };
-  readonly transcript: EventConsumer<TranscriptEvent> = { publish: (event) => this.dispatch((observer) => observer.transcript?.(event)) };
-  readonly memory: EventConsumer<MemoryEvent> = { publish: (event) => this.dispatch((observer) => observer.memory?.(event)) };
+  readonly facts: EventConsumer<ResourceFact> = { publish: (fact) => this.dispatch((observer) => observer.fact?.(fact)) };
   private dispatch(work: (observer: InvocationObserver) => unknown): unknown | undefined {
     return publishSessions(this.#sessions, work);
   }

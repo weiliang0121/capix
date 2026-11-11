@@ -46,6 +46,13 @@ const receiver: RunnerObservationReceiver = {
       event.fact.describe();
       void [contextId, offerId, phase];
     }
+    if (event.source === 'fact') {
+      const operationId: string = event.fact.operationId;
+      const name: string | undefined = event.fact.name;
+      // @ts-expect-error Passive fact metadata never exposes the typed producer body.
+      const body = event.fact.fact;
+      void [operationId, name, body];
+    }
     if (event.source === 'checkpoint') {
       const activityId: string = event.fact.activityId;
       const recovering: boolean = event.fact.recovering;
@@ -55,6 +62,12 @@ const receiver: RunnerObservationReceiver = {
         // @ts-expect-error Saved images and their business contents are not observation metadata.
         const frame = event.fact.frame;
         void [point, children, frame];
+      }
+      if (event.fact.kind === 'fact') {
+        const operationId: string = event.fact.fact.operationId;
+        // @ts-expect-error Checkpoint fact metadata never exposes the typed producer body.
+        const body = event.fact.fact.fact;
+        void [operationId, body];
       }
       if (event.fact.kind === 'failed') {
         const code: string = event.fact.diagnostic.code;
@@ -103,6 +116,14 @@ const feedback: EntryFeedback = {
     receive(fact) {
       const contextId: string = fact.identity.contextId;
       void contextId;
+      return undefined;
+    },
+  },
+  fact: {
+    receive(fact) {
+      const operationId: string = fact.operationId;
+      const body = fact.fact;
+      void [operationId, body];
       return undefined;
     },
   },

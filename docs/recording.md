@@ -2,7 +2,7 @@
 
 记录实体由 `@weiliang0121/capix-records`（`packages/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@weiliang0121/capix-records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`packages/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。
 
-Runtime 的 `@weiliang0121/capix-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `packages/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 提供事实到记录的映射。实体包不依赖 Runtime、结构或内容实体包。
+Runtime 的 `@weiliang0121/capix-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `packages/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 仅处理调用结果映射。records 的 content 适配持有消息／记忆映射，并显式依赖两个内容包的事实类型身份；记录实体本体不依赖 Runtime 或结构。
 
 Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 RecordClock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 `packages/records/src/tree/`，具体关系规则位于 `tree/relation.ts`，不处理 Context、业务正文或 ExecutionRecordSnapshot。
 
@@ -55,7 +55,7 @@ RecordRegistration 只覆盖一次记录登记，既不包含整个 Callable 调
 
 ## 调用记录
 
-`bindRecording(recorder, { failure?, invalidate? })` 创建宿主记录安装，默认为树中各结构选择记录声明；build 前用 `installation.describe(structure, { input?, output?, relationAccepted?, relationHandled?, role? })` 登记投影与角色。底层 `invocationRecording` 仍是安装使用的观测声明，申请 InvocationRecordAccess；普通结构不含 observation 配置。InvocationRecording 维护记录句柄、父预设和直接子预设，不建立全局 Context 反查。Invocation 不持有记录或 source，不直接调用记录 Helper。role 是宿主解释用途的元数据；Observer 用 `conversation-task` 标识任务范围，不把所有 Group 当成任务。
+`bindRecording(recorder, { failure?, invalidate?, fact? })` 创建宿主记录安装，默认为树中各结构选择记录声明；build 前用 `installation.describe(structure, { input?, output?, relationAccepted?, relationHandled?, role? })` 登记投影与角色。底层 `invocationRecording` 仍是安装使用的观测声明，申请 InvocationRecordAccess；普通结构不含 observation 配置。InvocationRecording 维护记录句柄、父预设和直接子预设，不建立全局 Context 反查。Invocation 不持有记录或 source，不直接调用记录 Helper。role 是宿主解释用途的元数据；Observer 用 `conversation-task` 标识任务范围，不把所有 Group 当成任务。
 
 子调用 returned 使用宿主为该子结构登记的 output 描述；父层 accepted/handled 可以产生不同值，分别由父结构投影的 `relationAccepted(output, relation)` / `relationHandled(output, relation)` 独立描述。默认仍保留原值，不根据对象身份推断两种语义相等。文件分支据此将读取正文和模型请求投影为路径、字节数、摘要或请求元数据；运行中的输入输出与父子接纳仍保留真实对象。模型产生的回答仍按原有规则记录，生成正文可能引用源文，这不等于存储原始文件。
 
@@ -75,13 +75,13 @@ Invocation.failure 是运行中的最终交付事实，不依赖记录存在。C
 
 ## 内容记录与来源
 
-Memories 和 Transcript 负责审查与落实内容，自身不依赖 Recorder。内部 ChangeProvenance 提供 origin.contextId 和类型化观察端口；资源绑定将本调用观察端口传入，实体将正式事件交给必要捕获与可选观察。无调用的独立实体变更可使用环境默认端口。
+Memories 和 Transcript 负责审查与落实内容，自身不依赖 Recorder。内部 ChangeProvenance 提供 origin.contextId 和类型化观察端口；资源适配在本次 operation 中取得准确类型的 facts consumer，实体将正式事件交给必要捕获与可选观察。无调用的独立实体变更可使用环境默认端口。
 
 记录安装从已发生事件构造 TranscriptRecord / MemoryRecord。RecordChangeSource 只存在于记录特化中，由本次记录句柄和父预设推导，实体不接收 callId/executionId，也不反查 Context。服务输入由 Scene 的普通 append 资源正式写入，归已经存在的 Scene 调用；此时尚未建立任务 Group，不伪造任务记录。
 
 TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UID 和绝对 index 用于跨端定位；TranscriptRangeRef/MessageRef 只可在内部实体适配中使用，不能进入记录正文。snapshotValue 对普通记录数据执行复制、检查、冻结，不再识别并保留这些实体引用。
 
-`observeMemory` 从 `@weiliang0121/capix-records` 导入，按结构兼容的只读输入组合当前记忆内容与已有 MemoryRecord。它只要求集合提供 `transcript.id` 和 `values()`，使用协议中的记忆值；记录包不依赖 `@weiliang0121/capix-memory`，也不持有或恢复 Memories。
+`observeMemory` 从 `@weiliang0121/capix-records` 导入，按结构兼容的只读输入组合当前记忆内容与已有 MemoryRecord。它只要求集合提供 `transcript.id` 和 `values()`，使用协议中的记忆值，不持有或恢复 Memories。records 的默认内容适配另外依赖 memory 的公开事实类型身份；Memory 字段和剩余协议归属将在后续阶段收敛。
 
 ## 资源运行事实
 
@@ -136,3 +136,11 @@ InvocationRecord 表达一次调用的正文机制，新实时载体为 Callable
 `@capix/conversation-service/recording` 在 build 前调用 `createConversationRecording(scene, recorder, options?)`，为实际结构树登记服务输入/输出/接收摘要，并复用 `bindRecording`。调用材料保留来源身份、版本、索引和数量，正文长度与数组条数替代反复复制；特殊非 JSON 返回值转成描述。正式消息范围、记忆变更和资源事实继续由已有预设按真实调用归属记录，业务节点没有额外 Recorder 依赖。
 
 CLI `--records PATH` 为宿主选项，未启用不创建记录安装；启用后在内存记录，并在本地入口与独立发送结束后导出完整性标记和 RecordBook 快照。isolate 的 invalidate 使该份来源永久 incomplete，严格失败仍依既有 propagate 处理。单次摘要有界不代表记录总量有界，退出导出也不代表崩溃可恢复。具体文件生命周期与使用见 [对话服务宿主](../../capix-lab/docs/conversation-host.md)。
+
+## 业务事实的记录适配
+
+低层调用只转交 ResourceFact，不再提供 transcript／memory 两个专用观察端口。`bindRecording` 的可选同步 `fact(envelope, source, writer)` 在本次观察写窗口中解释领域事实：用生产者的 `FactType.match(envelope.fact, ...)` 取得准确类型，再明确选择记录形式。新增实体不需要修改 Invocation 或 CP 的事件枚举；没有匹配的事实仍可被其他安装观察，记录预设不伪造解释。
+
+默认 handler 为 records 公开的 `recordContentFact`，沿用 TranscriptRecord／MemoryRecord。自定义 handler 可显式先调用它，再匹配业务事实。默认适配核验资源 context 与记录 source 一致，并要求已知内容事件的 origin 属于同一调用；缺失或错配仍像原实现一样拒绝，通过 isolate／propagate 处理。独立实体的无调用记录仍使用 installation.transcript／memory 或显式记录工厂，不从“当前调用”补来源。
+
+`transcriptRecord(event, source?)`、`memoryRecord(event, source?)` 是同一映射的公开函数。资源操作 UUID 单独位于 envelope.operationId，不写入 MemoryRecord.operationId（该旧字段指 OperationRecord 的归属）。业务记录如需准确操作连线，应在自己的明确投影里保存该 UUID。异步 fact handler 被拒绝，其迟到拒绝被消费；实体已发生的效果和记录失败分别保留。
