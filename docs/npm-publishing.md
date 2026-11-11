@@ -35,7 +35,7 @@ pnpm release:check
 发布由维护者在本地终端完成。GitHub 只保留 CI 与自动版本 PR，不需要配置 npm GitHub token、trusted publisher 或发布 Environment。
 
 1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次 18 个准确包名及其发布权限。本地验证不能证明远端名称占用或发布权限。
-2. 原 17 包的 `0.1.0` 首发已完成。本次包含 ModelExchanges 契约变更与新增 Tool 的待发布 changesets，先按下节流程审阅并合并版本 PR；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。核对 18 包 fixed 组的版本计划后，在干净的已审阅提交上完成上述验证。不要直接重发已有 `0.1.0`；`release:publish` 会拒绝尚未处理的 changesets。
+2. 原 17 包的 `0.1.0` 首发已完成。当前待发布 changesets 包含 ModelExchanges 固定起点、新 Tool、类型化领域事实、独立 Memory、领域／协议出口归位及 View 来源适配。它们包含破坏性公开契约修订，消费方不能只替换版本号。先按下节流程审阅并合并版本 PR；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。核对 18 包 fixed 组的版本计划后，在干净的已审阅提交上完成上述验证。不要直接重发已有 `0.1.0`；`release:publish` 会拒绝尚未处理的 changesets。
 3. 在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天；发布时按终端提示完成认证。
 4. 执行 `pnpm release:publish`，上传当前尚未存在的版本。此命令会写入 npm，只有决定正式发布时才执行。
 
@@ -70,4 +70,4 @@ pnpm release:publish
 
 Observer 内容参考装配及其测试已移至 `capix-lab/services/observer-content`，不再进入 CAPiX 候选 tarball 批次，也未转为公开预设。17 个已发布包与 18 个当前公开／候选包是不同范围；旧 20／21 包 manifest 不代表当前完整批次。
 
-候选消费者需自行适配新增包及契约变化。本次 ModelExchanges v2 与 Tool 的框架验证不代表 capix-lab 原参考服务已完成迁移；Lab 的候选清单、资源登记与持久适配仍需在其任务中单独处理。
+候选消费者需自行适配新增包及契约变化。本次 ModelExchanges v2、Tool、Memory v2、FactType 与协议出口的框架验证不代表 capix-lab 原参考服务已完成迁移。Lab 的独立实体对照实验使用新批次和自己的锁文件，不改变根 workspace 的旧批次；服务的资源登记、持久／CP 编码、业务协议和 UI 仍需在其任务中单独处理，见 [Lab 迁移清单](../../capix-lab/docs/framework-candidate-migration.md)。

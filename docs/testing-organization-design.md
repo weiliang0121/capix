@@ -1,6 +1,6 @@
 # 包内测试与框架自证设计
 
-当前范围为 18 个公开包与 2 个私有客户端包。ActiveView、ConversationContent、默认材料策略和内容同步的组合测试已随实现迁至 Lab 的 `services/observer-content/test`；CAPiX 继续独立验证 Transcript、Memory、View、Resources 等共享契约，不以 Lab 测试为框架门槛。
+CAPiX 当前测试范围为 18 个公开包；两个私有客户端包及测试归 Lab。ActiveView、ConversationContent、默认材料策略和内容同步的组合测试已随实现迁至 Lab 的 `services/observer-content/test`；CAPiX 继续独立验证 Transcript、Memory、View、Resources 等共享契约，不以 Lab 测试为框架门槛。
 
 日期：2026-11-10。状态：已实施。原测试目录、脚本和 CI 已按本设计收敛，具体迁移与验证见[实施记录](testing-migration.md)。
 

@@ -8,9 +8,9 @@
 | -------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | 包内类型 | 由所属包解释的专属概念；宿主仍可实现其公开端口   | 结构配置状态、资源捕获、Invocation 控制、CP Store                                                               |
 | 共同契约 | 多个包需要遵守同一形状，但不需要知道实现对象     | CallableContract、InvocationIdentity、InvocationOrigin、ChildCalls、Work、操作接收、输出端口、CP 编码与认证事实 |
-| 跨端协议 | 实际跨端传输的共享形状，需要解析、版本和兼容约定 | protocol 的 Transcript 基线／增量；Lab 私有协议的会话提交和业务观测                                             |
+| 跨端协议 | 实际跨端传输的共享形状，需要编码、接纳和版本约定 | protocol 的 Transcript 基线／增量；Lab 私有协议的会话提交和业务观测                                             |
 
-类型不会因为 `export` 或有两个 import 就自动晋级。单纯持久化也不自动属于 protocol，例如 CP Frame 属于 `@weiliang0121/capix-checkpoint` 的保存格式，invocation 依据它安装运行关系，尚不构成跨端协议。先确定它表达的责任及消费者，再决定归属；使用者可以从所属包的公开入口取得类型。共同契约的改变需要同时检查提供者与消费者，成为协议还需要检查编码、接纳和历史兼容。
+类型不会因为 `export` 或有两个 import 就自动晋级。单纯持久化也不自动属于 protocol，例如 CP Frame 属于 `@weiliang0121/capix-checkpoint` 的保存格式，invocation 依据它安装运行关系，尚不构成跨端协议。先确定它表达的责任及消费者，再决定归属；使用者可以从所属包的公开入口取得类型。共同契约的改变需要同时检查提供者与消费者，成为协议还需要明确编码、接纳和版本拒绝边界。当前开发阶段不维护旧库、旧 CP 或旧业务契约的升级路径，不能把协议版本约定解释为自动兼容旧格式。
 
 ## 当前依赖
 
@@ -68,11 +68,13 @@ ChildReference、I/O 签名、CP point owner 等见证只有一个定义。结�
 
 ## 领域数据与跨端接纳
 
-`@weiliang0121/capix-transcript` 自有 Message、MessageLocator、TranscriptRangeLocator、TranscriptSnapshot 和 TranscriptEvent。`measurement` 通过该公开 Message 类型按对象身份计数。`@weiliang0121/capix-records/data` 自有记录 DTO、归档形状与校验、输出读取及通用历史查询契约；它不加载 Recorder 或 Node 实现，不依赖业务协议。
+实体承载持续累积的信息，资源开放受控操作，View 组织本次材料。`stableValue` 与 View 包的 `createViewSource` 是现有共享能力；实体的版本推进与条件更新复用仍需独立设计，contracts 与 protocol 均不提供通用实体容器。
+
+`@weiliang0121/capix-transcript` 自有 Message、MessageLocator、TranscriptRangeLocator、TranscriptSnapshot 和 TranscriptEvent。`measurement` 通过该公开 Message 类型按对象身份计数。`@weiliang0121/capix-memory` 自有 MemoryItem、Memories 的内容、批次、依据、事件和持久契约，不依赖 transcript 或 protocol；它是压缩总结预设，不是通用业务状态容器。`@weiliang0121/capix-records/data` 自有记录 DTO、归档形状与校验、输出读取及通用历史查询契约；它不加载 Recorder 或 Node 实现，不依赖业务协议。
 
 `@weiliang0121/capix-protocol` 只保留根出口：TranscriptWireMessage、TranscriptWireSnapshot、TranscriptWireEvent、TranscriptFrame、TranscriptUpdate 和 acceptTranscriptUpdate。Wire 类型明确表达跨端副本，不重导领域本体。acceptTranscriptUpdate 接收 unknown，固定并校验单个 baseline、delta 或 error 值；返回不可变材料。它不持有流状态，不核对前后连续性，不组织传输、重连或调用，也不提供实体恢复资格。
 
-会话提交、admission、Observer 聚合、内容展示和业务增量等 DTO 归 Lab 私有 `lab-protocol`。Lab 的旧候选分发及运行行为不随框架类型归位自动升级；本轮文档不表示 Lab 已导入或验证新版框架产物。框架本身独立验证公开领域出口、纯数据接纳和机制契约。
+会话提交、admission、Observer 聚合、内容展示和业务增量等 DTO 归 Lab 私有 `lab-protocol`。Lab 仍消费旧候选，Memory、Tool 与观察契约尚未整体适配当前框架；业务协议交接不表示已导入或验证新版框架产物。框架不反向依赖这些业务 DTO 或 Lab workspace，独立验证公开领域出口、纯数据接纳和机制契约；Lab 验证不作为 CAPiX 合入或发布前提。
 
 ## 绑定接缝
 

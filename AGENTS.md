@@ -72,9 +72,10 @@ Message／定位／领域变化归 transcript；InvocationEvent 与阶段词汇�
 
 ## 实体、交互和参考服务
 
+- 持续累积、再次引用或演化的信息由明确的实体所有者承接；实体能力契约说明可兑现的固定读取、版本、更新或历史能力，资源开放受控操作，View 组织本次使用范围。Memory 是压缩总结预设，不把业务结果、确认或推进状态强制装成记忆。共性应逐步收敛为可复用能力，不能把作者重复实现视为最终目标；当前已有 stableValue／ViewSource／createViewSource 等接缝，尚无统一版本容器或自动实体历史／事务能力。
 - 自定义实体按能力组合，不要求 Entity 基类、统一状态枚举或特定业务 value。View 的可选同步 `createViewSource` 固定读取入口、核验版本并隔离被动内容；作者负责准确版本、scope 与缺项 RangeError，inspect/read 不扫描目录，undefined 不是缺项信号。异步来源仍实现 ViewSource。材料固定不等于历史可查或效果可重做，领域事实与记录由实际资源操作显式关联。见 [自定义实体](docs/custom-entities.md)。
 - Transcript 正式消息只追加；Memories 独立于 Transcript，以集合统一写入固定的 `{id,value:{content,metadata?}}`，更新保留单项 UUID，不保留 topic 或强制来源；`memoryResources<Metadata>()` 创建一次供作者与宿主共享的准确 Offer。View 仅保存来源范围、成员及派生索引，不持有实体或活动端点。has/members 本地查，include 仅核验新增项，exclude 不读来源，apply 依据完整版本核验。退出视图不删除实体、不强制替代内容或来源累加。
-- Memory 的领域类型与变化事实归 memory，不依赖 protocol；状态与固定请求使用当前 v2。完整 Stable 材料不等于 JSON，持久／CP 适配需明确保真 codec；默认 records／wire 仅投影 content 与可选 reason，不冒充实体恢复依据。持久端口异常后该 Memory 实例拒绝新写入及当前查询，准确旧回执仍可确认；由宿主从权威存储重新载入，不自动重试。发布失败不撤销已安装内容，也不使实例进入提交不确定。
+- Memory 的领域类型与变化事实归 memory，不依赖 protocol；状态与固定请求使用当前 v2。完整 Stable 材料不等于 JSON，持久／CP 适配需明确保真 codec；默认 records 仅投影 content 与可选 reason，不冒充实体恢复依据，业务 wire 由宿主维护。持久端口异常后该 Memory 实例拒绝新写入及当前查询，准确旧回执仍可确认；由宿主从权威存储重新载入，不自动重试。发布失败不撤销已安装内容，也不使实例进入提交不确定。
 - 实体同步变更先检查、持久成功后安装，再发布变化；无变化也应完成要求的依据核验。持久异常和同步契约违规属于 PersistenceError，不凭本地未安装推断外部未提交。读取快照不隐含全局事务，版本不可复用，冲突不自动重试。
 - ActiveView、ConversationContent 及内容同步整体归 capix-lab/services/observer-content 参考装配，尚未作为通用公开预设发布。Transcript、Memory、View、Resources 等共享机制继续由 CAPiX 维护。内容策略、材料选择、记忆提取与压缩是业务可替换 Node/Group 或实体预设，不把模型判断和默认策略固化成内核职责。完整材料和供模型查看的活跃视图分别表达。
 - Interaction 固定请求只发送一次，与调用独立存活；signal只终止局部等待，晚到反馈可保存并再次读取。宿主关闭先停止本地入口，再等其持有的外部发送 settled。未知反馈不自动重发。

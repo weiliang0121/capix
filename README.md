@@ -80,7 +80,9 @@ CP 只恢复显式声明的 point 和完整依据，不恢复 JavaScript 栈、�
 
 ## 参考装配与实验
 
-完整 Conversation / Observer 服务、页面和大型实验由相邻的 **capix-lab** 承接。当前使用本地交接位置 [../capix-lab/README.md](../capix-lab/README.md)，没有在此假定其远端仓库地址；GitHub 上的源码读者需要另行取得该仓库。Observer 的 ActiveView、ConversationContent、内容同步及其测试位于 `capix-lab/services/observer-content`，尚未抽象为通用公开预设。CAPiX 继续维护 Transcript、Memory、View、Resources 等共享机制，当前共 18 个公开包和 2 个私有客户端包。这些参考装配不随上述三个 npm 包安装。
+完整 Conversation / Observer 服务、页面和大型实验由相邻的 **capix-lab** 承接。当前使用本地交接位置 [../capix-lab/README.md](../capix-lab/README.md)，没有在此假定其远端仓库地址；GitHub 上的源码读者需要另行取得该仓库。Observer 的 ActiveView、ConversationContent、内容同步及其测试位于 `capix-lab/services/observer-content`，尚未抽象为通用公开预设。CAPiX 只维护 18 个公开框架包，包括 Transcript、Memory、View、Resources；两个私有客户端包也归 Lab。这些参考装配不随上述三个 npm 包安装。
+
+自定义实体以自己的身份、内容和规则承接持续材料，资源开放受控操作，View 组织本次使用范围。现有共享能力与可运行示例见[自定义实体](docs/custom-entities.md)；无需把业务事实包装成记忆或继承统一 Entity。仓库当前的 Memory、领域事实、protocol 和 View 修订仍待发布，npm `0.1.0` 不代表这些新契约；消费候选时须明确整批产物和来源摘要。Lab 的独立实体实验已消费新候选，现有参考服务尚未整体升级。
 
 离线对话、真实模型配置、宿主数据库与页面启动命令以 capix-lab 的 README 为准。CAPiX 不读取相邻仓库的凭证、配置或源码来运行；跨仓候选验证使用明确的一批打包产物。迁移位置和适用基线见 [仓库拆分设计](docs/repository-split-design.md)。
 

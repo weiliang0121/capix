@@ -17,7 +17,7 @@
 | 记录、观测和运行出口       | [记录](recording.md)、[增量观测](observation-increments.md)、[运行出口](runtime-ports.md)                                                        |
 | 客户端与跨端协议           | [客户端运行能力](client-runtime.md)、[协议](protocol.md)                                                                                         |
 
-CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer 是 **schema 6 加完整当前表形状**。格式版本、业务声明版本和实体修订分别核验，不能互相替代。恢复只消费已保存依据，不恢复草稿、任意执行栈或未确认的外部效果。
+框架 CP 当前是 **Frame v6**。格式版本、业务声明版本和实体修订分别核验，不能互相替代。恢复只消费已保存依据，不恢复草稿、任意执行栈或未确认的外部效果。Lab 当前旧候选服务的 Conversation schema 8、Observer schema 6 是宿主基线，不是新框架实体的格式兼容承诺；后续升级见 [Lab 迁移清单](../../capix-lab/docs/framework-candidate-migration.md)。
 
 ## 使用和服务装配
 
@@ -25,11 +25,11 @@ CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer �
 - 最小资源／结构示例：[dictionary.mjs](../examples/dictionary.mjs)；Runner：[runner.mjs](../examples/runner.mjs)。
 - 新内核的典型服务：[Conversation README](../../capix-lab/services/conversation/README.md)、[宿主与持久化](../../capix-lab/docs/conversation-host.md)、[浏览器体验](../../capix-lab/docs/conversation-web.md)、[显式恢复](../../capix-lab/docs/conversation-recovery.md)。
 - 原 Observer 参考服务：[装配](../../capix-lab/docs/service-assembly.md)、[对话身份](../../capix-lab/docs/conversations.md)、[持久化](../../capix-lab/docs/persistence.md)。两个服务的数据库和业务恢复资格独立。ActiveView、ConversationContent、内容同步及其测试由 [Lab observer-content](../../capix-lab/services/observer-content/README.md) 维护，当前不属于框架公开预设。
-- 原生工具：[可运行示例](../../capix-lab/examples/tool-conversation.mjs)、[工具预设](../../capix-lab/services/conversation/src/tools/README.md)。设计过程保留在[协议设计](native-tool-integration.md)和[宿主设计](../../capix-lab/docs/native-tool-host-integration.md)，现行存储以服务文档为准。
+- 原生工具：[框架当前示例](../examples/tool.mjs)、[Tool 公开契约](../packages/tool/README.md)。Lab 的[原服务示例](../../capix-lab/examples/tool-conversation.mjs)和[旧 ToolLoop 装配](../../capix-lab/services/conversation/src/tools/README.md)仍属其固定候选，不能当作新版 Tool 的用法。设计过程保留在[协议设计](native-tool-integration.md)和[宿主设计](../../capix-lab/docs/native-tool-host-integration.md)。
 
 ## 仓库组织与开源准备
 
-- [客户端、协议与实体边界收敛计划](kernel-boundary-migration-plan.md)：近期迁移顺序、阶段完成条件和测试归属；P0／P1 已完成客户端交接，P2 已接通类型化领域事实与普通业务材料。P3 Memory 已独立，P4 领域类型与业务协议已归位；P5 已完成自定义实体入口及独立消费验证，下一步 P6 仓库与契约收尾。Lab 未升级新框架候选。
+- [客户端、协议与实体边界收敛计划](kernel-boundary-migration-plan.md)：P0—P6 框架迁移与独立验收已完成，第 12 节记录最终范围与验证。Lab 服务升级另按[迁移清单](../../capix-lab/docs/framework-candidate-migration.md)推进；目前只有独立实体实验消费新候选，根 workspace 尚未升级。
 - [仓库拆分设计](repository-split-design.md)：框架与实验／参考装配两个仓库的目标目录、能力归属、验证交接和分阶段迁移。第一版已实施，后续候选仍需逐项明确边界。
 - [包命名与开源准备](open-source-preparation.md)：统一 `packages/` 的长期布局、保留真实客户端职责、已发布包身份，以及公共入口、贡献说明与公开历史的逐步准备。已落实公开入口与包目录；未改变仓库可见性。
 

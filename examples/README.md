@@ -10,6 +10,6 @@
 - [视图](view.mjs)、[成员操作](view-membership.mjs)、[Skill 视图](view/skills.mjs)：实体与视图组合。
 - [自定义实体](entities.mjs)：可修订 Plan、只追加 Notes 和 Memory 共用资源、View 与调用；[作者契约](../docs/custom-entities.md)说明可选 CP／记录及其边界。
 
-历史[业务推进实验](../../capix-lab/examples/business-progress/README.md)的辅助实现已归 Lab；本仓遗留的 `business-progress.mjs` 入口仍待完整交接，暂不作为可运行示例。不要通过跨仓私有导入补齐它。
+历史[业务推进实验](../../capix-lab/examples/business-progress/README.md)的主入口及辅助实现均归 Lab，由其固定框架批次验证。本仓不保留依赖已迁出辅助实现的入口，也不通过跨仓私有导入运行实验。
 
 完整对话、工具场景、SQLite CP 基准及历史推演在 [capix-lab](../../capix-lab/README.md)。已跟踪的 `intent/results` 原始模型输出暂留原位置等待公开保留决定，不作为本仓示例入口，亦未自动复制到 Lab。

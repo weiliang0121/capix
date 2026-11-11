@@ -1,6 +1,6 @@
 # 自定义实体：按能力接入
 
-业务对象拥有内容、身份和更新规则。CAPiX 按用途读取它提供的材料，通过资源限制操作，再把正式输入、交付和接纳固定下来。业务不必继承 `Entity`，也不必伪装成 Transcript 或 Memory。
+实体承载持续累积的信息，拥有内容、身份和更新规则；资源开放受控操作；View 组织本次使用的材料。实体可表示当前业务状态、追加材料或压缩总结，并不要求保留每个历史版本。CAPiX 把正式输入、交付和接纳固定下来，业务按能力契约接入，不必继承 `Entity` 或伪装成 Transcript、Memory。
 
 完整离线例子见 [entities.mjs](../examples/entities.mjs)，业务对象见 [entities/domain.mjs](../examples/entities/domain.mjs)：可修订 Plan、只追加 Notes 和 Memory 共用 View、Resource 与 Node。运行：
 
@@ -15,6 +15,7 @@ node examples/entities.mjs
 | ---------------------- | ------------------------------------------------------------------------- | --------------------------------- |
 | 在节点中操作业务对象   | `Resource` 加 `ResourceOffer.methods`                                     | 自动持久化、事务、幂等            |
 | 交付一份不再变化的数据 | 普通被动数据；实体也可主动使用 `stableValue` 固定版本                     | 历史版本查询、对象身份保留        |
+| 条件更新业务内容       | 实体自己的更新方法与准确 expected 依据；通过资源开放                      | 通用版本容器、冲突自动重试        |
 | 被 View 选择和读取     | `ViewSource`，同步来源可用 `createViewSource`                             | 自动纳入、材料策略、写入权限      |
 | 发布领域变化           | 自己的 `FactType` 和 `publishFact`，通过实际 `operation.facts(type)` 转交 | 自动推断因果、自动记录或公共 wire |
 | 保存实体内容           | 实体自己的持久端口、编码和确认规则                                        | 跨实体或与 CP 的共同事务          |
@@ -24,7 +25,7 @@ node examples/entities.mjs
 
 ## 同步来源适配
 
-重复的部分是读取约束，而不是业务实体的生命周期。`createViewSource` 归 `capix-view`，把作者已有的单项读取组织成四个来源方法：
+当前已复用的是来源读取约束。`createViewSource` 归 `capix-view`，把作者已有的单项读取组织成四个来源方法；它不负责实体内容固定或版本推进：
 
 ```ts
 import { createViewSource } from '@weiliang0121/capix-view';
@@ -102,4 +103,6 @@ return state;
 - [Runtime 组合回归](../packages/runtime/test/entity-chain.test.mjs) 覆盖普通可变业务状态、追加材料和 Memory；CP／记录四种开关组合都通过相同资源和真实调用路径。验证旧值不变、过期依据拒绝、准确操作关联、窗口关闭和显式恢复不重复效果。
 - [仓库外消费](../scripts/release/fixtures/consumer.mjs)与[类型消费](../scripts/release/fixtures/consumer.ts)直接安装公开包验证上述接缝，不导入仓库测试夹具或 Lab 源码。
 
-本轮不新增通用 Entity 容器。可修订对象与追加集合的写入和版本规则并不相同；它们共享的读取机制已经由适配器承接。需要预设实体时，应先确定其独立的领域承诺，再组合这些能力。Memory 是压缩总结的预设，不承担任意业务状态的存储模板。
+现有可复用能力包括 `stableValue` 的被动数据固定、`createViewSource` 的同步读取与版本核验，以及资源窗口和类型化事实转交。实体的版本生成、条件更新、持久提交及固定写入确认仍由各自实现负责；当前没有通用版本容器或实体更新 helper。示例中的 Plan／Notes 写入代码是业务实现，不是已经交付的通用更新 API。
+
+通用抽象应继续降低作者重复实现固定、版本与条件更新的负担。下一步需要比较实际重复代码、明确更新与失败契约后再设计复用能力；P5 的读取适配不能作为这些能力已完成或不再需要的结论。实体仍按能力组合，是否需要可选容器另行论证，不预设 Entity 基类。Memory 只承载压缩总结预设，提取与压缩由可替换策略完成，任意业务状态使用自己的实体。

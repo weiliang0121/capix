@@ -1,10 +1,10 @@
 # 内容实体与独立包
 
-CAPiX 维护共享实体与机制；Observer 专用内容组合及测试位于 `capix-lab/services/observer-content`，尚未成为通用公开预设。本文描述共享包与 Lab 参考装配的协作边界。包边界让各对象能够单独阅读、验证和继续整理；没有新增统一内容平台，也没有给每个值增加生命周期。
+实体承载持续累积的信息，资源开放受控操作，View 组织本次材料。CAPiX 维护共享实体与机制；Observer 专用内容组合及测试位于 `capix-lab/services/observer-content`，尚未成为通用公开预设。本文描述共享包与 Lab 参考装配的协作边界。包边界让各对象能够单独阅读、验证和继续整理；没有新增统一内容平台，也没有给每个值增加生命周期。
 
-P3 已落实独立 Memory 内容及其资源、View、记录与协议投影，当前 API 见 [记忆](memory.md)。Lab 的提取策略、宿主持久编码与客户端尚未迁移；P4 已归位消息、记录和调用进度类型，Lab 组合说明不表示其已导入或验证新版框架产物。[实体能力契约盘点与迁移候选](entity-capabilities-audit.md) 保留设计盘点范围。
+独立 Memory 内容及其资源、View 与默认记录投影已经落实，当前 API 见 [记忆](memory.md)。框架 protocol 只提供 Transcript wire；Memory 展示投影属于具体业务。消息、记录和调用进度类型已归位各自领域包。Lab 仍使用旧候选，其提取策略、宿主持久编码、Memory／Tool 与观察契约尚未整体适配；本文的 Lab 组合说明不表示其已导入或验证新版框架产物。[实体能力契约盘点与迁移候选](entity-capabilities-audit.md) 保留设计盘点范围。
 
-P5 的[自定义实体](custom-entities.md)提供作者入口：普通业务对象用可选 `createViewSource` 接入相同 View／资源／调用链，CP 和记录分别装配。复用读取约束，不新增 Entity 基类或统一业务容器；现有实体按自身领域承诺继续独立实现。
+[自定义实体](custom-entities.md)提供当前作者入口：普通业务对象用可选 `createViewSource` 接入相同 View／资源／调用链，CP 和记录分别装配。实体按固定读取、版本核验、条件更新等能力契约组合。现有 `stableValue` 与 `createViewSource` 已复用数据固定和读取约束；版本推进、条件更新及持久确认仍由各实体实现，进一步降低更新代码重复的复用能力尚需设计，当前没有 Entity 基类或通用版本容器。Memory 是压缩总结预设，提取与压缩策略由上层组合。
 
 ## 对象与包
 
@@ -54,7 +54,7 @@ flowchart TD
 
 图只展开内容和记录协作关系；共享实体、measurement 与 records 不依赖 protocol；共同契约与诊断由各自公开包提供。measurement 的 Message 来自 transcript 公开类型，WeakMap 计数仍按准确对象身份，不按文本或位置合并。Runtime 安装资源端点与可选记录预设，实体包不调用 Runtime。`observeMemory` 通过集合 `id` 与 `values(): readonly {id,value}[]` 的只读结构契约组合当前 content 与记录，按准确 memoriesId 过滤。records 的默认内容适配显式依赖 memory、transcript 的公开事实类型身份；Memory 本体不依赖 protocol 或 transcript。
 
-默认记录／wire 只投影记忆 content 与可选操作 reason，不复制未知 metadata。baseline 与增量采用相同形状，更新替换 value；需要主题、消息跳转或其他字段时由业务显式提供自己的投影，不能把展示 DTO 当作完整实体快照或恢复材料。
+默认记录只投影记忆 content 与可选操作 reason，不复制未知 metadata。框架 protocol 不提供 Memory wire，业务展示由宿主明确投影。baseline 与增量采用相同形状，更新替换 value；需要主题、消息跳转或其他字段时由业务显式提供自己的投影，不能把展示 DTO 当作完整实体快照或恢复材料。
 
 ## 包内组织与公开出口
 
@@ -120,7 +120,7 @@ sequenceDiagram
   end
 ```
 
-选择、加载和初始化 SQLite 仍由 `services/observer` 完成。内容包只消费 `ConversationContentPersistence`：实体提交端口及内容故障报告；不查数据库、不持有连接。`loadConversationContent` 因此仍在服务装配侧。
+选择、加载和初始化 SQLite 由 Lab 的 `services/observer` 完成。内容包只消费 `ConversationContentPersistence`：实体提交端口及内容故障报告；不查数据库、不持有连接。`loadConversationContent` 因此仍在服务装配侧。
 
 `ConversationContent` 可以跨运行安装存活。借用它的环境关闭时只解除自身观察；拥有它的宿主才关闭内容同步。实体本身不跟随一次 Invocation 创建或销毁。资源窗口关闭后端点失效，实体和已经正式接纳的内容仍存在。
 
@@ -164,13 +164,13 @@ resources.register(new Resource(transcript), TranscriptResource.append);
 
 Runtime 的 `/content` 出口已删除；根与 `/recording` 对记录实体的旧重导也已删除，`/recording` 仅保留运行观测预设。记录载体的已有 kind 与调用历史解释保留，Memory 的旧 topic/来源正文形状明确拒绝；不改变 Frame 格式与恢复语义。Lab 的 `@capix/observer-content` 组合 Observer 内容生命周期并提供参考装配自己的 ActiveView 策略，不重导独立实体包或通用 View。通用 Transcript wire 由 protocol 根的 TranscriptWireMessage/Snapshot/Event、TranscriptFrame/Update 与 acceptTranscriptUpdate 提供；领域类型直接从 transcript 获取。会话、Observer 和内容展示业务 DTO 归 Lab 私有 lab-protocol，旧候选行为不自动升级；Lab 尚未消费新版框架的状态不因这次类型迁移改变。
 
-## 后续逐包整理
+## 后续维护边界
 
 共享实体按各自契约继续维护。Memory 的 P3 公开值、固定确认、资源、View 与默认记录投影已经落实；后续 Lab 业务装配、持久 codec 与客户端接纳单独迁移，不能把现有参考装配当作新接口的已适配消费者。
 
 资源与 Invocation 通过中立的类型化 ResourceFact 转交事实，实体包持有各自 FactType；具体消息／记忆解释由 records 默认适配承担。事实来源关联不自动证明业务因果，也不是通用事件注册或插件机制。
 
-MessageUsage 当前生产路径通过服务的 `ConversationMaterialUsageResource` 核对正式消息后写入；独立 `MessageUsageResource.record` 保留，尚未被生产 deps 使用。目前服务不读取它的 get()；界面由 observeSelection 根据记录中的成功结果另算统计。两者的时机和历史范围不同，本轮保持原行为，下一轮先明确计量口径与消费者，再决定如何协作。
+Lab 参考装配中的 MessageUsage 路径通过服务的 `ConversationMaterialUsageResource` 核对正式消息后写入；独立 `MessageUsageResource.record` 保留，尚未被生产 deps 使用。目前服务不读取它的 get()；界面由 observeSelection 根据记录中的成功结果另算统计。两者的时机和历史范围不同，本轮保持原行为，下一轮先明确计量口径与消费者，再决定如何协作。
 
 observer-content 的 ChangeConsumer 与在途调用聚合属于 Lab 宿主观测交付；业务 ObserverChange 由 Lab 私有 lab-protocol 持有，不回流到框架 protocol 或共同契约。其消费新版框架的适配与验收由 Lab 单独推进。
 
