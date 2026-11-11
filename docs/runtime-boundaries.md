@@ -63,35 +63,9 @@ await runner.run(input, options);
 
 资源端点验证本地调用、阶段/轮次及固定控制信号，不递归查询祖先状态。阶段变化不重新解算声明。正常 run 及其中的操作接收共用本次业务窗口；恢复有独立窗口，旧端点不可跨窗口复用。普通调用没有轮次切换或独立异常阶段。CP resume 离开后其独立窗口永久关闭。
 
-## Observer 的输入与材料
+## 输入、构造与材料
 
-服务的 ConversationScene 通过正式 append 资源落实输入，然后把 `{message,messageIndex,fileTask?}` 作为普通输入交给 ConversationGroup。Task 是普通 Group；内核没有 E 专属 entry、EntryInput 或按层固定的资源准备。
-
-```mermaid
-sequenceDiagram
-    participant Runner
-    participant Scene
-    participant Content as Transcript
-    participant Builder as CallableInvocationBuilder
-    participant Source as 明确的资源 scope / 调用 hooks
-    participant Task as Task Group
-    Runner->>Scene: 启动普通调用
-    Scene->>Content: 正式 append 输入
-    Content-->>Scene: 已落实位置
-    Scene->>Builder: create(task, acceptedInput)
-    Builder->>Source: capture(input, 本次 options)
-    Source-->>Builder: 固定配置、定位与供给
-    Builder->>Builder: Context / Invocation
-    Builder->>Source: 同步 started
-    Builder->>Task: run(work)
-    Task->>Task: prepareContext，维护后捕获活跃材料
-    Task->>Task: 决策、回答落实、记忆收尾
-    Task-->>Scene: 真实返回
-    Scene->>Scene: 接纳
-    Scene-->>Runner: 最终交付
-```
-
-输入已落实而 Task 尚未建立时失败，保留内容及 Scene 的事实，不伪造 Task。模型配置在根校验时固定，原文定位在 Task 构造时捕获；真正模型材料由 prepareContext 在可选维护后一次捕获，其后各能力使用同一份固定材料。默认不隐式裁剪或分段，容量超限明确失败。
+输入固定、构造来源捕获和业务材料选择是三个不同边界。输入在 capture/refine 前固定；显式 scope 与 hooks 可取得本次宿主参数及供给；业务可在 run 中通过资源读取固定材料。业务已经写入实体而子调用尚未建立时失败，保留真实实体与父调用事实，不伪造子调用。
 
 started 在 Context 建立后、调用 started 事实前同步运行，必须返回 undefined。异步或其他返回拒绝；意外 Promise 的迟到拒绝被消费，不承诺撤销已经开始的副作用。恢复旧调用不重复 started；恢复活动中新建调用正常登记。被动 progress 不能替代这个严格建立钩子。
 
@@ -134,7 +108,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 对象按次创建并不自动归属调用包。作者 Work 适配需要理解成员、deps、恢复 uses 与 point；它调用单次机制，但仍是结构向调用的适配。因此 `packages/runtime/src/construction/` 与 InvocationCapabilities 留在 Runtime。DriverFact/DriverObserver 描述宿主入口，也留在 Runtime；调用观察会话只按固定对象身份关联，不反向引用观察安装对象的类型。
 
-低层消费者从 `@weiliang0121/capix-invocation` 取得单次机制。纯数据进度契约由 `@weiliang0121/capix-invocation/events` 提供 InvocationEvent、过程阶段／动作和关系 phase；该入口不加载活调用或 Node API。共享 InvocationRelationIdentity 与 CallableKind 从 contracts 取得。Runtime 的记录适配使用 records/data 的记录类型与校验，不依赖 protocol 或业务 DTO。Runtime 原根入口和 `/construction` 中已有的调用名称精确重导新包的同一对象，不扩大为整个包的通配出口，也不复制错误类。Observer 对 Clock、取消、故障、进展和 CP 端口直接使用新包；结构配置、callableHooks、Runner 和交互装配保持原入口。业务作者仍使用相同的 `run(work)`，没有新增装配步骤。
+低层消费者从 `@weiliang0121/capix-invocation` 取得单次机制。纯数据进度契约由 `@weiliang0121/capix-invocation/events` 提供 InvocationEvent、过程阶段／动作和关系 phase；该入口不加载活调用或 Node API。共享 InvocationRelationIdentity 与 CallableKind 从 contracts 取得。Runtime 的记录适配使用 records/data 的记录类型与校验，不依赖 protocol 或业务 DTO。Runtime 原根入口和 `/construction` 中已有的调用名称精确重导新包的同一对象，不扩大为整个包的通配出口，也不复制错误类。宿主可直接使用 invocation 的 Clock、取消、故障、进展和 CP 端口；结构配置、callableHooks、Runner 和交互装配由 Runtime 提供。业务作者仍使用相同的 `run(work)`，没有新增装配步骤。
 
 验证入口：
 
@@ -142,11 +116,9 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 - `packages/invocation/test/invocation-boundary-checkpoint.test.mjs`：真实保存等待关系与接纳事实，经 JSON 往返在新 Store/Context 和重建的 CP 契约中续接；固定子交付不重跑，已接纳事实不重复回调，缺失或不一致的子依据明确拒绝。
 - `packages/invocation/test/invocation-boundary-package.test.mjs`：检查独立编译、声明产出和实际模块加载，不借 Runtime/Structure 反向完成工作；执行覆盖父子接纳、调用观测和真实 CP 保存后的续接。
 
-Invocation 当前仍借助 Context.resources 协调资源窗口的开启与关闭。这是固定供给与本次活动的具体接线，没有为分包新增通用机制注册器。CP 保存格式、声明版本、实体固定效果与恢复资格均保持原样；此次分包不增加任意位置恢复、自动重放或跨进程接管。
+Invocation 当前仍借助 Context.resources 协调资源窗口的开启与关闭。这是固定供给与本次活动的具体接线，没有为分包新增通用机制注册器。CP 保存格式、声明版本、实体固定效果与恢复资格均保持原样；这些机制不提供任意位置恢复、自动重放或跨进程接管。
 
-## Runtime 职责与收敛（2026-10-27）
-
-以调用包迁移 `628c732` 为基线，完成 Runtime 主路径与局部接缝整理；跨包退出契约已在后续闭环落实，见 [调用退出契约](invocation-exit-contract.md)。独立交互也已迁出，相关接线继续由 Runtime 负责。
+## Runtime 职责
 
 Runtime 有自己的不变量：把一棵结构与宿主供给固定为同一份安装；只允许属于这份安装的调用使用它；按本次输入与窗口兑现已经确定的能力。它不决定业务执行顺序，也不重新实现 Invocation 状态机。“组织模块”仍需要明确这些职责，不能把剩余文件统称为胶水。
 
@@ -221,28 +193,9 @@ sequenceDiagram
 
 这是按接口双向协作，不是包之间的循环依赖：Invocation 消费自己的窄 Work 契约，Runtime 提供适配实现。恢复先核验保存依据、定位固定 point，再进入同一调用构造路径；其 Work 使用 point 的 deps/uses，而非重跑原 run。Interaction 不在这条退出链上，它的发送与反馈可以继续存在。
 
-### 本轮已完成的整理
+### 验证入口
 
-1. **默认构建使用 Resources。** `CallableBuilder.build(structure, resources, interactions?, options?)` 与 `CallableBinder.bind` 是唯一的现代装配入口。`buildResources/bindResources` 已移除。Driver/source 放入 `legacy/`，显式 `buildCallableFromSource(structure, options, capabilities?)` 供旧宿主和来源专项测试使用；它复用同一个 `installCallable`，不另建结构树或调用机制。
-2. **计划、安装结果与本次依据分开。** `CallableBuildPlan` 是解算树与调用接线；原结构上的 `CallableConstruction` 保存最终 binding/calls/invocations；`CallableCallScope` 保存本次根运行的宿主条件和准确归属。`scope.prepare` 返回 `PreparedCall`，明确它提供供给和回调，不是一个资源访问窗口。
-3. **整树发布保持集中。** `structure/install.ts` 负责检查、保留配置、准备全树、复核宿主回调未改写结构、统一安装、finally 解除构建标记。Builder 选择装配条件，Binder 解算固定契约；安装 helper 不引入独立实体或新生命周期。
-4. **入口执行共用明确操作。** `entry.ts` 的 `runEntry` 统一忙碌检查、取得占用、正常或恢复构造、真实调用结束、释放及错误聚合。占用状态仍归 Runner 或 Driver 各根持有。Runner 浅固定 options 和严格 validate 保持；旧 Driver/source 的参数及校验行为保持，不借目录迁移改变兼容语义。
-
-   Runner 的输出订阅与本次取消管理位于 `runner/output.ts`、`runner/cancellation.ts`。公开端点只允许订阅；发布端留在 Runner 内部，由根构造的 `RootInvocationOptions` 连接有效 signal 与输出接收器。资源接线仍消费原宿主 options。取得入口后、宿主校验后、供给准备和构造边界检查取消；已经开始的同步工作不承诺回滚。Runner 边界只映射由本次有效 signal 证明、且首次来自外部 signal 的取消交付，维持旧宿主的准确取消识别；不扫描 cause 或将普通错误归为取消。busy 不替换当前取消归属，旧调用清理核对身份以保留 released 回调里建立的新调用。
-
-5. **静态解算显化步骤。** `resolveDeclaration` 主体保留本层快照/观察/deps、CP 成员检查、成员递归、供给归集与收窄核验；纯辅助函数表达各项检查，全树固定之后才调用宿主 check。没有把一次解算拆成多个管理对象。
-6. **资源安装缩窄。** InstalledScope 只持有 supply、固定及局部 provider、capture；不再保存整个 ResolvedCallable。局部 scope 在构建时一次建索引。本次供给继承和 timing 保持不变。
-7. **Work 与接收配置表达真实前提。** InvocationAccess 和 InvocationWorkBinding 使用准确的 CallableContext 约束，去掉 resources/signal 隐含断言；直接 invoke 与已创建句柄 invoke 共享接收配置校验与方法绑定。显式 create→CP→invoke 的精细时点保留，真实返回与接收事实仍分开。
-
-低层构造 API 有明确调整：旧 `new CallableBuilder(...).build(structure, {source, providers, ...})` 改为 `buildCallableFromSource`；纯资源接线使用新的 Builder.build。内部 scope 的 open 改为 prepare，CallableBindings/CallableCallBindings/CallAccess 分别改为 CallableBuildPlan/CallableCallScope/PreparedCall。根与 `/construction` 按现有职责精确导出这些对象；普通 `new Runner(...).build(); runner.run(input)` 用法不变。
-
-验证入口：`packages/runtime/test/runtime-resolution.test.mjs` 覆盖解算顺序、CP 外部成员拒绝与嵌套供给；`packages/runtime/test/runtime-work-adapter.test.mjs` 覆盖回调 receiver、固定配置、accepted/handled 与接收故障归属；`packages/runtime/test/runtime-entry.test.mjs` 覆盖入口重入、观察失败聚合及旧新宿主差异。框架包内的 Runner、Driver、结构、资源和恢复回归由 CAPiX 独立运行；Lab 服务与客户端维护自己的回归，不作为框架验证前置条件。
-
-### 后续闭环与保留议题
-
-- **退出契约已闭合。** InvocationExecution 统一 `sealOutput → settleAcceptances → Work close`，Runtime 通过 InvocationWork 的可选同步 close 端口返回 OperationOutcome。正文先捕获、接纳排空后认证来源，关闭失败明确归属 control 且不可业务降级。InvocationResources.closeAllResult 耗尽剩余窗口；Invocation 在成功 CP／父交付之前处理关闭结果，最后仅做本地占用释放。原始错误与清理错误均保留，已成立工作／CP 事实不回滚；普通、恢复、低层及微任务边界均有回归。详见 [退出契约](invocation-exit-contract.md)。
-- **交互接线与独立机制。** Interaction/Interactions 已归 `@weiliang0121/capix-interaction`，Runtime 保留 Runner 可选参数和资源通道接线；共享 PersistenceError/RuntimeErrorHelper 已归 diagnostics。更完整的外部执行、沙箱和工作区是后续议题，不由本次分包提前定义。
-- **记录预设与公开出口。** 记录连接结构观察声明、调用事实与记录资源，有作为组合预设的依据。Initializer 仍只是一次性同步创建辅助；这些暂不新增包。普通入口、低层构造与历史重导继续明确标注，不为了减少导出数另建门面。
+[解算测试](../packages/runtime/test/runtime-resolution.test.mjs) 覆盖解算顺序、CP 外部成员拒绝与嵌套供给；[Work 适配](../packages/runtime/test/runtime-work-adapter.test.mjs) 覆盖回调 receiver、固定配置和接收故障归属；[入口测试](../packages/runtime/test/runtime-entry.test.mjs) 覆盖入口重入、释放与观察失败聚合。退出时序与关闭故障见 [调用退出契约](invocation-exit-contract.md)。
 
 ## 稳定调用数据与事实成立
 
@@ -260,13 +213,13 @@ sequenceDiagram
 
 当前内容限额是深度64、展开1000000值、展开文本与记录键共64×1024×1024个UTF-16代码单元。DAG 可在进程内共享固定副本，重复边仍累计展开内容；只有 `stableValue` 自己成功产生的不可变子图具有复用证据，`Object.freeze`、类型断言与外部承诺不能替代。恢复保证数据含义，不保证跨进程对象身份、原型或共享拓扑。限额不是 JS 堆上限，Proxy 的元操作仍可能执行；固定失败是受保护机制故障，不能通过业务 fallback 假造成功。
 
-需要修改收到的数组或记录时生成新值。稳定候选、正式交付、实体落实、CP 提交是四个不同边界；本轮不增加草稿恢复、全局事务、自动重试或新的调用状态实体。实体自己的版本化快照、快照缓存及分块前缀另行推进。
+需要修改收到的数组或记录时生成新值。稳定候选、正式交付、实体落实、CP 提交是四个不同边界；不提供草稿恢复、全局事务、自动重试或新的调用状态实体。实体自己的版本化快照、快照缓存及分块前缀另行推进。
 
 ## 返回、接纳与实体落实
 
-`returned` 不等于 `accepted`。Composite 可在 checkpoint.receptions 登记恢复编码用的 reception，接纳开始即固定契约；回调结果先固定为 Stable<V> 再检查，安装后不可改写。check 只依赖固定值及已绑定参数，不承担当前外部业务条件；同步返回值不替换接纳值，thenable 拒绝。codec 在首次发布持久表示时检查往返，后续热保存复用准确表示；冷恢复重新解码/检查。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。
+`returned` 不等于 `accepted`。Composite 可在 checkpoint.receptions 登记恢复编码用的 reception，接纳开始即固定契约；回调结果先固定为 `Stable<V>` 再检查，安装后不可改写。check 只依赖固定值及已绑定参数，不承担当前外部业务条件；同步返回值不替换接纳值，thenable 拒绝。codec 在首次发布持久表示时检查往返，后续热保存复用准确表示；冷恢复重新解码/检查。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。
 
-接纳的异步作用域由调用包共享一个 AsyncLocalStorage 载体，每个父调用持有独立 owner，每次接纳建立带子调用身份的局部帧。嵌套接纳仍能查询有效祖先；并发链各自隔离，退出后帧失效。读取同一 owner 时只检查最近帧，不跳过失效帧借用外层权限。该载体不保存业务历史，也不为每个历史父调用保留独立异步钩子；200 会话验证曾暴露后者对所有后续 Promise 的传播成本。回归见 `packages/invocation/test/invocation-reception-scope.test.mjs`。
+接纳的异步作用域由调用包共享一个 AsyncLocalStorage 载体，每个父调用持有独立 owner，每次接纳建立带子调用身份的局部帧。嵌套接纳仍能查询有效祖先；并发链各自隔离，退出后帧失效。读取同一 owner 时只检查最近帧，不跳过失效帧借用外层权限。该载体不保存业务历史，也不为每个历史父调用保留独立异步钩子，避免历史父调用的钩子持续参与后续 Promise 传播。回归见 `packages/invocation/test/invocation-reception-scope.test.mjs`。
 
 实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v6 保持完整逻辑直接关系、业务 state/refs、接纳契约位置及 handled 事实；物理提交只写新增固定正文、变化关系和 head，冷恢复完整重建。state 仍每次完整提交，point.check 仍每次执行；many refs 可用完整数组替换，也可显式传入有序选择并提交出现项增删。选择不隐式跨点沿用，缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md) 和[增量引用选择](checkpoint-selection.md)。
 

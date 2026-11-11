@@ -17,7 +17,7 @@ if (update.type === 'baseline') console.log(update.snapshot.messages);
 
 Public types: `TranscriptWireMessage`, `TranscriptWireSnapshot`, `TranscriptWireEvent`, `TranscriptFrame`, `TranscriptUpdate`. These are explicit transport representations; entity APIs belong to `capix-transcript`. Invocation events belong to `capix-invocation/events`, record data and validation to `capix-records/data`, and shared relation identity to `capix-contracts`.
 
-The former `content`, `invocation`, `recording`, `conversation` and `observer` subpaths have been removed. Reference service DTOs and endpoint admission are maintained by the separate CAPiX Lab workspace. This package does not reexport entity implementations or business protocols.
+Application DTOs and endpoint admission belong to each host application. This package does not reexport entity implementations or business protocols.
 
 ES modules and TypeScript declarations. The npm distribution contains compiled JavaScript, declarations, this README and the MIT license; no HTTP, Node-specific implementation or UI dependency is introduced by this entry point.
 

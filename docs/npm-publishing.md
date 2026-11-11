@@ -4,15 +4,13 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；新增 `capix-tool` 已纳入该清单但尚未发布；此前目录迁移未改已有包名、版本或公开出口。根包仍为私有。当前两个私有客户端已迁至 Lab，不属于框架 workspace 或任何框架分发批次。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
+公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；新增 `capix-tool` 已纳入该清单但尚未发布；此前目录迁移未改已有包名、版本或公开出口。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
 
 公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。完整职责见根 [README](../README.md#包与公开入口)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
 后续包名仍按可复用职责确定，必要限定词放在主体之前；不把 `server`、`services`、`apps` 等源码目录自动映射成发布名称。预设、集成与 UI 只有在职责和公开边界确定后才单独命名，参考装配不直接变成产品包。
 
-仓库承载框架、可复用集成、预设、策略及 UI；实验、参考装配和产品应用后续可按边界拆到独立仓库。0.1.0 首发之后，现有包已统一至 packages，参考装配与实验已交接到本地 capix-lab。首发名单不代表今后所有可复用能力。
-
-2026-11-09 已完成 17 个公开包的 `0.1.0` 首发。官方 registry 的版本、latest 标签及 tarball SHA-512 均与验收产物一致；仓库外从 npm 安装后，29 个公开出口、类型检查、资源与调用、身份一致性和 CP 冷恢复验证通过。
+新增公开包需要明确职责、公开出口、独立测试与许可，再加入分发清单和版本组；源码目录或文档示例不自动成为发布包。
 
 ## 本地验证
 
@@ -62,12 +60,10 @@ pnpm release:publish
 
 执行前确认工作区干净，拉取后核对准备发布的提交。`release:publish` 会再次执行产物验收；npm 登录和 2FA 仍由维护者在终端完成。
 
-## 实验仓库的候选分发
+## 候选分发
 
-`pnpm integration:pack` 干净构建现有 18 个公开框架包，只生成本地 `.capix/integration` tarball 批次，不发布。manifest 记录基线提交、dirty 标记、实际源文件摘要和每个产物的 SHA256。候选不包含 Lab 的客户端或装配；文件白名单只含编译产物、声明、README 和可用许可文件。
+`pnpm integration:pack` 干净构建 18 个公开包，生成 `.capix/integration` tarball 批次，不发布 npm。manifest 记录源码提交、dirty 状态、源文件摘要和每个产物的 SHA256；文件白名单仅含编译产物、声明、README 与许可。
 
-在 capix-lab 中显式运行 `pnpm candidate:import --directory /absolute/path/to/capix/.capix/integration`，校验完整批次并复制到本仓本地 vendor，根 overrides 固定全部传递依赖到同批产物；执行 install 更新并审查独立锁文件，再 frozen install 与 check。没有相邻源码软链。该路径是本地验证分发，不自动修改 npm 发布清单；Lab 客户端使用自身 workspace，不再安装客户端 tarball。
+`pnpm integration:check` 在仓库外临时消费者中安装这批包，核对依赖、公开出口、运行结果和类型。消费方若要接入候选，须按准确 manifest 校验完整批次并维护自己的锁文件，不能混用不同源码批次的同版本包，也不能绕过公开出口读取私有 src/dist。
 
-Observer 内容参考装配及其测试已移至 `capix-lab/services/observer-content`，不再进入 CAPiX 候选 tarball 批次，也未转为公开预设。17 个已发布包与 18 个当前公开／候选包是不同范围；旧 20／21 包 manifest 不代表当前完整批次。
-
-候选消费者需自行适配新增包及契约变化。本次 ModelExchanges v2、Tool、Memory v2、FactType 与协议出口的框架验证不代表 capix-lab 原参考服务已完成迁移。Lab 的独立实体对照实验使用新批次和自己的锁文件，不改变根 workspace 的旧批次；服务的资源登记、持久／CP 编码、业务协议和 UI 仍需在其任务中单独处理，见 [Lab 迁移清单](../../capix-lab/docs/framework-candidate-migration.md)。
+候选包和压缩发布包分别生成、分别验证，源码版本相同不意味着 tarball 字节相同。消费方的业务策略、持久 codec 和恢复资格需要自行适配；框架分发验证不替任意应用保证其升级完成。

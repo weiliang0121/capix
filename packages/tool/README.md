@@ -95,6 +95,6 @@ CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完�
 
 ## 验证与维护
 
-`pnpm --filter @weiliang0121/capix-tool test` 独立构建依赖并运行本包测试，覆盖普通/CP 调用、错误分流、预算、取消、共享实体、多步推进、类型负例，以及新 Runner/Store 的恢复和缺失依据拒绝。夹具只使用公开包，无 Lab 服务或测试依赖。参考服务及其 SQLite 接入仍在 capix-lab 单独维护。
+`pnpm --filter @weiliang0121/capix-tool test` 独立构建依赖并运行本包测试，覆盖普通/CP 调用、错误分流、预算、取消、共享实体、多步推进、类型负例，以及新 Runner/Store 的恢复和缺失依据拒绝。夹具只使用公开包，验证不依赖外部服务或应用测试。
 
 MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).

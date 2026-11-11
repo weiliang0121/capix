@@ -1,6 +1,6 @@
 # 结构包：配置、组合与运行端口契约
 
-状态：2026-10-25。`@weiliang0121/capix-structure` 位于 `packages/structure`，沿用已经确定的 Scene / Group / Node 模型。分包明确结构与执行的归属，保留原对象身份、作者写法和运行语义。
+`@weiliang0121/capix-structure` 提供 Scene / Group / Node、配置、成员和类型关联；执行机制由 invocation 提供，运行装配由 Runtime 连接。
 
 作者先构造结构、配置处理函数和申请资源，再通过 Runner 完成装配与运行。结构包可以独立用于构造和检查结构；它不会在构造、add 或声明恢复点时执行处理函数。
 
@@ -83,7 +83,7 @@ return work.children.invoke(child, input);
 
 `CallableMembers` 只重复结构已有成员约束且没有生产消费者，已删除；实际约束由 Composite、Node.members、ChildCallable 和 add 保留。MemberNamesOf、NamedChildOperation(s) 以及 DefinitionFactory 作为推导内部类型保留，不再单独导出。
 
-`defineNode/defineGroup/defineScene` 是可选的类型推导便利，结果仍是普通结构。现有构造器显式给出 I/O 泛型后，不能再自动补齐未指定的资源/Delta 泛型；因此本轮保留工厂及其必要类型，而不把类型断言或手写资源泛型的成本转给作者。工厂配置与构造器配置的差别来自该推导职责，不代表不同运行模型。
+`defineNode/defineGroup/defineScene` 是可选的类型推导便利，结果仍是普通结构。现有构造器显式给出 I/O 泛型后，不能再自动补齐未指定的资源/Delta 泛型；因此提供工厂及其必要类型，而不把类型断言或手写资源泛型的成本转给作者。工厂配置与构造器配置的差别来自该推导职责，不代表不同运行模型。
 
 ## 构建接缝
 
@@ -117,7 +117,7 @@ sequenceDiagram
 - CP 的 state/refs/reception 保留所属点、直接子及值类型关联；refs/facts 不额外授予 resume 行动权限。
 - 构建、调用、资源窗口、交付和 CP 保存仍有各自边界。分包不改变返回与父接纳的区别，也不扩大恢复承诺。
 
-包接缝的验证入口是 `test/structure-package.test.mjs` 与 `test/types/structure-package.ts`；现有结构、调用、操作接收和 CP 回归继续覆盖运行行为。
+包接缝的验证入口是 [独立结构包测试](../packages/runtime/test/structure-package.test.mjs)；现有结构、调用、操作接收和 CP 回归继续覆盖运行行为。
 
 ## Sequence 与 Dynamic：一次构造的 Group 预设
 
@@ -234,4 +234,4 @@ resources.capture(processing, () => ({ value: undefined })).register(flowOffer, 
 
 ## 验证
 
-`test/presets*.test.mjs` 覆盖步骤与决策推进、真实父子调用、失败处理、窗口和类型关联；`test/common-dependencies.test.mjs` 覆盖公共与局部 deps、并发调用材料隔离、嵌套供给及端点失效。类型测试既检查合法程序，也去掉 `@ts-expect-error` 确认非法程序被拒绝。既有调用和 CP 回归验证分包没有改变运行语义。
+[结构预设测试](../packages/structure/test) 覆盖步骤与决策推进、真实父子调用、失败处理、窗口和类型关联；[公共申请测试](../packages/runtime/test/common-dependencies.test.mjs) 覆盖公共与局部 deps、并发调用材料隔离、嵌套供给及端点失效。类型测试既检查合法程序，也去掉 `@ts-expect-error` 确认非法程序被拒绝。既有调用和 CP 回归验证分包没有改变运行语义。

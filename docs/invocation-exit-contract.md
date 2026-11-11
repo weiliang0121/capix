@@ -1,15 +1,15 @@
-# 调用退出契约：时序审计与验证
+# 调用退出契约
 
-2026-11-04。在 `e18fcea` 的退出审计之后，采用“模块闭合失败边界、调用统一安排顺序”的方案完成实施。
+退出遵守“模块闭合失败边界、调用统一安排顺序”：正文、关闭、最终交付与本地释放各自保留结果。
 
 ## 结论
 
 InvocationExecution 统一处理正文结束、输出封口、接纳排空和本阶段 Work 关闭。Runtime 只提供具体执行与同步关闭端口，普通执行和 CP 恢复共用同一退出顺序。Invocation 负责后续子调用等待、剩余资源关闭、最终交付及 CP 占用释放。
 
-审计发现并修复的两处缺口：
+两个必要约束：
 
-1. Work 关闭异常覆盖原业务异常：现在分别保存正文与关闭结果，在准确归属后聚合交付。
-2. 低层资源关闭失败跳过 CP 释放，并可能留下过早的父关系成功：现在关闭先于成功 CP／父层交付，最外层 finally 只执行不调用宿主代码的本地释放。
+1. Work 关闭不能覆盖原业务异常：分别保存正文与关闭结果，准确归属后聚合交付。
+2. 低层关闭失败不能跳过 CP 释放或提前发布父关系成功：关闭先于成功 CP／父层交付，最外层 finally 只执行不调用宿主代码的本地释放。
 
 沿用 OperationOutcome，不增加 ExitScope、阶段 DSL 或结构声明。业务作者的 deps/run/output/checkpoint 用法不变，恢复范围不变。
 
@@ -94,9 +94,9 @@ await work.resources.files.write(path, content);
 
 普通正文抛错与取消也不同：前者被捕获后，已有接纳仍可使用资源，待排空后才安装正文失败；已成立效果不会因此回滚。取消会通过固定 signal 立即阻止后续端点访问，但仍等待本次正文、已登记子调用与接纳活动退出，不自动等待普通资源 Promise。不能用 Promise.race 提前释放这些仍在执行的调用活动。Interaction 的独立发送则继续存活，退出的只是本次读取／跟随。
 
-保留窗口不保证接纳成功：取消或已归属的阻断故障仍可使回调的下一次端点访问失败，且此时 delta 已封口。接纳中多个效果的事务、提交与补偿是后续独立议题，本轮不增加接纳不可取消区间或跨资源原子性。
+保留窗口不保证接纳成功：取消或已归属的阻断故障仍可使回调的下一次端点访问失败，且此时 delta 已封口。接纳中多个效果的事务、提交与补偿是后续独立议题，不提供接纳不可取消区间或跨资源原子性。
 
-## 故障探针与修复结果
+## 关闭故障反例
 
 运行 [invocation-exit.mjs](../examples/invocation-exit.mjs)：
 
@@ -105,27 +105,27 @@ pnpm build
 node examples/invocation-exit.mjs
 ```
 
-这是故障注入诊断，不是推荐应用写法。只使用公开出口、内存资源和 MemoryCheckpointStore，不调用模型、不写业务库。修复后所有检查为 true、退出码为 0；保证未满足时退出码为 1。
+这是故障注入诊断，不是推荐应用写法。只使用公开出口、内存资源和 MemoryCheckpointStore，不调用模型、不写业务库。所有契约检查满足时为 true、退出码为 0；保证未满足时退出码为 1。
 
 ### A. 原正文失败被清理失败覆盖
 
 Scene 发起一个资源操作但未等待，然后抛出 `bodyFailure`；资源的 `onClose` 抛出 `cleanupFailure`。
 
-修复前只保留 `ResourcePortError → cleanupFailure`。现在交付 AggregateError，保留正文原错误与清理错误；正文为 `throw undefined` 也凭 Outcome 判别字段保留，不把它当成“没有失败”。
+只保留 `ResourcePortError → cleanupFailure` 会丢失原正文失败。交付 AggregateError，保留正文原错误与清理错误；正文为 `throw undefined` 也凭 Outcome 判别字段保留，不把它当成“没有失败”。
 
-原问题来自 [Work 适配](../packages/runtime/src/binding/work.ts) 的 finally。现在具体 close 返回 Outcome，正文与关闭分别由 [InvocationExecution](../packages/invocation/src/invocation/execution.ts) 处理；普通／恢复路径均有双失败专项。
+[Work 适配](../packages/runtime/src/binding/work.ts) 的具体 close 返回 Outcome，正文与关闭分别由 [InvocationExecution](../packages/invocation/src/invocation/execution.ts) 处理；普通／恢复路径均有双失败专项。
 
 ### B. 资源关闭失败跳过 CP 占用释放
 
 直接构造公开的低层 Invocation，挂载资源与 CP Store。正文返回，但最后关闭未完成资源操作时 `onClose` 抛错。
 
-修复后的观察结果：
+契约要求的观察结果：
 
 - 调用 Promise 拒绝清理错误。
 - Context 已固定为 succeeded，`invocation.failure` 准确记录后续交付失败。
 - 同一个 Store／Context ID 的诊断探针可以进入，证明本地占用已释放。
 
-在 [Invocation.deliver](../packages/invocation/src/invocation/invocation.ts) 中，剩余关闭现在返回 Outcome 并进入交付处理；CP release 与宿主可抛错端口分离。Context 已成功不会被倒改为失败。
+在 [Invocation.deliver](../packages/invocation/src/invocation/invocation.ts) 中，剩余关闭返回 Outcome 并进入交付处理；CP release 与宿主可抛错端口分离。Context 已成功不会被倒改为失败。
 
 探针复用 Context ID 只是核验排他释放，不是业务重跑建议。本例没有保存恢复点，不证明存在一个可恢复的业务执行。另有多窗口专项验证 closeAllResult 耗尽全部窗口，以及部分资源构造／暴露失败时原错误不会被清理错误覆盖。
 
@@ -162,7 +162,7 @@ interface InvocationWork<I, O, Context> {
 - [调用退出故障](../packages/invocation/test/invocation-exit-failures.test.mjs)与[装配退出故障](../packages/runtime/test/invocation-exit-failures.test.mjs)：普通／恢复双失败、子来源、非法 close、关闭故障不可降级、CP／观察失败与本地占用释放。
 - [调用资源退出](../packages/invocation/test/invocation-resource-exit.test.mjs)与[资源活动退出](../packages/resources/test/invocation-resource-exit.test.mjs)：多窗口耗尽、单错误身份、构造／暴露和关闭双失败、同步及不可重开。
 - [资源访问](../packages/resources/test/resource-access.test.mjs)：关闭后晚到结果不可接纳、异步接收过程中端点失效。
-- [交互消费](../../capix-lab/test/conversation-interaction.test.mjs)、[过程反馈](../../capix-lab/test/conversation-interaction-progress.test.mjs)：局部取消／窗口关闭不终止独立发送，后续调用仍可读取同一反馈。
+- [交互注册](../packages/interaction/test/interaction/registry.test.mjs)、[过程反馈](../packages/interaction/test/interaction/progress.test.mjs)：局部取消／窗口关闭不终止独立发送，后续调用仍可读取同一反馈。
 - [入口回归](../packages/runtime/test/runtime-entry.test.mjs)、[Work 适配](../packages/runtime/test/runtime-work-adapter.test.mjs)：宿主释放、严格观察故障、原始返回与接纳事实。
 
 这些验证不证明任意宿主清理函数都会及时返回，也不承诺强制终止任意 Promise、跨实体回滚或完整进程恢复。

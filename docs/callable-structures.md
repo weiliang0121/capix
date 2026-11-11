@@ -1,6 +1,6 @@
 # Scene、Group、Node 与共同调用
 
-状态：2026-10-25，统一操作模型、独立结构包与共同契约。结构持有配置，`run` 组织操作，Invocation 协调本次活动与真实交付。当前契约替代此前的 setter、独立接纳阶段及调用级异常声明，迁移范围见 [全仓迁移](../../capix-lab/docs/callable-operation-migration.md)，包边界见 [结构包](structure-package.md)。
+结构持有配置，`run` 组织操作，Invocation 协调本次活动与真实交付。包边界见 [结构包](structure-package.md)。
 
 ## 对象与切面
 
@@ -128,7 +128,7 @@ return content;
 
 Sequence 以 `new Sequence([node, {node, input?, result?, delta?}, …])` 一次配置固定推进，默认传递前一步接收值，末步作为整体结果。复杂回调用参数标注或 satisfies SequenceStep 提供类型，构造核验完整链路。Dynamic 以 `new Dynamic({options, decide, maxSteps?})` 一次配置候选及决策成员，整体I/O由决策输入与finish分支推导；决定通过类型关联的call/finish表达，默认最多8个候选动作。两者复用普通 Group、真实子调用与失败接收，不改变内核位置或运行机制。
 
-`withDependencies(common)` 的 node/group/scene 工厂在配置处理函数时就合并公共申请，供给仍显式由 Resources.capture/register 兑现，不在运行期追加未知字段。共享材料是普通资源，每次 Group 调用可有独立材料，各成员取得自身窗口的端点。预设当前不自动保存或恢复材料，也不自动建立 CP。API 与迁移差异见 [结构包](structure-package.md)，可执行例子见 [presets.mjs](../examples/presets.mjs)。
+`withDependencies(common)` 的 node/group/scene 工厂在配置处理函数时就合并公共申请，供给仍显式由 Resources.capture/register 兑现，不在运行期追加未知字段。共享材料是普通资源，每次 Group 调用可有独立材料，各成员取得自身窗口的端点。预设当前不自动保存或恢复材料，也不自动建立 CP。API 见 [结构包](structure-package.md)，可执行例子见 [presets.mjs](../examples/presets.mjs)。
 
 ## Work、观测与恢复
 

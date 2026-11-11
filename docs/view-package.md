@@ -4,7 +4,7 @@
 
 包依赖 packages/contracts、resources 与 diagnostics；diagnostics 仅提供必要持久端口的统一错误身份，不引入调用、Runtime 或业务实体依赖。
 
-Observer 的 `ActiveView` 已移入 Lab 的 `@capix/observer-content`。它用 View 处理消息与记忆，同时保留“新内容默认纳入、退出后不因更新重新纳入”的业务策略。两者不是两个内容副本。
+宿主可用 View 组合消息、记忆和自定义来源，再显式定义纳入与退出策略。View 不持有第二份实体正文。
 
 完整可运行例子见 [examples/view.mjs](../examples/view.mjs)，自定义静态来源见 [examples/view/skills.mjs](../examples/view/skills.mjs)。运行 `pnpm build && node examples/view.mjs`，可以看到消息、记忆、Skill 材料通过资源进入节点，以及后处理调整成员后两次捕获的差异。例子全部使用内存数据，Skill 作为材料读取，具体怎样组织模型输入仍由业务节点决定。
 
@@ -219,25 +219,14 @@ const readView = new ResourceOffer({
 
 资源访问辅助不创建第二份来源，不持有 Runtime/Invocation，也不让纯 View 自行找到资源中心。宿主显式把 Materials 登记给这个 Offer，节点通过 deps 取得受控端点；普通资源的窗口和取消规则继续生效。该低层 expose 直接返回上述同步／异步读取接口，不额外承诺普通 methods 的 delta/result 包装。
 
-## 操作成本与契约迁移
+## 操作成本
 
 View 内部按 source/key 建立成员索引，成员查询与新增项判断不需要每次遍历全部成员。`members()` 直接提供冻结引用数组。include 只让来源检查新增 key；exclude 不读来源；index 只索取当前成员摘要及各来源 stamp。Transcript、Memory 等适配器可以据此避免为少量已知 key 枚举整个来源目录；任意自定义来源的实际读取成本仍由其实现决定。
 
-这不意味着变更全程都是 O(新增项数)。有变化时仍要构造完整成员数组、下一状态及成员索引，宿主持久端口也仍接收完整状态；这些成本随成员数增长。此次收敛减少不必要的来源目录读取和业务侧成员重组，没有引入增量持久协议、后台索引或新的进度实体。
+这不意味着变更全程都是 O(新增项数)。有变化时仍要构造完整成员数组、下一状态及成员索引，宿主持久端口也仍接收完整状态；这些成本随成员数增长。这些局部操作避免不必要的来源目录读取和业务侧成员重组，没有引入增量持久协议、后台索引或新的进度实体。
 
 来源适配器必须增加 `inspect`，不能把部分目录改名为 `index`，也不能用“先后读取碰巧相同”代替同一版本的核验。持久适配器从旧 `ViewCommit.basis` 改为读取 `previous.revision` 和 `checkedSources`，按实际操作维护保证。`ViewState` 的保存格式不变；读取策略仍使用完整 `ViewBasis`，apply 的过期检查没有移除。
 
-## Observer 的保留策略
+## 宿主策略边界
 
-以下为 Lab 参考装配原有策略；P3 未修改该装配或完成其新 Memory 适配。Lab 的 `@capix/observer-content` 的 `ActiveView` 使用两个 whole 来源，并转换通用 basis 与旧的 `transcriptId/memoriesId/indexRevision/transcriptRevision/memorySequence`。它负责：
-
-1. 初始化时选择当前消息段及已有记忆。
-2. 根据源增量游标把新消息、新记忆纳入，更新已有记忆不重新纳入已退出项。
-3. 提供已有 read/manage Offer，并保持旧的 ActiveViewSnapshot、Selection 和持久状态形状。
-4. 把显式成员变更转换为旧宿主持久端口，提交完成后才安装 View 状态。
-
-自动纳入仍属于源写入的持久事务，内存 View 同步时不再重复提交一份独立写入。SQL `active_content`、保存字段 `active`、既有 CP 的业务 state、冲突码及恢复拒绝规则保持。通用 View 没有自动纳入、淘汰、容量策略、后台监听、固定效果凭据或调用恢复能力。
-
-Memory 的当前集合不依赖 Transcript，来源身份为 memoriesId，版本取集合 sequence。单项更新不自动改变 View 成员；旧 stamp 拒绝，已经取得的固定材料保持原值。View 保留完整 Stable 值，不承担 metadata 的持久或 CP 编码，也不以默认展示 DTO 替代完整材料。
-
-现行 Observer 维护链与恢复边界见 [活跃材料](active-content.md)，包归属和入口迁移见 [内容实体与独立包](content-entities-packages.md)。
+通用 View 不自动纳入新消息、记忆或更新项，也不要求退出前生成替代内容。宿主可组合多个来源，显式维护成员；来源更新、成员变更与内容持久化仍是独立事实。View 不提供固定写入效果凭据，不能凭目标成员相等确认一次未知提交，也不扩大 CP 恢复资格。见 [实体包](content-entities-packages.md) 和 [Checkpoint](checkpoints.md)。

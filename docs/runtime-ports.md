@@ -1,6 +1,6 @@
 # 运行控制、输出与观测出口
 
-状态：2026-10-28，本轮出口接线已实现。`runner.output` 保持名称，事件新增本次入口的 `entryId`；`runner.observation` 提供只读元数据订阅，覆盖入口、普通调用、资源访问、CP 活动与普通业务注释。CP 新增独立被动 `feedback`，严格观察与保存语义保持。本文保留实施前的反例与探针作为依据，第 7、9 节说明当前落点与限制；不新增公开 Run 实体或跨端协议。
+`runner.output` 交付 Scene 整体输出，事件携带本次入口 entryId；`runner.observation` 提供入口、调用、资源访问、CP 活动及普通业务注释的只读元数据。CP 的独立被动 feedback 不改变严格观察与 Store 语义；不提供公开 Run 实体或跨端协议。
 
 本文回答：哪些端口参与运行，哪些端口消费结果或观察事实；它们在哪里建立、何时有效、失败影响什么。结构与调用机制见 [运行边界](runtime-boundaries.md)，普通用法见 [可调用结构](callable-structures.md)，服务跨端交付见 [协议](protocol.md)。
 
@@ -136,7 +136,7 @@ sequenceDiagram
 3. CP 最终 delivery：该调用在 Store 中的最终交付已固定；跨进程持久性取决于 Store 实现。根调用之后的宿主 released 观察仍有自己的失败边界。
 4. `runner.run` 的 Promise：本次宿主入口最终返回／拒绝。失败仍不意味着之前所有实体效果未发生。
 
-现有 Observer 的 submission.completed 等待运行返回，answer 和正式消息另行表达；本次梳理不能把这些已有区别抹平。
+宿主应将输出完成、正式实体消息与入口最终返回分别表达，不能仅凭 completed 预览认定业务已经成功。
 
 ### 5.2 CP 的观察失败存在明确不对称
 
@@ -170,11 +170,11 @@ Runner 只读观测出口在同步投影后交付，遵守以下边界：
 - 恢复观测沿用 CP 的活动身份与 installed 基线；不能伪造普通调用重新 started。
 - 选择保存／跨端消费时，再形成明确的纯值协议与容量规则；不能直接序列化原始观察对象。
 
-已有 [Observer CP 投影](../../capix-lab/services/observer/src/observation/checkpoints.ts) 可作为实例参考：它保存有界元数据和诊断，不把整个 Frame 暴露给客户端。这不是要求 Runtime 复刻 Observer 的业务投影。
+宿主需要 CP 历史或跨端展示时，应单独保存有界元数据与诊断，并明确裁剪和保留规则，不能直接暴露完整 Frame。
 
 ## 7. 已确定的心智：Runner 兑现场景的运行契约
 
-Scene 树已经表达整体处理与整体输出。本轮接受这个前提，不另建任意节点输出的订阅平台，也不自动拼接所有子节点 delta。Runner 负责让这份场景实际运行，并向宿主公开运行出口。
+Scene 树已经表达整体处理与整体输出。不另建任意节点输出的订阅平台，也不自动拼接所有子节点 delta。Runner 负责让这份场景实际运行，并向宿主公开运行出口。
 
 | Scene 侧          | Runner 侧               | 职责转换                    |
 | ----------------- | ----------------------- | --------------------------- |
@@ -219,41 +219,27 @@ runner.observation.subscribe({
 });
 ```
 
-当前范围是此 Runner 的入口与调用子树中的调用、资源访问、CP 活动及普通业务注释。实体独立变化、脱离调用后的 Interaction 通知仍由原生产者公开，服务按真实关联组合。一次订阅不自动安装 Recorder、不复制正文、不创建持久历史。恢复路径原本没有业务注释出口，本轮没有添加对应 CP 事实或伪造普通 business 事件。
+当前范围是此 Runner 的入口与调用子树中的调用、资源访问、CP 活动及普通业务注释。实体独立变化、脱离调用后的 Interaction 通知仍由原生产者公开，服务按真实关联组合。一次订阅不自动安装 Recorder、不复制正文、不创建持久历史。恢复路径原本没有业务注释出口，不提供对应 CP 事实或伪造普通 business 事件。
 
 Runner 复用现有 Progress 对普通调用事实的轻量投影，没有重建进度状态机。当前不额外公开同源的 `runner.progress`。
 
-### 本轮实施落点
+### 实现位置
 
 1. **Runner 入口与输出。** [Runner](../packages/runtime/src/runner.ts) 为每次 run/resume 固定反馈关联，[输出订阅](../packages/runtime/src/runner/output.ts) 在交付时添加 entryId；必要收尾之后发布真实 settled。
 2. **只读观测与按次接线。** [事件契约](../packages/runtime/src/runner/observation-contract.ts)、[同步投影](../packages/runtime/src/runner/observation-projection.ts) 和[单次反馈](../packages/runtime/src/runner/feedback.ts) 分开；[构造反馈](../packages/runtime/src/construction/feedback.ts) 只连接接收器，不提供替换 Store 或必要机制的入口。
 3. **CP 独立反馈。** [CP 发布](../packages/invocation/src/checkpoint/invocation.ts) 同一事实分别交付被动 feedback 与原 observation；[恢复转发](../packages/invocation/src/checkpoint/observation.ts) 不再因严格观察故障连带关闭被动事实。恢复建立前的失败也经独立反馈交付。
 
-普通根输出订阅已不需要 output hook；必要登记与校验保持独立。对照服务可直接消费 Runner 出口，原 Observer 的特定 Group 接线只有在整体输出和登记职责真正迁移后才能删除。本轮没有据此删改旧服务的必要登记。
+根输出订阅由 Runner.output 提供；必要登记和校验保持独立。被动订阅不能替代调用构造、内容落实或恢复登记。
 
 这三步不要求一个统一事件总线，不把所有模块包装成同一种订阅对象，也不把被动观察升级成恢复或业务推进机制。
 
-## 8. 首轮盘点的验证记录
+## 8. 验证入口
 
-首轮盘点未改实现；针对当前工作区运行了 9 个既有测试，全部通过：
+[输出契约](../packages/runtime/test/output/contract.test.mjs) 验证消费者隔离与无消费者时的生产校验；[CP feedback](../packages/invocation/test/checkpoint/feedback.test.mjs) 验证独立消费与严格提交边界；[Runner 端口](../packages/runtime/test/runner-ports.test.mjs) 与[观测](../packages/runtime/test/runner-observation.test.mjs) 验证重入、入口身份、取消和恢复关联。
 
-| 测试文件／选中用例                                                                                                                         | 验证边界                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| [output/contract](../packages/runtime/test/output/contract.test.mjs)：consumer failure、invalid delta、fallback violating final type，3 个 | 消费失败隔离；生产校验没有消费者也不能略过       |
-| [progress](../packages/runtime/test/progress.test.mjs)：strict observation、commit progress、resource returned observation，3 个           | 进度或实体效果已经成立后，严格观察仍可使交付失败 |
-| [transcript/fixed](../packages/transcript/test/fixed.test.mjs)：post-commit change failure，1 个                                           | 凭据可确认，不重复落实或发布                     |
-| [transcript/changes](../packages/transcript/test/changes.test.mjs)：capture failure reports committed facts，1 个                          | 捕获失败与内容已提交同时成立                     |
-| [memory/persistence](../packages/memory/test/persistence.test.mjs)：memory publication failure，1 个                                       | 已提交整批记忆的通知故障不隐藏其他成员事实       |
+## 9. 设计取舍：入口关联、恢复反馈与订阅生命周期
 
-首轮另用不落文件的 Runner / MemoryCheckpointStore 探针验证 4 个场景：strict saved、strict finishing、strict finished、isolate saved，均符合第 5.2 节。当时尚未成为持久回归；本轮新增的 [CP feedback 测试](../packages/invocation/test/checkpoint/feedback.test.mjs) 已覆盖独立消费与严格提交边界。
-
-已有 [Runner 端口测试](../packages/runtime/test/runner-ports.test.mjs) 覆盖订阅重入、取消归属与恢复等前轮改动。新增 [Runner 观测测试](../packages/runtime/test/runner-observation.test.mjs) 覆盖入口身份、输出完成后的严格 released 失败、恢复关联、迟到订阅与消费者隔离。2026-10-28 实施后执行 `pnpm check`，构建、类型检查、2060 项测试及格式检查全部通过；本地 conversation 与 runner-output 示例也执行通过，未调用真实模型。
-
-普通订阅保持被动隔离，现有严格机制安装保留原语义。本轮补足出口关联与接线，未更换 output 名称。
-
-## 9. 实施依据：入口关联、恢复反馈与订阅生命周期
-
-本节保留实施前的反例与探针，相关入口关联、只读订阅及 CP 反馈接缝现已实现。它们没有改变 Scene / Resources / Runner 的职责，也没有新增公开 Run 实体。
+以下反例解释入口关联、只读订阅与 CP 被动反馈的必要边界。它们不改变 Scene / Resources / Runner 职责，也不引入公开 Run 实体。
 
 ### 9.1 持续订阅，需要区分每次进入 Runner
 
@@ -316,11 +302,11 @@ build 固定机制；每次入口固定接收器与 entryId
 subscribe / unsubscribe 只改变末端消费者
 ```
 
-实施前 CP 只有一个可选观察会话。若把严格观察者和 Runner 被动消费写进同一个 `observe` 回调，严格观察故障会使整个会话停用，后续被动转交也被一起停掉。
+若把严格观察者和 Runner 被动消费写进同一个 `observe` 回调，严格观察故障会使整个会话停用，后续被动转交也被一起停掉。
 
 当前 `CheckpointInstallation.feedback?: ProgressReceiver<CheckpointFact>` 在 CP 生产边界接收原始同步事实。每份事实只建立一次，feedback 与原 observation 共享 activityId、sequence 和事实对象；被动接收通过 ProgressChannel 隔离故障，再执行原观察策略。`prepareCheckpointRestoration` 在 Invocation 建立前的失败也沿此规则交付。Store、恢复身份与严格保存语义不随出口变化。
 
-独立性覆盖完整转交链：恢复调用向 CP activity/resource 的桥接已改为只转交事实与保留错误包装的薄适配；停用状态由各消费会话持有。严格观察失败之后，真实失败收尾仍能送达被动端，不会重新启用失败观察者。领域事实统一以 CP `kind: fact` 转交；消息／记忆不再是两个特殊活动种类。Runner 正常 `source: fact` 和 CP 的 fact 子项均只暴露操作来源、序号、时间与可选类型名称，不暴露领域正文。业务注释原本没有这条恢复出口，本轮没有扩展。
+独立性覆盖完整转交链：恢复调用向 CP activity/resource 的桥接已改为只转交事实与保留错误包装的薄适配；停用状态由各消费会话持有。严格观察失败之后，真实失败收尾仍能送达被动端，不会重新启用失败观察者。领域事实统一以 CP `kind: fact` 转交；消息／记忆不再是两个特殊活动种类。Runner 正常 `source: fact` 和 CP 的 fact 子项均只暴露操作来源、序号、时间与可选类型名称，不暴露领域正文。恢复业务注释没有该出口，不提供。
 
 原始 `feedback` 不承诺纯数据：其中可能有 Frame、借用 IO、错误或资源 describe。Runner 在同步边界将其投影成固定元数据，不保留这些原对象。这里实现的是已有 CP 事实的独立交付接缝，Runner 不代理 Store，不建立第二套恢复过程。普通安装的可选严格策略继续由机制安装承担；新订阅只消费。
 
@@ -339,17 +325,17 @@ subscribe / unsubscribe 只改变末端消费者
 
 无人订阅仍会有固定会话和分派开销；目标是跳过不必要的投影与分配，不宣称零开销。业务注释的未知 payload、资源 describe 与 Frame 都不应因“统一出口”而默认复制。
 
-### 9.5 本轮实施边界
+### 9.5 支持边界
 
 - **保持原语义：** Scene 整体输出、Runner.output、run/resume/cancel、独立资源与 Interaction 生命周期、Promise 最终交付。
-- **本轮已实现：** 单次 entryId 反馈关联、最终入口 settled 事实、Runner 的只读元数据订阅，以及 CP 的独立被动交付接缝。
+- **提供：** 单次 entryId 反馈关联、最终入口 settled 事实、Runner 的只读元数据订阅，以及 CP 的独立被动交付接缝。
 - **暂不扩展：** 输出历史与重放、运行中途完整快照、公开 Run 对象、全局观察中心、通用队列与外部交互所有权。
 
-接缝已有定向回归，对照服务可以直接消费 Runner 出口。旧 Observer 的必要登记不能因新订阅可用而直接删除；确认业务角色、内容落实及恢复登记均已明确归属后，才能逐项简化原接线。
+订阅只提供反馈；业务角色、内容落实和恢复登记必须由其实际所有者维护。
 
-### 9.6 实施前的临时探针
+### 9.6 关键反例
 
-实施前仅用当时公开 API 执行 `node --input-type=module` 脚本，未修改生产代码、未新增永久测试，也未调用真实模型。三组探针全部符合以下结果，作为本轮 entryId 与接线的设计依据：
+以下反例用于理解端口语义，不是副作用重试许可：
 
 | 探针                 | 条件                                                                                    | 实际结果                                                                                                               |
 | -------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |

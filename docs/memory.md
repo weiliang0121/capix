@@ -1,6 +1,6 @@
 # 独立记忆实体
 
-状态：2026-11-11，P3 当前契约。`@weiliang0121/capix-memory` 保存有持续身份、可修订的一段总结。它不依赖 Transcript，不要求 topic、消息来源、文件凭据或变更解释；内容是否真实、应提取什么、保留多久及怎样进入 View，由业务策略决定。
+`@weiliang0121/capix-memory` 保存有持续身份、可修订的一段总结。它不依赖 Transcript，不要求 topic、消息来源、文件凭据或变更解释；内容是否真实、应提取什么、保留多久及怎样进入 View，由业务策略决定。
 
 `Memories<Metadata = never>` 是唯一写拥有者。单项是固定的 `MemoryItem`，没有第二个可变 Memory 实例：
 
@@ -101,8 +101,8 @@ const receipt = memories.applyFixed(request);
 
 ## 领域事实、记录与展示
 
-MemoryEvent 归 memory：集合 ID、sequence、时间、可选调用来源，以及 `{action,memoryId,value,reason?}`。MemoryFacts 通过 P2 的类型化事实端口转交；没有来源的独立更新仍无来源，不由全局当前调用补线。
+MemoryEvent 归 memory：集合 ID、sequence、时间、可选调用来源，以及 `{action,memoryId,value,reason?}`。MemoryFacts 通过类型化事实端口转交；没有来源的独立更新仍无来源，不由全局当前调用补线。
 
 默认 records 适配只投影 content 和可选 reason，MemoryRecord 保留集合／项身份及实际调用关系；`observeMemory` 按准确 memoriesId 关联当前项和记录。baseline 和增量使用同一个正文投影，不夹带未知 metadata，不伪称完整快照。业务需展示或保存其他字段时，使用显式适配。
 
-protocol 的 MemoryViewValue／MemoryChangeEvent 是上述展示 DTO，独立于领域值域；旧 topic、sourceIndexes、sourceResults 已退出默认形状。Lab 的提取规则、来源跳转、服务持久编码与客户端需要另行适配；本仓没有修改它们或导入旧数据。
+框架 protocol 不提供 Memory wire。需要 topic、来源跳转或其他 metadata 时，宿主显式定义展示与持久 codec，不能把默认记录投影当作完整实体快照或恢复材料。

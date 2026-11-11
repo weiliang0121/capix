@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 // pnpm build && node examples/view-membership.mjs
 // 已知引用的维护策略：通过原子操作修改成员，不先读取所有材料。
 import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
@@ -34,7 +35,12 @@ const runner = new Runner(new Scene(maintain), resources).build();
 // 正式写入与视图维护分开。业务提供刚落实的索引，无需重新扫描历史。
 transcript.append({ role: 'user', content: '现在讨论资源包。' }, { role: 'assistant', content: 'Resource 保存实体，Offer 定义访问操作。' });
 const decision = { appended: [1, 2], retired: [0] };
-console.log('维护后的成员：', await runner.run(decision));
+const members = await runner.run(decision);
+assert.deepEqual(members, [
+  { source: 'messages', key: 1 },
+  { source: 'messages', key: 2 },
+]);
+console.log('维护后的成员：', members);
 const revision = view.exportState().revision;
 await runner.run(decision);
 console.log(`重复执行没有变更：revision ${revision} → ${view.exportState().revision}`);
@@ -47,3 +53,15 @@ console.log(
   before.entries.map((entry) => entry.value.content),
 );
 console.log(`来源仍保留 ${transcript.length} 条正式消息；退出视图不删除消息。`);
+
+assert.equal(view.exportState().revision, revision);
+assert.equal(transcript.length, 3);
+assert.deepEqual(
+  before.entries.map((entry) => entry.value.content),
+  ['旧话题：介绍一下这个项目。'],
+);
+assert.deepEqual(
+  view.captureSync(sources).entries.map((entry) => entry.key),
+  [1, 2],
+);
+assert.equal(runner.isRunning, false);

@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { Resource } from '@weiliang0121/capix-resources';
@@ -33,8 +34,10 @@ export function createToolRunner(provider) {
 
 // 离线协议示例：第一次请求选择工具，第二次使用真实工具反馈回答。
 // 换成配置好的 ChatCompletionsProvider 后，Tool、节点和资源登记不变。
+const requests = [];
 const offlineModel = {
   async complete(request) {
+    requests.push(request);
     const feedback = request.exchanges?.at(-1)?.feedback[0];
     return {
       formatVersion: 1,
@@ -50,5 +53,11 @@ const offlineModel = {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const runner = createToolRunner(offlineModel);
-  console.log(await runner.run({ request: { messages: [{ role: 'user', content: 'Translate hello.' }] } }));
+  const result = await runner.run({ request: { messages: [{ role: 'user', content: 'Translate hello.' }] } });
+  assert.equal(result, '你好');
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].exchanges?.length ?? 0, 0);
+  assert.deepEqual(requests[1].exchanges.at(-1).feedback[0].content, [{ kind: 'text', text: '你好' }]);
+  assert.equal(runner.isRunning, false);
+  console.log(result);
 }

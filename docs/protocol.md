@@ -1,6 +1,6 @@
 # 消息传输契约与业务协议边界
 
-`@weiliang0121/capix-protocol` 仅提供明确的 Transcript 基线、增量、错误帧，以及 `acceptTranscriptUpdate` 单帧接纳。根出口是唯一入口；原 content／invocation／recording／conversation／observer 子出口已删除，不保留兼容门面。
+`@weiliang0121/capix-protocol` 仅提供明确的 Transcript 基线、增量、错误帧，以及 `acceptTranscriptUpdate` 单帧接纳。根出口是唯一入口。
 
 ## 真实归属
 
@@ -12,7 +12,7 @@
 | 调用事件与阶段词汇                                    | `capix-invocation/events`，根出口重导同一份定义 |
 | 记录数据、归档身份、输出解析、记录树校验              | `capix-records/data`，纯数据出口不加载记录实体  |
 | TranscriptWireMessage／Snapshot／Event、Frame／Update | `capix-protocol`                                |
-| Conversation／Observer 聚合 DTO 与端点接纳            | Lab 私有 `@capix/lab-protocol`                  |
+| 业务聚合 DTO 与端点接纳                               | 具体宿主                                        |
 
 表内框架包都使用 `@weiliang0121/` scope。领域类型回到拥有行为的包；能跨端读取不意味着必须移入 protocol。只有明确的传输表示和接纳才由 protocol 维护，框架实体、Invocation 和 Runtime 不反向依赖它。共同类型的晋级规则见[契约与协议](contracts-protocol.md)。
 
@@ -33,11 +33,9 @@ const update = acceptTranscriptUpdate(JSON.parse(payload));
 
 **接纳一帧不代表接纳一条连续的流。** 集合身份匹配、连续 revision、重复交付、原正文是否被改写、连接替换与有限重建，仍由具体消费者负责。单帧错误也不自动取得重试、取消或恢复资格；HTTP、队列、预览、持久恢复和 UI 不进入本包。
 
-## 参考服务交接
+## 宿主协议
 
-Conversation 的提交、admission、活动、预览、文件、配置和恢复候选，以及 Observer 的 overview、selection、memory、interaction 和聚合流，随当前服务及客户端由 [Lab 业务协议](../../capix-lab/docs/protocol.md) 维护。原本位于此文档的服务行为说明由 Lab 当前契约接续，不作为所有框架消费者的规则。
-
-P4 中 Lab 只完成业务协议所有权迁移，继续使用已有 `ff9bce492c183625851610f838b31189d44cd90f` 公开候选批次。它仍按该版本导入框架领域／记录类型；尚未升级新 Memory、Tool 和观察端口，也未消费本轮新 wire 接纳器。后续统一升级在 Lab 独立完成；CAPiX 的构建、合入和发布不依赖 Lab 验收。
+提交、admission、预览、文件、配置、恢复候选与聚合流由宿主自行定义版本和接纳规则。框架不提供 Conversation／Observer DTO、HTTP 路由或 UI。业务协议引用框架领域类型时仍须明确 wire 表示，不能直接传递活实体、能力对象或内部事实。
 
 ## 独立验证
 

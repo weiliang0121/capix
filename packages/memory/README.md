@@ -64,7 +64,7 @@ Exported state, commit payloads, events, and reads contain Stable values, not an
 
 `MemoryEvent<Metadata>` and `MemoryFacts` belong to this package. Each event identifies memoriesId, sequence, time, optional origin, and `{action,memoryId,value,reason?}`. Forwarding uses typed facts; an independent change without origin does not acquire an inferred calling identity.
 
-Default records and protocol DTOs deliberately project only content and optional reason, omitting unknown metadata. Baseline and incremental display values use the same projection. Applications that need topic, source links, or other metadata must define their own projection and encoding. Lab services, persistence adapters, and clients require a separate migration; the CAPiX P3 changes do not include that work.
+Default records deliberately project only content and optional reason, omitting unknown metadata. The framework protocol package does not define Memory wire DTOs. Baseline and incremental display values use the same projection. Applications that need topic, source links, or other metadata must define their own projection and encoding. Applications own their persistence adapters and wire DTOs; display projections are not complete entity snapshots or recovery material.
 
 ## License
 

@@ -3,4 +3,4 @@ dist
 .test-dist
 pnpm-lock.yaml
 .env*
-traces/
+docs/.vitepress/cache/

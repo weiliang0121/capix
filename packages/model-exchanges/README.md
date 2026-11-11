@@ -87,4 +87,4 @@ commit(change) {
 
 `new ModelExchangeViewSource(exchanges, origin?)` 可读取全体或一个准确起点的交换。起点本身不是自动加入 View 的材料，内容选择仍由策略决定。版本覆盖起点建立、成员与反馈变化；`inspect/read` 只读取请求的 keys，旧快照保持原值，来源版本变化后读取拒绝。退出视图不删除事实。
 
-包内测试覆盖起点固定、请求重建、预算、持久未知、格式拒绝和 View；Runtime 包的集成测试使用真实 Scene/Node/Group、资源、Interaction 与 CP，验证普通登记和新 Runner 恢复，核对缺失或变化的依据不会触发重发。此轮没有迁移 capix-lab 的参考服务或 SQLite 适配，[Tool](../tool/README.md) 预设已在框架落地但尚未发布；不把离线恢复验证当作外部工具效果的恢复承诺。
+包内测试覆盖起点固定、请求重建、预算、持久未知、格式拒绝和 View；Runtime 包的集成测试使用真实 Scene/Node/Group、资源、Interaction 与 CP，验证普通登记和新 Runner 恢复，核对缺失或变化的依据不会触发重发。[Tool](../tool/README.md) 提供公开 Group 预设；不把离线恢复验证当作外部工具效果的恢复承诺。

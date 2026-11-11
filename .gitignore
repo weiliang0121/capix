@@ -3,9 +3,8 @@ dist/
 .env
 .env.*
 !.env.example
-traces/
 .DS_Store
 .test-dist/
 *.tsbuildinfo
-/workspace-files/
 /.capix/
+docs/.vitepress/cache/

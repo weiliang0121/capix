@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 // 运行：pnpm build && node examples/view.mjs
 // 全部使用内存数据。本例准备材料并维护视图，不调用外部模型。
 import { Transcript, TranscriptViewSource } from '@weiliang0121/capix-transcript';
@@ -90,3 +91,12 @@ console.log(`两次捕获的成员数：${first.snapshot.entries.length} → ${s
 console.log(`原始实体仍保留：${transcript.length} 条消息、${memories.values().length} 条记忆`);
 console.log(`首份快照仍包含：${first.snapshot.entries.length} 项`);
 console.log(`视图修订：${view.exportState().revision}（第二次维护没有成员变化，不增加修订）`);
+
+assert.equal(first.snapshot.entries.length, 4);
+assert.equal(second.snapshot.entries.length, 3);
+assert.equal(first.snapshot.entries.filter((entry) => entry.source === 'messages').length, 2);
+assert.equal(second.snapshot.entries.filter((entry) => entry.source === 'messages').length, 1);
+assert.equal(transcript.length, 2);
+assert.equal(memories.values().length, 1);
+assert.equal(view.exportState().revision, 1);
+assert.equal(runner.isRunning, false);

@@ -65,26 +65,27 @@ Scene 是入口结构，Group 组合成员，Node 执行具体处理；Resources
 
 ## 能力范围与版本边界
 
-| 状态                      | 范围                                                                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 已有公开包与当前契约      | 结构、资源、调用、稳定值、有限 CP 恢复、交互、内容实体、记录、原生模型协议适配及 Tool 预设                                     |
-| 私有 workspace / 参考装配 | Lab 的 `@capix/client-runtime`、`@capix/client-http`、Observer 内容组合、Conversation / Observer 宿主、ToolLoop 组合与参考页面 |
-| 设计候选                  | 通用 SQLite CP 适配、可嵌入观测 UI；尚未形成新的公开包                                                                         |
-| 当前未实现的产品能力      | MCP 接入、操作系统沙箱、动态调度、外部权限平台                                                                                 |
+仓库当前维护结构、资源、调用、稳定值、有限 CP 恢复、交互、内容实体、记录、原生模型协议与 Tool 预设。当前主分支包含待发布契约；npm `0.1.0` 与本分支不能视为同一版本。使用已发布包时查看该版本的 README 和 CHANGELOG，消费本地候选时固定完整分发批次。
 
-资源访问窗口约束框架内的受控操作，不提供操作系统隔离。模型协议支持范围和预算以对应包契约为准；参考宿主的性能和恢复实验不构成任意业务装配的保证。
+资源访问窗口约束框架内的受控操作，不提供操作系统隔离。MCP 接入、操作系统沙箱、动态调度与外部权限平台尚未作为框架能力实现。模型协议支持范围和预算以对应包契约为准。
 
-CP 只恢复显式声明的 point 和完整依据，不恢复 JavaScript 栈、任意草稿或未知外部效果。取消会等待已经启动的子调用真实退出；保存、交付与外部效果分别成立，不构成统一事务。详情见 [退出契约](docs/invocation-exit-contract.md)、[稳定事实与 CP](docs/checkpoints.md)。
+CP 只恢复显式声明的 point 和完整依据，不恢复 JavaScript 栈、任意草稿或未知外部效果。取消会等待已经启动的子调用真实退出；保存、交付与外部效果分别成立，不构成统一事务。详情见[退出契约](docs/invocation-exit-contract.md)和[Checkpoint](docs/checkpoints.md)。
 
-当前处于 0.x 开发阶段，公开契约和格式变化必须记录版本依据。只打开当前数据库和 **Frame v6** CP 格式；不自动升级、清空或降级读取旧数据。拒绝旧库不修改原文件，请显式使用新路径或由数据所有者决定重置。当前格式的重启载入、交互读取和显式 CP 恢复仍是正式能力。
+当前处于 0.x 开发阶段，公开契约和格式变化必须记录版本依据。只接收当前格式；不自动升级、清空或降级读取旧数据。拒绝旧数据不修改原文件，当前格式重启、交互读取和显式 CP 恢复仍是正式能力。
 
-## 参考装配与实验
+## 文档网站与示例
 
-完整 Conversation / Observer 服务、页面和大型实验由相邻的 **capix-lab** 承接。当前使用本地交接位置 [../capix-lab/README.md](../capix-lab/README.md)，没有在此假定其远端仓库地址；GitHub 上的源码读者需要另行取得该仓库。Observer 的 ActiveView、ConversationContent、内容同步及其测试位于 `capix-lab/services/observer-content`，尚未抽象为通用公开预设。CAPiX 只维护 18 个公开框架包，包括 Transcript、Memory、View、Resources；两个私有客户端包也归 Lab。这些参考装配不随上述三个 npm 包安装。
+文档网站源码位于 `docs/`，公开示例位于 `examples/`；网站直接展示同一份可运行源码。框架不依赖其他仓库、服务或私人开发资料。
 
-自定义实体以自己的身份、内容和规则承接持续材料，资源开放受控操作，View 组织本次使用范围。现有共享能力与可运行示例见[自定义实体](docs/custom-entities.md)；无需把业务事实包装成记忆或继承统一 Entity。仓库当前的 Memory、领域事实、protocol 和 View 修订仍待发布，npm `0.1.0` 不代表这些新契约；消费候选时须明确整批产物和来源摘要。Lab 的独立实体实验已消费新候选，现有参考服务尚未整体升级。
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+pnpm docs:dev
+```
 
-离线对话、真实模型配置、宿主数据库与页面启动命令以 capix-lab 的 README 为准。CAPiX 不读取相邻仓库的凭证、配置或源码来运行；跨仓候选验证使用明确的一批打包产物。迁移位置和适用基线见 [仓库拆分设计](docs/repository-split-design.md)。
+`pnpm examples:check` 实际运行并验证示例；`pnpm docs:build` 校验文档链接与代码引用后构建静态网站，`pnpm docs:preview` 预览产物。文档站未自动部署。示例在 Node.js 执行，网站显示源码和运行说明，不表示执行内核可直接运行于浏览器。
+
+学习路径见[文档导航](docs/README.md)、[最小示例](examples/README.md)与[架构](docs/organization.md)。自定义业务实体可以通过资源和 View 接入，不需要继承统一基类或把业务内容伪装成记忆；详见[自定义实体](docs/custom-entities.md)。
 
 ## 本地开发与贡献
 
