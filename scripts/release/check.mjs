@@ -72,7 +72,7 @@ export async function check() {
     await mkdir(consumer);
     const workspace = await json(join(root, 'package.json'));
     const dependencies = Object.fromEntries(archives.map((entry) => [entry.name, `file:${join(releaseDirectory, entry.file)}`]));
-    await writeFile(join(consumer, 'package.json'), JSON.stringify({ name: 'release-consumer', private: true, type: 'module', dependencies, devDependencies: { typescript: workspace.devDependencies.typescript, '@types/node': workspace.devDependencies['@types/node'] } }, null, 2));
+    await writeFile(join(consumer, 'package.json'), JSON.stringify({ name: 'release-consumer', private: true, type: 'module', dependencies, devDependencies: { zod: workspace.devDependencies.zod, typescript: workspace.devDependencies.typescript, '@types/node': workspace.devDependencies['@types/node'] } }, null, 2));
     command('npm', ['install', '--ignore-scripts', '--package-lock=false', '--no-audit', '--no-fund', '--prefer-offline', `--registry=${registry}`, '--fetch-timeout=20000', '--fetch-retries=1'], { cwd: consumer });
     command('npm', ['ls', '--all'], { cwd: consumer, stdio: 'pipe' });
     for (const fixture of ['consumer.mjs', 'consumer.ts']) await cp(join(root, 'scripts/release/fixtures', fixture), join(consumer, fixture));

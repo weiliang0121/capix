@@ -7,6 +7,8 @@ import { assertStructureConfigurable } from '@weiliang0121/capix-structure/const
 import { Runner, Resources, type RunnerOutputEvent } from '@weiliang0121/capix-runtime';
 import { CallableBuilder, type InvocationCapabilities } from '@weiliang0121/capix-runtime/construction';
 import { invocationRecording } from '@weiliang0121/capix-runtime/recording';
+import { z } from 'zod';
+import { Tool, type ToolMember } from '@weiliang0121/capix-tool';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
 const dictionary = new ResourceOffer({
@@ -74,3 +76,44 @@ if (false) {
   fixed.values.push('mutate');
 }
 void [result, builder, recording, options, received];
+
+// Public preset declarations retain each member's input and readonly output.
+const inlineLookup = defineNode<{ key: string }, { values: string[] }>()({ run: (work) => ({ values: [work.input.key] }) });
+const inlineTool = new Tool({
+  policyVersion: 'release.inline.v1',
+  tools: {
+    lookup: {
+      node: inlineLookup,
+      description: 'Read local values',
+      input: z.strictObject({ key: z.string() }),
+      result: {
+        succeeded: (value) => {
+          const text: string = value.values[0]!;
+          // @ts-expect-error Tool mapping receives deeply readonly Stable output
+          value.values.push('mutate');
+          return { status: 'ok', content: [{ kind: 'text', text }] };
+        },
+      },
+    },
+  },
+});
+const hoistedLookup = defineNode<{ key: string }, { text: string }>()({ run: (work) => ({ text: work.input.key }) });
+const hoistedMember = {
+  node: hoistedLookup,
+  description: 'Read a local word',
+  input: z.strictObject({ key: z.string() }),
+  result: { succeeded: (value) => ({ status: 'ok', content: [{ kind: 'text', text: value.text }] }) },
+} satisfies ToolMember<typeof hoistedLookup>;
+const hoistedTool = new Tool({ policyVersion: 'release.hoisted.v1', tools: { lookup: hoistedMember } });
+const toolScene = new Scene<CallableInput<typeof inlineTool>, string>().add({ tool: inlineTool });
+toolScene.run = (work) => work.children.tool.invoke(work.input);
+const toolResult: Promise<string> = new Runner(toolScene, new Resources()).build().run({ request: { messages: [{ role: 'user', content: 'hello' }] } });
+if (false) {
+  // @ts-expect-error Tool input schema must match its registered Node input
+  new Tool({ policyVersion: 'invalid', tools: { lookup: { ...hoistedMember, input: z.number() } } });
+  // @ts-expect-error Tool mapping output must use the native ToolResult contract
+  new Tool({ policyVersion: 'invalid', tools: { lookup: { ...hoistedMember, result: { succeeded: () => 'raw' } } } });
+  // @ts-expect-error Tool remains a Group and cannot replace Runner's Scene
+  new Runner(hoistedTool, new Resources());
+}
+void [hoistedTool, toolResult];

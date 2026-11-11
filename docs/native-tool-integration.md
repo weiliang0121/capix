@@ -6,6 +6,8 @@
 
 Provider 的现行接口见 [ModelProvider](../packages/model-provider/README.md)，工具作者接口见[工具预设](../../capix-lab/services/conversation/src/tools/README.md)，宿主使用见[服务 README](../../capix-lab/services/conversation/README.md)。本文旧文本交互只读和旧库迁移安排已撤销，详见文首兼容约定。
 
+2026-11-11：框架 [ModelExchanges](../packages/model-exchanges/README.md) 已将初始消息、请求选项和模型可见目录纳入固定起点，后续交换归属于起点；快照为 v2。模型输入可用 `{ origin, exchanges }` 引用，在发送资源处重建完整请求，资源直接登记实体，不再要求父输入 capture 供给初始材料。执行节点、工具映射与授权仍留在结构和资源中。随后已落地公开 [Tool Group 预设](../packages/tool/README.md)，使用 `new Tool({ tools, policyVersion })`、普通交换/模型资源登记及可选 CP；不保留 `tool()` 工厂、ToolLoop 别名或专用装配函数。capix-lab 参考 ToolLoop/宿主持久适配尚未迁移，下文的捕获装配描述保留当时语境，不能视作新 API。
+
 ## 1. 目标与范围
 
 让模型通过原生工具调用协议提出操作请求，由现有结构、资源和调用机制完成执行、接纳与反馈。模型决定下一步不改变 Invocation 的职责：它继续维护真实调用、访问窗口、父子交付与退出边界。

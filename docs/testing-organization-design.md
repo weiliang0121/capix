@@ -154,7 +154,7 @@ capix/
 | `pnpm test:repository`                                                | 已完成构建后，执行 workspace、依赖边界与仓库脚本检查        |
 | `pnpm test`                                                           | 构建一次，再执行 packages 与 repository 两部分              |
 | `pnpm check`                                                          | 构建一次，完成源码类型、两类正式测试和格式检查              |
-| `pnpm integration:check`                                              | 验证全部 20 个候选 tarball 的隔离安装、出口及运行／类型消费 |
+| `pnpm integration:check`                                              | 验证全部 21 个候选 tarball 的隔离安装、出口及运行／类型消费 |
 | `pnpm release:check`                                                  | 维持最终发布 tarball 的独立消费者验收                       |
 
 一个小的 `scripts/test` 执行器负责发现与构建协调，不承载测试语义。单包模式构建选中包及明确依赖；全仓模式先按依赖顺序构建一次，然后汇总准确测试文件交给 node:test。不要通过递归执行每个包的自带构建入口，造成一次全仓验证重复构建多个依赖闭包。
@@ -171,7 +171,7 @@ CAPiX CI 只检出本仓即可执行上述正式检查；不得读取 Lab 路径
 
 ### 7.1 分发验证也在本仓闭合
 
-现有 release:check 验证 17 个经过发布处理的公开包；integration:pack 构建的 20 包候选没有相同的压缩处理，不能把两种产物当成同一份证据。`integration:check` 已在 CAPiX 内为 20 包候选补独立临时消费者的安装与关键出口 smoke，覆盖三个未发布包的分发；无需启动 Lab。
+当前新增 Tool 后，release:check 验证 18 个经过发布处理的公开包；integration:pack 构建的 21 包候选没有相同的压缩处理，不能把两种产物当成同一份证据。`integration:check` 已在 CAPiX 内为 21 包候选补独立临时消费者的安装与关键出口 smoke，覆盖三个未发布包的分发；无需启动 Lab。
 
 打包检查除了文件白名单，还应拒绝 `dist/test`、fixture 等误编译产物。build、release:check、integration:pack 都可能重建同一批 dist，需顺序执行，不能和正在读取产物的测试并发。测试版本、源码来源与实际 tarball 摘要分别记录；候选源码摘要不自动代表已包含所有测试工具和验收依据。
 

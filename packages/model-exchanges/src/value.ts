@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 import { requireToolFeedback } from '@weiliang0121/capix-model-provider';
-import type { ExchangeOperation, ExchangeReference, ExchangeIntakeReceipt, ExchangeFeedbackReceipt } from './types.js';
+import type { ExchangeOperation, ExchangeReference, ExchangeOriginReference, ExchangeIntakeReceipt, ExchangeFeedbackReceipt } from './types.js';
 import { maximumModelExchangeEntryBytes } from './limits.js';
 
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [name: string]: JsonValue };
@@ -45,14 +45,19 @@ export function capture(value: unknown, limit = maximumModelExchangeEntryBytes):
 }
 
 /** Fix only the collection envelope. Each entry is captured and checked independently. */
-export function captureSnapshotEnvelope(value: unknown, maximumEntries: number): Readonly<{ formatVersion: unknown; id: unknown; sequence: unknown; entries: readonly unknown[] }> {
+export function captureSnapshotEnvelope(value: unknown, maximumEntries: number, maximumOrigins: number): Readonly<{ formatVersion: unknown; id: unknown; sequence: unknown; origins: readonly unknown[]; entries: readonly unknown[] }> {
   if (value === null || typeof value !== 'object' || isProxy(value) || Array.isArray(value) || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) throw new TypeError('Invalid model exchange snapshot object');
   const fields = Object.getOwnPropertyDescriptors(value);
-  const names = ['formatVersion', 'id', 'sequence', 'entries'];
+  const names = ['formatVersion', 'id', 'sequence', 'origins', 'entries'];
   if (Reflect.ownKeys(fields).length !== names.length || names.some((name) => !Object.hasOwn(fields, name) || !fields[name]!.enumerable || !('value' in fields[name]!))) throw new TypeError('Invalid model exchange snapshot fields');
-  const source: unknown = fields.entries!.value;
+  const origins = captureSnapshotArray(fields.origins!.value, maximumOrigins);
+  const entries = captureSnapshotArray(fields.entries!.value, maximumEntries);
+  return Object.freeze({ formatVersion: fields.formatVersion!.value, id: fields.id!.value, sequence: fields.sequence!.value, origins, entries });
+}
+
+function captureSnapshotArray(source: unknown, maximum: number): readonly unknown[] {
   if (!Array.isArray(source) || isProxy(source) || Object.getPrototypeOf(source) !== Array.prototype) throw new TypeError('Invalid model exchange entries array');
-  if (source.length > maximumEntries) throw new RangeError('Model exchange snapshot exceeds collection limits');
+  if (source.length > maximum) throw new RangeError('Model exchange snapshot exceeds collection limits');
   if (Reflect.ownKeys(source).length !== source.length + 1) throw new TypeError('Model exchange entries must be a dense data array');
   const entries: unknown[] = [];
   for (let index = 0; index < source.length; index++) {
@@ -60,7 +65,7 @@ export function captureSnapshotEnvelope(value: unknown, maximumEntries: number):
     if (!field || !field.enumerable || !('value' in field)) throw new TypeError('Model exchange entries must be a dense data array');
     entries.push(field.value);
   }
-  return Object.freeze({ formatVersion: fields.formatVersion!.value, id: fields.id!.value, sequence: fields.sequence!.value, entries: Object.freeze(entries) });
+  return Object.freeze(entries);
 }
 
 export function encodedBytes(value: unknown): number {
@@ -98,6 +103,11 @@ export function counter(value: unknown): number {
 export function requireExchangeReference(value: unknown): ExchangeReference {
   const item = record(capture(value), ['collection', 'id', 'revision']);
   return Object.freeze({ collection: identity(item.collection), id: identity(item.id), revision: counter(item.revision) });
+}
+export function requireExchangeOriginReference(value: unknown): ExchangeOriginReference {
+  const item = record(capture(value), ['collection', 'id', 'digest']);
+  if (typeof item.digest !== 'string' || !/^[a-f0-9]{64}$/u.test(item.digest)) throw new TypeError('Invalid model exchange origin digest');
+  return Object.freeze({ collection: identity(item.collection), id: identity(item.id), digest: item.digest });
 }
 export function requireExchangeOperation(value: unknown): ExchangeOperation {
   const item = record(capture(value), ['parentContextId', 'childContextId', 'position']);

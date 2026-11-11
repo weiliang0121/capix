@@ -1,0 +1,54 @@
+{
+  "name": "@weiliang0121/capix-tool",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node ../../scripts/test/run.mjs --package ."
+  },
+  "dependencies": {
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-checkpoint": "workspace:*",
+    "@weiliang0121/capix-diagnostics": "workspace:*",
+    "@weiliang0121/capix-structure": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-interaction": "workspace:*",
+    "@weiliang0121/capix-model-provider": "workspace:*",
+    "@weiliang0121/capix-model-exchanges": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "description": "A native model tool-calling Group preset for CAPiX.",
+  "license": "MIT",
+  "author": "wei.liang (https://github.com/weiliang0121)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weiliang0121/capix.git",
+    "directory": "packages/tool"
+  },
+  "engines": {
+    "node": ">=22.23.2"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "devDependencies": {
+    "@weiliang0121/capix-runtime": "workspace:*"
+  }
+}

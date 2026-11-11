@@ -32,8 +32,8 @@ export async function pack() {
   const privateEntries = await Promise.all(privateDirectories.map(async (directory) => ({ directory, path: join(root, directory), manifest: await json(join(root, directory, 'package.json')) })));
   for (const entry of privateEntries) assert.equal(entry.manifest.private, true);
   const entries = [...publicEntries, ...privateEntries];
-  assert.equal(entries.length, 20);
-  assert.equal(new Set(entries.map((entry) => entry.manifest.name)).size, 20);
+  assert.equal(entries.length, 21);
+  assert.equal(new Set(entries.map((entry) => entry.manifest.name)).size, 21);
   await mkdir(join(root, '.capix'), { recursive: true });
   const lock = join(root, '.capix/integration.lock');
   await mkdir(lock);

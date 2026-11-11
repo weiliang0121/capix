@@ -1,8 +1,8 @@
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { SourceStamp, SyncViewSource } from '@weiliang0121/capix-view';
 import type { ModelExchanges } from './exchanges.js';
-import type { ModelExchangeEntry } from './types.js';
-import { capture, identity, record } from './value.js';
+import type { ExchangeOriginReference, ModelExchangeEntry } from './types.js';
+import { capture, identity, record, requireExchangeOriginReference } from './value.js';
 
 export interface ModelExchangeSummary {
   readonly model: string;
@@ -18,19 +18,20 @@ export class ModelExchangeViewSource implements Source {
   readonly id: string;
   readonly scope: string;
   readonly #exchanges: ModelExchanges;
-  readonly #group?: string;
+  readonly #origin?: ExchangeOriginReference;
 
-  constructor(exchanges: ModelExchanges, scope?: string) {
+  constructor(exchanges: ModelExchanges, origin?: ExchangeOriginReference) {
     this.#exchanges = exchanges;
-    this.#group = scope === undefined ? undefined : identity(scope);
+    this.#origin = origin === undefined ? undefined : requireExchangeOriginReference(origin);
+    if (this.#origin) exchanges.origin(this.#origin);
     this.id = exchanges.id;
-    this.scope = scope === undefined ? 'whole' : `scope:${JSON.stringify(scope)}`;
+    this.scope = this.#origin === undefined ? 'whole' : `origin:${JSON.stringify(this.#origin.id)}`;
     Object.freeze(this);
   }
 
   index(): ReturnType<Source['index']> {
     const stamp = this.stamp();
-    const entries = Object.freeze(this.#exchanges.values(this.#group).map((entry) => Object.freeze({ key: entry.id, summary: summarize(entry) })));
+    const entries = Object.freeze(this.#exchanges.values(this.#origin).map((entry) => Object.freeze({ key: entry.id, summary: summarize(entry) })));
     this.requireCurrent(stamp);
     return Object.freeze({ stamp, entries });
   }
@@ -67,7 +68,7 @@ export class ModelExchangeViewSource implements Source {
     if (!Array.isArray(selected) || selected.some((key) => typeof key !== 'string' || !key) || new Set(selected).size !== selected.length) throw new TypeError('Model exchange view requires unique string keys');
     return selected.map((key) => {
       const entry = this.#exchanges.get(identity(key));
-      if (!entry || (this.#group !== undefined && entry.scope !== this.#group)) throw new RangeError('Exchange is outside the view source scope');
+      if (!entry || (this.#origin !== undefined && entry.origin !== this.#origin.id)) throw new RangeError('Exchange is outside the view source scope');
       return entry;
     });
   }

@@ -42,7 +42,11 @@
     "esbuild": "0.28.2",
     "prettier": "3.9.6",
     "typescript": "6.0.3",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@weiliang0121/capix-tool": "workspace:*",
+    "@weiliang0121/capix-model-provider": "workspace:*",
+    "@weiliang0121/capix-model-exchanges": "workspace:*",
+    "@weiliang0121/capix-interaction": "workspace:*"
   },
   "license": "MIT",
   "author": "wei.liang (https://github.com/weiliang0121)"

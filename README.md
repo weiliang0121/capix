@@ -46,7 +46,7 @@ Scene 是入口结构，Group 组合成员，Node 执行具体处理；Resources
 
 ## 包与公开入口
 
-17 个公开包统一使用 **`@weiliang0121/capix-`** 前缀，源码位于 `packages/<后缀>`，npm 名称保持不变。它们属于同一个 Changesets fixed 版本组；内部依赖从 `workspace:*` 转换成准确发布版本。新增候选能力不会自动加入该组。
+18 个公开包纳入分发配置，统一使用 **`@weiliang0121/capix-`** 前缀，源码位于 `packages/<后缀>`，此前已发布包的 npm 名称保持不变；新增 `tool` 预设尚未发布。它们属于同一个 Changesets fixed 版本组；内部依赖从 `workspace:*` 转换成准确发布版本。新增候选能力不会自动加入该组。
 
 | 包后缀                                        | 职责与入口                                                                    |
 | --------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -58,6 +58,7 @@ Scene 是入口结构，Group 组合成员，Node 执行具体处理；Resources
 | `interaction`                                 | [独立外部请求、反馈及局部等待](docs/interactions.md)                          |
 | `transcript`、`memory`、`view`、`measurement` | [消息、记忆、视图、使用计数及资源契约](docs/content-entities-packages.md)     |
 | `records`、`changes`、`diagnostics`           | [可选记录、变化交付与故障诊断](docs/recording.md)                             |
+| `tool`                                        | [原生工具调用的 Group 预设](packages/tool/README.md)                          |
 | `model-provider`、`model-exchanges`           | [原生模型协议适配、回复与工具反馈实体](docs/native-tool-integration.md)       |
 
 跨包只使用各包公开出口，不导入 `src` / `dist` 私有路径。Runtime 不转发所有能力；例如内容实体从各自包导入，可选记录安装使用 `@weiliang0121/capix-runtime/recording`。完整清单与分发验证见 [npm 发布](docs/npm-publishing.md)。
@@ -66,9 +67,9 @@ Scene 是入口结构，Group 组合成员，Node 执行具体处理；Resources
 
 | 状态                      | 范围                                                                                                                            |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 已有公开包与当前契约      | 结构、资源、调用、稳定值、有限 CP 恢复、交互、内容实体、记录及原生模型协议适配                                                  |
+| 已有公开包与当前契约      | 结构、资源、调用、稳定值、有限 CP 恢复、交互、内容实体、记录、原生模型协议适配及 Tool 预设                                      |
 | 私有 workspace / 参考装配 | `@capix/client-runtime`、`@capix/client-http`、`@capix/observer-content`；Conversation / Observer 宿主、ToolLoop 组合与参考页面 |
-| 设计候选                  | 独立工具循环预设、通用 SQLite CP 适配、可嵌入观测 UI；尚未形成新的公开包                                                        |
+| 设计候选                  | 通用 SQLite CP 适配、可嵌入观测 UI；尚未形成新的公开包                                                                          |
 | 当前未实现的产品能力      | MCP 接入、操作系统沙箱、动态调度、外部权限平台                                                                                  |
 
 资源访问窗口约束框架内的受控操作，不提供操作系统隔离。模型协议支持范围和预算以对应包契约为准；参考宿主的性能和恢复实验不构成任意业务装配的保证。

@@ -59,6 +59,7 @@
     "registry": "https://registry.npmjs.org"
   },
   "devDependencies": {
+    "@weiliang0121/capix-model-exchanges": "workspace:*",
     "@weiliang0121/capix-transcript": "workspace:*",
     "@weiliang0121/capix-memory": "workspace:*",
     "@capix/observer-content": "workspace:*",

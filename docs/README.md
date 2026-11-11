@@ -20,7 +20,7 @@ CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer �
 
 ## 使用和服务装配
 
-- npm 发布：[分发范围、产物验证、版本 PR 与本地发布](npm-publishing.md)。17 个 `@weiliang0121/capix-*` 包已发布 `0.1.0`；其余私有 workspace 不在首发范围。
+- npm 发布：[分发范围、产物验证、版本 PR 与本地发布](npm-publishing.md)。17 个 `@weiliang0121/capix-*` 包已发布 `0.1.0`；新增 [Tool 预设](../packages/tool/README.md) 已纳入分发配置但尚未发布；其余私有 workspace 不在首发范围。
 - 最小资源／结构示例：[dictionary.mjs](../examples/dictionary.mjs)；Runner：[runner.mjs](../examples/runner.mjs)。
 - 新内核的典型服务：[Conversation README](../../capix-lab/services/conversation/README.md)、[宿主与持久化](../../capix-lab/docs/conversation-host.md)、[浏览器体验](../../capix-lab/docs/conversation-web.md)、[显式恢复](../../capix-lab/docs/conversation-recovery.md)。
 - 原 Observer 参考服务：[装配](../../capix-lab/docs/service-assembly.md)、[对话身份](../../capix-lab/docs/conversations.md)、[持久化](../../capix-lab/docs/persistence.md)。两个服务的数据库和业务恢复资格独立。

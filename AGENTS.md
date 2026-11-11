@@ -16,7 +16,7 @@
 
 ## 包与依赖边界
 
-品牌保持 CAPiX，packages/ 中 17 个公开包统一使用 @weiliang0121 scope 和 capix- 前缀，名称与 0.1.0 首发不变；packages/client-runtime、client-http、observer-content 保持 @capix/* 私有身份。capix-lab 可通过明确的 20 包 tarball 批次开展实验，不能读取相邻框架私有源码；候选分发不形成两仓测试依赖。发布契约见 [npm 发布](docs/npm-publishing.md)。
+品牌保持 CAPiX，packages/ 中 18 个公开包统一使用 @weiliang0121 scope 和 capix- 前缀，此前首发名称不变，新增 tool 尚未发布；packages/client-runtime、client-http、observer-content 保持 @capix/* 私有身份。capix-lab 可通过明确的 21 包 tarball 批次开展实验，不能读取相邻框架私有源码；候选分发不形成两仓测试依赖。发布契约见 [npm 发布](docs/npm-publishing.md)。
 
 一个根 pnpm Workspace 与锁文件。包按职责划分，跨包只使用公开出口，不导入其他包的 src/dist 私有路径；包独立不意味着新增实体生命周期。
 
@@ -32,6 +32,7 @@
 | packages/transcript、memory、view、measurement                         | 独立消息、记忆、视图与使用计数及资源契约；不反向依赖 Runtime                                                         | [实体包](docs/content-entities-packages.md)、[View](docs/view-package.md)                                            |
 | packages/records、changes、diagnostics                                 | 记录实体；变化捕获/转交；PersistenceError 与有界诊断。真实故障归属仍由 Invocation 决定                               | [记录](docs/recording.md)、[异常](docs/exceptions.md)                                                                |
 | packages/model-provider、model-exchanges                               | 原生模型协议适配；完整回复、工具反馈槽位及固定接纳凭据实体。模型只是资源能力之一                                     | [工具接入](docs/native-tool-integration.md)                                                                          |
+| packages/tool                                                          | 原生工具调用的普通 Group 预设；固定起点、目录、串行推进及可选 CP；不依赖 Runtime 实现                                | [Tool](packages/tool/README.md)                                                                                      |
 | packages/observer-content                                              | 内容组合、ActiveView 默认策略及变化分发；不依赖 Runtime、Observer 服务或 SQLite                                      | [活跃材料](docs/active-content.md)                                                                                   |
 | capix-lab/services/conversation、observer                              | 参考业务装配、宿主持久化、HTTP/CLI、恢复资格；SQLite 和业务策略留在服务                                              | [Conversation](../capix-lab/services/conversation/README.md)、[Observer 装配](../capix-lab/docs/service-assembly.md) |
 | packages/client-runtime、packages/client-http；capix-lab/apps/observer | 无 UI 的会话/消费生命周期；HTTP 接纳；React 投影与展示。服务端与客户端不互相依赖                                     | [客户端](docs/client-runtime.md)、[协议](docs/protocol.md)                                                           |
@@ -75,9 +76,9 @@
 - 内容策略、材料选择、记忆提取与压缩是业务可替换 Node/Group 或实体预设，不把模型判断和默认策略固化成内核职责。完整材料和供模型查看的活跃视图分别表达。
 - Interaction 固定请求只发送一次，与调用独立存活；signal只终止局部等待，晚到反馈可保存并再次读取。宿主关闭先停止本地入口，再等其持有的外部发送 settled。未知反馈不自动重发。
 - 可选过程流由发送侧发布、本次资源操作订阅转交；有界临时回放和游标有序读取，不承诺持久增量或跨调用恰好消费一次。流超限/失效不能伪造完整前缀，结束不等于反馈校验、持久或父层接纳完成。
-- 工具是已登记成员；ToolLoop是普通Group预设，目录/成员同源，固定policyVersion、Schema摘要与预算；Zod升级可能改变目录摘要并拒绝恢复。结果映射必须纯且无副作用，异步映射不获得幂等保证。model-exchanges独立持有完整回复、反馈槽位及固定接纳凭据，不依赖调用/结构/服务。
-- 首版工具串行，CLI/Web显式选择 material/tools，默认材料链不变；工具模式提供真实阶段和最终回答，不转交候选正文。ToolAnswer/Loop分别capture，entry仅管理每次run/resume的ToolExchangeUse并finally关闭，不持有第二套运行状态。列表只给unchecked候选，终态不复活。
-- 模型子输入只保存交换引用；完整请求在资源发送边界形成并交给Interaction保存。模型协议适配不重试，响应有界；SSE需固定回复身份、完整终态和DONE，仅选用正文增量，原生续接材料完整保存。Key只由宿主配置，不能输出、记录或传给客户端。
+- 工具是已登记成员；公开 Tool 是普通 Group 预设，作者用 tools 对象登记节点、参数 Schema 和结果映射，普通资源登记 ModelExchangeResource / ToolModelResource，不要求 capture 或专用 installer；默认不开 CP，恢复显式依赖成员 CP 和原交互查询。目录/成员同源，固定policyVersion、Schema摘要与预算；Zod升级可能改变目录摘要并拒绝恢复。结果映射必须纯且无副作用，异步映射不获得幂等保证。model-exchanges独立持有固定起点（初始请求与模型可见目录）、归属于起点的完整回复、反馈槽位及固定接纳凭据，不依赖调用/结构/服务；快照v2，资源直接登记实体。起点不包含执行节点或授权，目录兼容由执行方核验，准确引用不授权重发。当前接口见[ModelExchanges](packages/model-exchanges/README.md)。
+- capix-lab首版参考工具串行，CLI/Web显式选择 material/tools，默认材料链不变；工具模式提供真实阶段和最终回答，不转交候选正文。旧装配的ToolAnswer/Loop分别capture，entry管理ToolExchangeUse；尚未适配固定起点，不能据此给新实体添加capture要求。列表只给unchecked候选，终态不复活。
+- 模型子输入可只保存起点与交换前缀引用；完整请求在资源发送边界形成并交给Interaction保存。反馈槽闭合与协议续接资格分别核验，历史前缀重建不自动取得恢复资格。模型协议适配不重试，响应有界；SSE需固定回复身份、完整终态和DONE，仅选用正文增量，原生续接材料完整保存。Key只由宿主配置，不能输出、记录或传给客户端。
 - 联合归档门槛覆盖材料/工具及resume，读查询不门控；参考上限2 GiB、经验缓冲512 MiB、在途交互估计2 MiB，仅是入口门槛，不是硬配额或任意执行上界。ToolLoop、存储与模型各自限额分别成立。
 - 新服务默认维护仅在正式助手消息后提取；可处理的提取失败可按明确 failed 策略跳过，保存/捕获/依据故障仍传播。消息、记忆、View各自保留真实结果，不伪造跨实体事务。Scene等待维护再最终交付，已落实回答不因后续失败消失。
 - 记录是可选实体与观测消费，业务/恢复不依赖Recorder。Web主动start/stop/clear，默认idle；stop等待已选入口释放，不取消业务、不等待独立交互。隔离漏记标为不完整，不能重拉基线伪装修复；恢复产生新活动而不伪造过去调用树。
@@ -86,7 +87,7 @@
 
 ## 编码与验证
 
-- 测试按被维护的契约跟随包；跨包组合归真实协调者，不能因使用多个包就放入全局。公共测试工具可放根目录，但不得隐式装配 Runtime 或反向引入上层包；包之间不导入彼此测试夹具。根部仅保留必要的 workspace／测试发现／分发检查。20 包测试位于 packages/*/test，公共工具位于 testing/support，仓库检查位于 testing/repository。单包 test 构建依赖后运行；全仓 check 只构建一次，空测试范围、缺产物或未声明依赖不能静默通过。归属与命令见 [包内测试与框架自证设计](docs/testing-organization-design.md)。
+- 测试按被维护的契约跟随包；跨包组合归真实协调者，不能因使用多个包就放入全局。公共测试工具可放根目录，但不得隐式装配 Runtime 或反向引入上层包；包之间不导入彼此测试夹具。根部仅保留必要的 workspace／测试发现／分发检查。21 包测试位于 packages/*/test，公共工具位于 testing/support，仓库检查位于 testing/repository。单包 test 构建依赖后运行；全仓 check 只构建一次，空测试范围、缺产物或未声明依赖不能静默通过。归属与命令见 [包内测试与框架自证设计](docs/testing-organization-design.md)。
 - Node22.23.2、pnpm10.7.1、TypeScript6.0.3；外部依赖精确版本、内部workspace:*。Prettier printWidth1000，不为窄行宽拆散签名。
 - 每条变量声明一个变量。循环直接表达继续/结束条件，不用while(true)再内部break；流异常或提前结束也释放资源。
 - 类自身ID直接生成，不为ID造无意义别名；不为一次new建立空壳Builder，不为每次检查建立包装层。真实构造协调与对象不变量保留明确归属。

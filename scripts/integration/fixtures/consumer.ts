@@ -1,4 +1,4 @@
-// Compile private public declarations in the same isolated install as the 17 public packages.
+// Compile private public declarations in the same isolated install as the 18 public packages.
 import { ConversationHttpTransport, HttpTransport } from '@capix/client-http';
 import { TranscriptReplica, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
 import { initialActiveView, appendActiveView, type ActiveViewState } from '@capix/observer-content';

@@ -10,6 +10,10 @@ import * as construction from '@weiliang0121/capix-runtime/construction';
 import * as recording from '@weiliang0121/capix-runtime/recording';
 import { Resource, ResourceOffer, ResourceAccessClosed } from '@weiliang0121/capix-resources';
 import { receiveOperation } from '@weiliang0121/capix-resources/operation';
+import { z } from 'zod';
+import { Tool, ToolModelResource } from '@weiliang0121/capix-tool';
+import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
+import { requireModelRequest, requireModelReply } from '@weiliang0121/capix-model-provider';
 import { MemoryCheckpointStore, cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
 
 const { Scene, Group, Node, Runner, Resources, checkpointPoint } = runtime;
@@ -162,4 +166,45 @@ assert.equal(bodyRuns, 1);
 assert.equal(resumeRuns, 1);
 assert.ok(restoredEvents.every((event) => event.contextId === coldImage.frame.owner.contextId));
 assert.equal(coldStore.read(coldImage.frame.owner.contextId).delivery.status, 'succeeded');
-console.log('CAPiX installed consumer smoke passed (identity, resources, invocation, cold checkpoint restore)');
+// Exercise the distributed Tool preset with host-owned plain entity/channel resources.
+const modelContract = { key: 'release.tool.model.v1', request: requireModelRequest, reply: requireModelReply };
+const modelRequests = [];
+const modelReply = (id, output) => ({ formatVersion: 1, id, model: 'offline-consumer', output, termination: { kind: 'completed', reason: output.some((item) => item.kind === 'tool-call') ? 'tool_calls' : 'stop' }, usage: null, native: { format: 'chat-completions', version: 1 } });
+const exchanges = new ModelExchanges();
+const interactions = new runtime.Interactions().register(modelContract, {
+  send(request) {
+    modelRequests.push(structuredClone(request));
+    return request.exchanges.length === 0 ? modelReply('lookup-request', [{ kind: 'tool-call', id: 'lookup-1', name: 'lookup', arguments: { encoding: 'json-text', text: '{"key":"hello"}' } }]) : modelReply('final-answer', [{ kind: 'text', text: 'translated:hello' }]);
+  },
+});
+let toolExecutions = 0;
+const lookup = new Node({
+  run(work) {
+    toolExecutions++;
+    return { text: `translated:${work.input.key}` };
+  },
+});
+const tool = new Tool({
+  policyVersion: 'release.consumer.v1',
+  tools: { lookup: { node: lookup, description: 'Look up a local word', input: z.strictObject({ key: z.string() }), result: { succeeded: (value) => ({ status: 'ok', content: [{ kind: 'text', text: value.text }] }) } } },
+});
+assert.ok(tool instanceof Group, 'Tool shares distributed structure class identity');
+const toolScene = new Scene().add({ tool });
+toolScene.run = (work) => work.children.tool.invoke(work.input);
+const toolResources = new Resources().register(new Resource(exchanges), ModelExchangeResource).register(new Resource({ exchanges, channel: interactions.bind(modelContract) }), ToolModelResource);
+const toolRunner = new Runner(toolScene, toolResources, interactions).build();
+assert.equal(exchanges.sequence, 0);
+assert.equal(modelRequests.length, 0);
+assert.equal(await toolRunner.run({ request: { messages: [{ role: 'user', content: 'Translate hello' }] } }), 'translated:hello');
+assert.equal(toolExecutions, 1);
+assert.equal(modelRequests.length, 2);
+assert.deepEqual(
+  modelRequests[0].tools.map((item) => item.name),
+  ['lookup'],
+);
+assert.deepEqual(modelRequests[1].exchanges[0].feedback, [{ toolCallId: 'lookup-1', status: 'ok', content: [{ kind: 'text', text: 'translated:hello' }] }]);
+assert.equal(exchanges.snapshot().origins.length, 1);
+assert.equal(exchanges.snapshot().entries.length, 2);
+await interactions.settled();
+interactions.close();
+console.log('CAPiX installed consumer smoke passed (identity, resources, invocation, cold checkpoint restore, offline Tool)');

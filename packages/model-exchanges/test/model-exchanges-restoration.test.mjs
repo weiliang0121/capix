@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ModelExchanges, maximumModelExchangeLimits } from '@weiliang0121/capix-model-exchanges';
 
+const basis = () => ({ request: { messages: [{ role: 'user', content: 'fixed' }] }, catalog: { tools: [{ name: 'read', description: 'Read', parameters: {} }], digest: 'empty', policyVersion: 'v1' } });
+
 const reply = () => ({ formatVersion: 1, id: 'reply', model: 'offline', output: [{ kind: 'text', text: 'retained' }], termination: { kind: 'completed', reason: 'stop' }, usage: null, native: { format: 'chat-completions', version: 1 } });
 
 function snapshot() {
   const entity = new ModelExchanges();
-  entity.intake('scope', { parentContextId: 'loop', childContextId: 'model', position: 'receive' }, reply());
+  entity.intake(entity.begin('scope', basis()), { parentContextId: 'loop', childContextId: 'model', position: 'receive' }, reply());
   return structuredClone(entity.snapshot());
 }
 
@@ -19,8 +21,8 @@ test('the supported entry ceiling restores even when the collection contains ove
   const template = state.entries[0];
   const count = maximumModelExchangeLimits.entries;
   assert.ok(nodes(template) * count > 2_000_000, 'this exceeds the former whole-snapshot structural limit');
-  state.sequence = count;
-  state.entries = Array.from({ length: count }, (_, index) => ({ ...template, id: `entry-${index}`, sequence: index + 1, operation: { ...template.operation, childContextId: `model-${index}` } }));
+  state.sequence = count + 1;
+  state.entries = Array.from({ length: count }, (_, index) => ({ ...template, id: `entry-${index}`, sequence: index + 2, operation: { ...template.operation, childContextId: `model-${index}` } }));
   let effects = 0;
   const restored = ModelExchanges.restore(state, {
     limits: maximumModelExchangeLimits,
@@ -35,18 +37,18 @@ test('the supported entry ceiling restores even when the collection contains ove
       },
     },
   });
-  assert.equal(restored.sequence, count);
+  assert.equal(restored.sequence, count + 1);
   assert.equal(restored.values().length, count);
   const first = restored.get('entry-0');
   const last = restored.get(`entry-${count - 1}`);
-  assert.equal(last.sequence, count);
+  assert.equal(last.sequence, count + 1);
   assert.ok(Object.isFrozen(last.reply.output[0]));
   assert.ok(Object.isFrozen(last.operation));
   assert.notEqual(first.reply, template.reply, 'restoration owns frozen values, not references into caller data');
   template.reply.output[0].text = 'caller changed';
   assert.equal(first.reply.output[0].text, 'retained');
   assert.equal(last.reply.output[0].text, 'retained');
-  assert.throws(() => restored.intake('scope', { parentContextId: 'loop', childContextId: 'one-too-many', position: 'receive' }, reply()), /capacity/);
+  assert.throws(() => restored.intake(restored.begin('scope', basis()), { parentContextId: 'loop', childContextId: 'one-too-many', position: 'receive' }, reply()), /capacity/);
   assert.equal(effects, 0, 'restoration and capacity refusal do not persist or publish');
 });
 
@@ -84,6 +86,26 @@ test('snapshot envelopes and entry arrays reject accessors, proxies, hidden fiel
       'sparse entries',
       (value) => {
         delete value.entries[0];
+      },
+    ],
+    ['origin array accessor', (value) => Object.defineProperty(value.origins, '0', { get: getter, enumerable: true })],
+    [
+      'origin array proxy',
+      (value) => {
+        value.origins = proxy(value.origins);
+      },
+    ],
+    [
+      'origin proxy',
+      (value) => {
+        value.origins[0] = proxy(value.origins[0]);
+      },
+    ],
+    ['origin basis accessor', (value) => Object.defineProperty(value.origins[0], 'request', { get: getter, enumerable: true })],
+    [
+      'sparse origins',
+      (value) => {
+        delete value.origins[0];
       },
     ],
     ['entry accessor', (value) => Object.defineProperty(value.entries, '0', { get: getter, enumerable: true })],

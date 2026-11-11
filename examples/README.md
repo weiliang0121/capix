@@ -4,6 +4,7 @@
 
 - [字典资源与结构](dictionary.mjs)、[Runner](runner.mjs)：三包起点。
 - [预设](presets.mjs)：Sequence／Dynamic 的结构组合。
+- [Tool](tool.mjs)：普通 Group 预设与两项资源登记，离线模型选择成员并消费真实反馈。
 - [运行输出](runner-output.mjs)、[调用退出](invocation-exit.mjs)：输出接收与真实关闭。
 - [记录](records.mjs)：可选记录消费。
 - [视图](view.mjs)、[成员操作](view-membership.mjs)、[Skill 视图](view/skills.mjs)：实体与视图组合。

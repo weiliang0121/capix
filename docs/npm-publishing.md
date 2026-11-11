@@ -4,7 +4,7 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-公开范围为 `packages/` 中的 17 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；目录迁移未改包名、版本或公开出口。`packages/client-runtime`、`client-http`、`observer-content` 与根包仍为私有，不能因同在 packages 下而自动发布。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
+公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；新增 `capix-tool` 已纳入该清单但尚未发布；此前目录迁移未改已有包名、版本或公开出口。`packages/client-runtime`、`client-http`、`observer-content` 与根包仍为私有，不能因同在 packages 下而自动发布。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
 
 公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。完整职责见根 [README](../README.md#包与公开入口)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
@@ -30,12 +30,12 @@ pnpm release:check
 
 检查或打包不会发布 npm。发布前审阅实际打包列表，确认未包含密钥、私有路径或不应公开的文本。
 
-## 第一次本地发布
+## 本地发布
 
 发布由维护者在本地终端完成。GitHub 只保留 CI 与自动版本 PR，不需要配置 npm GitHub token、trusted publisher 或发布 Environment。
 
-1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次 17 个准确包名及其发布权限。本地验证不能证明远端名称占用或发布权限。
-2. 在干净的、已审阅提交上完成上述验证。当前首发版本为 `0.1.0`，直接发布当前真实包；首发前不运行 `release:version`，不额外推进版本。
+1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次 18 个准确包名及其发布权限。本地验证不能证明远端名称占用或发布权限。
+2. 原 17 包的 `0.1.0` 首发已完成。本次包含 ModelExchanges 契约变更与新增 Tool 的待发布 changesets，先按下节流程审阅并合并版本 PR；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。核对 18 包 fixed 组的版本计划后，在干净的已审阅提交上完成上述验证。不要直接重发已有 `0.1.0`；`release:publish` 会拒绝尚未处理的 changesets。
 3. 在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天；发布时按终端提示完成认证。
 4. 执行 `pnpm release:publish`，上传当前尚未存在的版本。此命令会写入 npm，只有决定正式发布时才执行。
 
@@ -64,6 +64,8 @@ pnpm release:publish
 
 ## 实验仓库的候选分发
 
-`pnpm integration:pack` 干净构建现有 20 包，只生成本地 `.capix/integration` tarball 批次，不发布。manifest 记录基线提交、dirty 标记、实际源文件摘要和每个产物的 SHA256。三个私有包仍带 private 身份，文件白名单只含编译产物、声明、README 和可用许可文件。
+`pnpm integration:pack` 干净构建现有 21 包，只生成本地 `.capix/integration` tarball 批次，不发布。manifest 记录基线提交、dirty 标记、实际源文件摘要和每个产物的 SHA256。三个私有包仍带 private 身份，文件白名单只含编译产物、声明、README 和可用许可文件。
 
 在 capix-lab 中显式运行 `pnpm candidate:import --directory /absolute/path/to/capix/.capix/integration`，校验完整批次并复制到本仓本地 vendor，根 overrides 固定全部传递依赖到同批产物；执行 install 更新并审查独立锁文件，再 frozen install 与 check。没有相邻源码软链。该路径是本地验证分发，不代表三个私有包已经公开，也不自动修改 npm 发布清单。
+
+候选消费者需自行适配新增包及契约变化。本次 ModelExchanges v2 与 Tool 的框架验证不代表 capix-lab 原参考服务已完成迁移；Lab 的候选清单、资源登记与持久适配仍需在其任务中单独处理。

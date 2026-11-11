@@ -28,7 +28,7 @@ export async function json(path) {
 }
 
 export async function packages() {
-  const directories = ['packages/contracts', 'packages/protocol', 'packages/changes', 'packages/checkpoint', 'packages/diagnostics', 'packages/interaction', 'packages/invocation', 'packages/measurement', 'packages/memory', 'packages/model-exchanges', 'packages/model-provider', 'packages/records', 'packages/resources', 'packages/runtime', 'packages/structure', 'packages/transcript', 'packages/view'];
+  const directories = ['packages/contracts', 'packages/protocol', 'packages/changes', 'packages/checkpoint', 'packages/diagnostics', 'packages/interaction', 'packages/invocation', 'packages/measurement', 'packages/memory', 'packages/model-exchanges', 'packages/model-provider', 'packages/records', 'packages/resources', 'packages/runtime', 'packages/structure', 'packages/tool', 'packages/transcript', 'packages/view'];
   const result = await Promise.all(directories.map(async (directory) => ({ directory, path: join(root, directory), manifest: await json(join(root, directory, 'package.json')) })));
   const byName = new Map(result.map((entry) => [entry.manifest.name, entry]));
   assert.equal(byName.size, result.length, 'Duplicate release package names');
