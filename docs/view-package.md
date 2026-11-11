@@ -89,6 +89,8 @@ interface SourceInspection<Key extends string | number, Summary> {
 
 `SyncViewSource` 是相同契约的同步形式，四个方法均直接返回。同步方法收到 Promise 或其他异步结果必须拒绝，不能把未完成的读取当成数据。
 
+自定义同步来源可以使用 `createViewSource({ id, scope, version, keys, inspect, read })`。其中 inspect/read 是单项回调；适配器组合上述四个来源方法，固定身份、核验版本并隔离被动内容。作者负责准确版本、固定范围与缺项拒绝；inspect/read 不枚举 keys，undefined 仍是合法内容。异步来源直接实现 ViewSource。完整用法与成本见[自定义实体](custom-entities.md)；适配器不持有业务版本历史、写入或资源访问权限。
+
 现有适配器由对应实体包提供：
 
 ```ts

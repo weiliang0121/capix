@@ -6,7 +6,7 @@ import { readFile, readdir } from 'node:fs/promises';
 
 import { fileURLToPath } from 'node:url';
 
-const packages = [{ name: '@weiliang0121/capix-view', exports: ['View', 'openView', 'openViewManager'] }];
+const packages = [{ name: '@weiliang0121/capix-view', exports: ['View', 'createViewSource', 'openView', 'openViewManager'] }];
 
 test('content packages load through public roots without importing callable structures or runtime', async () => {
   async function inspect(directory) {

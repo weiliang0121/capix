@@ -13,6 +13,7 @@
 | 支持哪些旧数据             | [开发期兼容](development-compatibility.md)：只接收当前格式，不迁移旧库或保留旧 CP 解码支路                                                       |
 | 独立外部交互与模型         | [交互](interactions.md)、[ModelProvider](../packages/model-provider/README.md)、[Tool 预设](../packages/tool/README.md)                          |
 | 内容、视图与策略           | [实体包](content-entities-packages.md)、[消息](transcript.md)、[记忆](memory.md)、[View](view-package.md)、[Lab 活跃材料边界](active-content.md) |
+| 业务自定义实体与可选能力   | [自定义实体](custom-entities.md)、[可运行例子](../examples/entities.mjs)                                                                         |
 | 记录、观测和运行出口       | [记录](recording.md)、[增量观测](observation-increments.md)、[运行出口](runtime-ports.md)                                                        |
 | 客户端与跨端协议           | [客户端运行能力](client-runtime.md)、[协议](protocol.md)                                                                                         |
 
@@ -28,7 +29,7 @@ CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer �
 
 ## 仓库组织与开源准备
 
-- [客户端、协议与实体边界收敛计划](kernel-boundary-migration-plan.md)：近期迁移顺序、阶段完成条件和测试归属；P0／P1 已完成客户端交接，P2 已接通类型化领域事实与普通业务材料。P3 Memory 已独立，P4 领域类型与业务协议已归位；下一步 P5 通用实体作者入口验收，P5／P6 尚未实施。Lab 本轮只迁移业务协议，未升级新框架候选。
+- [客户端、协议与实体边界收敛计划](kernel-boundary-migration-plan.md)：近期迁移顺序、阶段完成条件和测试归属；P0／P1 已完成客户端交接，P2 已接通类型化领域事实与普通业务材料。P3 Memory 已独立，P4 领域类型与业务协议已归位；P5 已完成自定义实体入口及独立消费验证，下一步 P6 仓库与契约收尾。Lab 未升级新框架候选。
 - [仓库拆分设计](repository-split-design.md)：框架与实验／参考装配两个仓库的目标目录、能力归属、验证交接和分阶段迁移。第一版已实施，后续候选仍需逐项明确边界。
 - [包命名与开源准备](open-source-preparation.md)：统一 `packages/` 的长期布局、保留真实客户端职责、已发布包身份，以及公共入口、贡献说明与公开历史的逐步准备。已落实公开入口与包目录；未改变仓库可见性。
 

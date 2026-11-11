@@ -18,6 +18,7 @@ import { FactType } from '@weiliang0121/capix-changes';
 import type { ResourceEventConsumer } from '@weiliang0121/capix-resources';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import * as memory from '@weiliang0121/capix-memory';
+import { View, createViewSource, openView, type ViewAccess } from '@weiliang0121/capix-view';
 
 const dictionary = new ResourceOffer({
   methods: {
@@ -179,6 +180,78 @@ if (false) {
   event.change.value.metadata!.tags.push('change');
 }
 void memoryResult;
+
+// New business sources retain distinct key/value types without an entity base class.
+const businessSettings = { locale: 'zh', preferences: { tags: ['installed'] } };
+const businessNotes = new Map([[0, { text: 'first note', labels: ['append-only'] }]]);
+const settingsSource = createViewSource({
+  id: 'typed.settings',
+  scope: 'whole',
+  version: () => '1',
+  keys: () => ['settings'] as const,
+  inspect(key) {
+    key satisfies 'settings';
+    return { locale: businessSettings.locale };
+  },
+  read(key) {
+    key satisfies 'settings';
+    return businessSettings;
+  },
+});
+const notesSource = createViewSource({
+  id: 'typed.notes',
+  scope: 'whole',
+  version: () => '1',
+  keys: () => [...businessNotes.keys()],
+  inspect(key) {
+    key satisfies number;
+    if (!businessNotes.has(key)) throw new RangeError('Unknown note');
+    return { label: `note ${key}` };
+  },
+  read(key) {
+    const value = businessNotes.get(key);
+    if (!value) throw new RangeError('Unknown note');
+    return value;
+  },
+});
+const businessSources = { settings: settingsSource, notes: notesSource, memories: memorySource };
+const businessView = new View<typeof businessSources>({
+  revision: 0,
+  sources: { settings: { id: settingsSource.id, scope: settingsSource.scope }, notes: { id: notesSource.id, scope: notesSource.scope }, memories: { id: memorySource.id, scope: memorySource.scope } },
+  members: [
+    { source: 'settings', key: 'settings' },
+    { source: 'notes', key: 0 },
+  ],
+});
+const businessViewOffer = new ResourceOffer({ expose: (origin: { view: typeof businessView; sources: typeof businessSources }, activity) => openView(origin.view, origin.sources, activity) });
+const businessScene = new Scene<null, string, { materials: ViewAccess<typeof businessSources> }>({
+  deps: { materials: businessViewOffer.request() },
+  async run(work) {
+    const material = await work.resources.materials.capture();
+    for (const entry of material.entries) {
+      if (entry.source === 'settings') entry.value.preferences.tags satisfies readonly string[];
+      if (entry.source === 'notes') entry.value.text satisfies string;
+      if (entry.source === 'memories') entry.value.value.metadata?.label satisfies string | undefined;
+    }
+    return 'typed business materials';
+  },
+});
+const businessSupply = new Resources().register(new Resource({ view: businessView, sources: businessSources }), businessViewOffer);
+const businessResult: Promise<string> = new Runner(businessScene, businessSupply).build().run(null);
+const settingsSnapshot = settingsSource.read(['settings'], settingsSource.index().stamp);
+if (false) {
+  // @ts-expect-error a settings source requires its own literal string key
+  settingsSource.inspect([0]);
+  // @ts-expect-error append-only note keys remain numeric
+  notesSource.read(['settings'], notesSource.index().stamp);
+  // @ts-expect-error View membership preserves each source's key type
+  businessView.includeSync(businessSources, [{ source: 'notes', key: 'settings' }]);
+  // @ts-expect-error source slots cannot be invented by the consumer
+  businessView.has({ source: 'other', key: 0 });
+  // @ts-expect-error adapter output is deeply readonly even before entering a View
+  settingsSnapshot.entries[0]!.value.preferences.tags.push('rewrite');
+}
+void businessResult;
 
 const exactMemoryRequest: memory.MemoryFixedApply<MemoryMetadata> = {
   contract: { key: 'memories.apply', version: 2 },

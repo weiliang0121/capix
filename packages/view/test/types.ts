@@ -1,5 +1,5 @@
 import { Resource, ResourceOffer, Resources } from '@weiliang0121/capix-resources';
-import { View, openView, openViewManager, type SyncViewSource, type ViewSource, type ViewState, type SourceStamp } from '@weiliang0121/capix-view';
+import { View, createViewSource, openView, openViewManager, type SyncViewSource, type ViewSource, type ViewState, type SourceStamp, type ViewSourceData, type ViewSourceOptions } from '@weiliang0121/capix-view';
 
 declare function expectType<Value>(value: Value): void;
 declare const stamp: SourceStamp;
@@ -98,6 +98,48 @@ new ResourceOffer({
     return openViewManager(view, asyncControlled, activity);
   },
 });
+
+const authored = createViewSource({
+  id: 'settings',
+  scope: 'visible',
+  version: () => '0',
+  keys: () => ['theme', 'language'] as const,
+  inspect: (key) => ({ title: key, groups: ['settings'] }),
+  read: (key) => ({ key, nested: { tags: ['local'] } }),
+});
+expectType<string>(authored.id);
+expectType<string>(authored.scope);
+const authoredIndex = authored.inspect(['theme']);
+expectType<'theme' | 'language'>(authoredIndex.entries[0]!.summary.title);
+const authoredValue = authored.read(['language'], authoredIndex.stamp).entries[0]!.value;
+expectType<'theme' | 'language'>(authoredValue.key);
+expectType<readonly string[]>(authoredValue.nested.tags);
+expectType<ViewSourceData<{ nested: { tags: string[] } }>>(authoredValue);
+// @ts-expect-error source adapter keys retain their literal domain
+authored.inspect(['unknown']);
+// @ts-expect-error metadata is recursively readonly
+authoredIndex.entries[0]!.summary.groups.push('changed');
+// @ts-expect-error source values are recursively readonly
+authoredValue.nested.tags.push('changed');
+// @ts-expect-error nested source values cannot be replaced
+authoredValue.nested = { tags: [] };
+// @ts-expect-error fixed source identity is readonly
+authored.scope = 'other';
+const authoredOptions: ViewSourceOptions<number, { title: string }, { content: string }> = { id: 'numbers', scope: 'whole', version: () => '0', keys: () => [0], inspect: (key) => ({ title: String(key) }), read: () => ({ content: 'value' }) };
+expectType<SyncViewSource<number, { readonly title: string }, { readonly content: string }>>(createViewSource(authoredOptions));
+const optional = createViewSource({ id: 'optional', scope: 'whole', version: () => '0', keys: () => ['key'], inspect: () => undefined, read: () => undefined });
+expectType<undefined>(optional.inspect(['key']).entries[0]!.summary);
+expectType<undefined>(optional.read(['key'], stamp).entries[0]!.value);
+// @ts-expect-error the synchronous adapter cannot accept an asynchronous source version
+createViewSource({ ...authoredOptions, version: async () => '0' });
+// @ts-expect-error the synchronous adapter cannot accept an asynchronous directory
+createViewSource({ ...authoredOptions, keys: async () => [0] });
+// @ts-expect-error the synchronous adapter cannot accept asynchronous metadata
+createViewSource({ ...authoredOptions, inspect: async () => ({ title: 'async' }) });
+// @ts-expect-error the synchronous adapter cannot accept asynchronous bodies
+createViewSource({ ...authoredOptions, read: async () => ({ content: 'async' }) });
+// @ts-expect-error source content cannot expose callable capabilities
+createViewSource({ ...authoredOptions, read: () => ({ run() {} }) });
 
 const index = view.indexSync(sources);
 for (const entry of index.entries) {

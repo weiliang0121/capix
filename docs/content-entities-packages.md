@@ -4,6 +4,8 @@ CAPiX 维护共享实体与机制；Observer 专用内容组合及测试位于 `
 
 P3 已落实独立 Memory 内容及其资源、View、记录与协议投影，当前 API 见 [记忆](memory.md)。Lab 的提取策略、宿主持久编码与客户端尚未迁移；P4 已归位消息、记录和调用进度类型，Lab 组合说明不表示其已导入或验证新版框架产物。[实体能力契约盘点与迁移候选](entity-capabilities-audit.md) 保留设计盘点范围。
 
+P5 的[自定义实体](custom-entities.md)提供作者入口：普通业务对象用可选 `createViewSource` 接入相同 View／资源／调用链，CP 和记录分别装配。复用读取约束，不新增 Entity 基类或统一业务容器；现有实体按自身领域承诺继续独立实现。
+
 ## 对象与包
 
 | 对象或能力                           | 入口与归属                        | 负责什么                                                          | 不承担什么                                      |
@@ -62,7 +64,7 @@ flowchart TD
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `packages/transcript`                 | `types.ts/event.ts`：Message、定位／快照、TranscriptEvent 与 TranscriptFacts；`transcript.ts`：集合及接纳；`ref.ts`：`MessageRef/TranscriptRangeRef`；`append.ts`：固定追加依据和凭据；`persistence.ts`：状态与同步提交；`resource.ts`：`TranscriptResource/TranscriptRangeReader`；`progress.ts`：追加进展值；`view.ts`：TranscriptViewSource；`presets.ts`：可选相邻配对算法 |
 | `packages/memory`                     | `memory.ts/memories.ts`：固定材料与唯一写集合；`change.ts/apply.ts`：变更和固定批次；`persistence.ts`：当前状态与同步增量提交；`resource.ts`：`memoryResources<Metadata>()` 的 read/apply Offer；`event.ts`：MemoryEvent/MemoryFacts；`view.ts`：MemoryViewSource                                                                                                              |
-| `packages/view`                       | `view.ts`：通用成员状态与一致读取；`source.ts/types.ts`：来源与数据契约；`access.ts`：按资源窗口打开端点                                                                                                                                                                                                                                                                       |
+| `packages/view`                       | `view.ts`：通用成员状态与一致读取；`source.ts/types.ts`：来源与数据契约；`adapter.ts`：自定义同步来源的可选适配；`access.ts`：按资源窗口打开端点                                                                                                                                                                                                                               |
 | `packages/measurement`                | `usage.ts`：按对象计数；`resource.ts`：受窗口控制的记录端点                                                                                                                                                                                                                                                                                                                    |
 | `packages/records`                    | `data/`：纯记录 DTO、归档校验、输出解析及通用查询；`record.ts/book.ts/recorder.ts`：记录载体与登记；`tree/`：直接归属与树查询；`restoration/`：只读历史恢复；`resource.ts`：普通快照 read/write；`construction.ts`：宿主记录构造；`memory/observe.ts`：结构兼容的记忆投影辅助                                                                                                  |
 | `capix-lab/services/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步；`view/active.ts`：ActiveView 来源同步与正式操作；`view/state.ts`：状态契约与校验；`view/default-policy.ts`：默认纳入预设；`view/resource.ts`：read/manage Offer                          |

@@ -15,7 +15,8 @@ export function data<Value>(value: Value): Value {
     if (typeof input !== 'object' || types.isProxy(input)) throw new TypeError('View content must be passive data');
     if (visiting.has(input)) throw new TypeError('View content cannot contain cycles');
     const array = Array.isArray(input);
-    if (!array && Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null) throw new TypeError('View content cannot contain live objects');
+    const prototype: unknown = Object.getPrototypeOf(input);
+    if (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) throw new TypeError('View content cannot contain live objects');
     visiting.add(input);
     try {
       const result: Record<string, unknown> | unknown[] = array ? [] : {};
@@ -66,9 +67,21 @@ export function checkKey(key: unknown): asserts key is ViewKey {
   throw new TypeError('View keys must be nonempty strings or nonnegative safe integers');
 }
 export function synchronous<Value>(value: Value, label: string): Exclude<Value, PromiseLike<unknown>> {
-  if (value && (typeof value === 'object' || typeof value === 'function') && typeof (value as { then?: unknown }).then === 'function') {
-    void Promise.resolve(value).catch(() => undefined);
-    throw new TypeError(`${label} must complete synchronously`);
+  if (value && (typeof value === 'object' || typeof value === 'function')) {
+    let current: object | null = value;
+    while (current !== null) {
+      if (types.isProxy(current)) throw new TypeError(`${label} cannot use a proxy`);
+      const descriptor = Object.getOwnPropertyDescriptor(current, 'then');
+      if (descriptor) {
+        if (!('value' in descriptor)) throw new TypeError(`${label} cannot use a then accessor`);
+        if (typeof descriptor.value === 'function') {
+          void Promise.resolve(value).catch(() => undefined);
+          throw new TypeError(`${label} must complete synchronously`);
+        }
+        break;
+      }
+      current = Object.getPrototypeOf(current);
+    }
   }
   return value as Exclude<Value, PromiseLike<unknown>>;
 }

@@ -22,6 +22,7 @@ import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model
 import { requireModelRequest, requireModelReply } from '@weiliang0121/capix-model-provider';
 import { MemoryCheckpointStore, cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
 import { Memories, MemoryViewSource, memoryResources } from '@weiliang0121/capix-memory';
+import { View, createViewSource, openView } from '@weiliang0121/capix-view';
 
 const { Scene, Group, Node, Runner, Resources, checkpointPoint } = runtime;
 const { RuntimeError, StableValueError, stableValue } = contracts;
@@ -307,4 +308,85 @@ const memorySource = new MemoryViewSource(memories, [memoryItem.id]);
 const memoryDirectory = memorySource.index();
 assert.deepEqual(memoryDirectory.entries, [{ key: memoryItem.id, summary: undefined }]);
 assert.deepEqual(memorySource.read([memoryItem.id], memoryDirectory.stamp).entries, [{ key: memoryItem.id, value: memoryItem }]);
-console.log('CAPiX installed consumer smoke passed (identity, resources, typed facts, invocation events, record data, transcript wire, cold checkpoint restore, offline Tool, standalone Memory)');
+
+// Business update rules stay local; the public adapter supplies the View protocol.
+const settings = { version: 0, value: { locale: 'zh', preferences: { tags: ['original'] } } };
+const notes = {
+  version: 1,
+  values: new Map([
+    [0, { text: 'first note' }],
+    [1, { text: 'unselected note' }],
+  ]),
+};
+let noteReads = 0;
+const settingsSource = createViewSource({
+  id: 'release.settings',
+  scope: 'whole',
+  version: () => String(settings.version),
+  keys: () => ['settings'],
+  inspect(key) {
+    if (key !== 'settings') throw new RangeError('Unknown settings key');
+    return { locale: settings.value.locale };
+  },
+  read(key) {
+    if (key !== 'settings') throw new RangeError('Unknown settings key');
+    return settings.value;
+  },
+});
+const notesSource = createViewSource({
+  id: 'release.notes',
+  scope: 'whole',
+  version: () => String(notes.version),
+  keys: () => [...notes.values.keys()],
+  inspect(key) {
+    if (!notes.values.has(key)) throw new RangeError('Unknown note');
+    return { label: `note ${key}` };
+  },
+  read(key) {
+    if (!notes.values.has(key)) throw new RangeError('Unknown note');
+    noteReads++;
+    return notes.values.get(key);
+  },
+});
+const entitySources = { settings: settingsSource, notes: notesSource, memories: memorySource };
+const entityView = new View({
+  revision: 0,
+  sources: Object.fromEntries(Object.entries(entitySources).map(([slot, source]) => [slot, { id: source.id, scope: source.scope }])),
+  members: [
+    { source: 'settings', key: 'settings' },
+    { source: 'notes', key: 0 },
+    { source: 'memories', key: memoryItem.id },
+  ],
+});
+const entityIndex = entityView.indexSync(entitySources);
+assert.equal(noteReads, 0, 'indexing selected summaries does not read note bodies');
+const entityOffer = new ResourceOffer({ name: 'release.entities', expose: (origin, activity) => openView(origin.view, origin.sources, activity) });
+const entityScene = new Scene({ deps: { materials: entityOffer.request() }, run: (work) => work.resources.materials.capture() });
+const entityRunner = new Runner(entityScene, new Resources().register(new Resource({ view: entityView, sources: entitySources }), entityOffer)).build();
+const entityMaterials = await entityRunner.run(null);
+assert.equal(noteReads, 1, 'one selected key does not read all append-only history');
+assert.deepEqual(
+  entityMaterials.entries.map((entry) => entry.source),
+  ['settings', 'notes', 'memories'],
+);
+assert.deepEqual(entityMaterials.entries[0].value, settings.value);
+assert.deepEqual(entityMaterials.entries[1].value, { text: 'first note' });
+assert.deepEqual(entityMaterials.entries[2].value, memoryItem);
+settings.value.preferences.tags.push('later');
+settings.version++;
+notes.values.set(2, { text: 'appended later' });
+notes.version++;
+memories.apply([{ action: 'update', memoryId: memoryItem.id, value: { content: 'updated summary' } }]);
+assert.equal(settingsSource.check(entityIndex.basis.sources.settings), false);
+assert.equal(notesSource.check(entityIndex.basis.sources.notes), false);
+assert.throws(() => settingsSource.read(['settings'], entityIndex.basis.sources.settings), RuntimeError);
+await assert.rejects(entityView.capture(entitySources, entityIndex), RuntimeError);
+assert.deepEqual(entityMaterials.entries[0].value.preferences.tags, ['original']);
+assert.equal(entityMaterials.entries[1].value.text, 'first note');
+assert.deepEqual(entityMaterials.entries[2].value, memoryItem);
+assert.throws(() => entityMaterials.entries[0].value.preferences.tags.push('rewrite'), TypeError);
+const currentEntities = await entityRunner.run(null);
+assert.deepEqual(currentEntities.entries[0].value.preferences.tags, ['original', 'later']);
+assert.equal(currentEntities.entries[2].value.value.content, 'updated summary');
+assert.equal(currentEntities.entries.length, 3, 'appending content does not change View membership');
+console.log('CAPiX installed consumer smoke passed (identity, resources, typed facts, invocation events, record data, transcript wire, cold checkpoint restore, offline Tool, standalone Memory, business View adapters)');
