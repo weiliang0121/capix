@@ -16,7 +16,7 @@
 
 ## 包与依赖边界
 
-品牌保持 CAPiX，packages/ 中 18 个公开包统一使用 @weiliang0121 scope 和 capix- 前缀，此前首发名称不变，新增 tool 尚未发布；packages/client-runtime、client-http、observer-content 保持 @capix/* 私有身份。capix-lab 可通过明确的 21 包 tarball 批次开展实验，不能读取相邻框架私有源码；候选分发不形成两仓测试依赖。发布契约见 [npm 发布](docs/npm-publishing.md)。
+品牌保持 CAPiX，packages/ 中 18 个公开包统一使用 @weiliang0121 scope 和 capix- 前缀，此前首发名称不变，新增 tool 尚未发布；packages/client-runtime、client-http 保持 @capix/* 私有身份。capix-lab 可通过明确的 20 包 tarball 批次开展实验，不能读取相邻框架私有源码；候选分发不形成两仓测试依赖。发布契约见 [npm 发布](docs/npm-publishing.md)。
 
 一个根 pnpm Workspace 与锁文件。包按职责划分，跨包只使用公开出口，不导入其他包的 src/dist 私有路径；包独立不意味着新增实体生命周期。
 
@@ -33,7 +33,7 @@
 | packages/records、changes、diagnostics                                 | 记录实体；变化捕获/转交；PersistenceError 与有界诊断。真实故障归属仍由 Invocation 决定                               | [记录](docs/recording.md)、[异常](docs/exceptions.md)                                                                |
 | packages/model-provider、model-exchanges                               | 原生模型协议适配；完整回复、工具反馈槽位及固定接纳凭据实体。模型只是资源能力之一                                     | [工具接入](docs/native-tool-integration.md)                                                                          |
 | packages/tool                                                          | 原生工具调用的普通 Group 预设；固定起点、目录、串行推进及可选 CP；不依赖 Runtime 实现                                | [Tool](packages/tool/README.md)                                                                                      |
-| packages/observer-content                                              | 内容组合、ActiveView 默认策略及变化分发；不依赖 Runtime、Observer 服务或 SQLite                                      | [活跃材料](docs/active-content.md)                                                                                   |
+| capix-lab/services/observer-content                                    | Observer 参考内容组合、ActiveView 策略及同步；实现和测试由 Lab 维护                                                  | [活跃材料](docs/active-content.md)                                                                                   |
 | capix-lab/services/conversation、observer                              | 参考业务装配、宿主持久化、HTTP/CLI、恢复资格；SQLite 和业务策略留在服务                                              | [Conversation](../capix-lab/services/conversation/README.md)、[Observer 装配](../capix-lab/docs/service-assembly.md) |
 | packages/client-runtime、packages/client-http；capix-lab/apps/observer | 无 UI 的会话/消费生命周期；HTTP 接纳；React 投影与展示。服务端与客户端不互相依赖                                     | [客户端](docs/client-runtime.md)、[协议](docs/protocol.md)                                                           |
 
@@ -73,7 +73,7 @@
 
 - Transcript 正式消息只追加；Memories 保持独立身份并显式更新；View 仅保存来源范围、成员及派生索引，不持有实体或活动端点。has/members 本地查，include 仅核验新增项，exclude 不读来源，apply 依据完整版本核验。退出视图不删除实体、不强制替代内容或来源累加。
 - 实体同步变更先检查、持久成功后安装，再发布变化；无变化也应完成要求的依据核验。持久异常和同步契约违规属于 PersistenceError，不凭本地未安装推断外部未提交。读取快照不隐含全局事务，版本不可复用，冲突不自动重试。
-- 内容策略、材料选择、记忆提取与压缩是业务可替换 Node/Group 或实体预设，不把模型判断和默认策略固化成内核职责。完整材料和供模型查看的活跃视图分别表达。
+- ActiveView、ConversationContent 及内容同步整体归 capix-lab/services/observer-content 参考装配，尚未作为通用公开预设发布。Transcript、Memory、View、Resources 等共享机制继续由 CAPiX 维护。内容策略、材料选择、记忆提取与压缩是业务可替换 Node/Group 或实体预设，不把模型判断和默认策略固化成内核职责。完整材料和供模型查看的活跃视图分别表达。
 - Interaction 固定请求只发送一次，与调用独立存活；signal只终止局部等待，晚到反馈可保存并再次读取。宿主关闭先停止本地入口，再等其持有的外部发送 settled。未知反馈不自动重发。
 - 可选过程流由发送侧发布、本次资源操作订阅转交；有界临时回放和游标有序读取，不承诺持久增量或跨调用恰好消费一次。流超限/失效不能伪造完整前缀，结束不等于反馈校验、持久或父层接纳完成。
 - 工具是已登记成员；公开 Tool 是普通 Group 预设，作者用 tools 对象登记节点、参数 Schema 和结果映射，普通资源登记 ModelExchangeResource / ToolModelResource，不要求 capture 或专用 installer；默认不开 CP，恢复显式依赖成员 CP 和原交互查询。目录/成员同源，固定policyVersion、Schema摘要与预算；Zod升级可能改变目录摘要并拒绝恢复。结果映射必须纯且无副作用，异步映射不获得幂等保证。model-exchanges独立持有固定起点（初始请求与模型可见目录）、归属于起点的完整回复、反馈槽位及固定接纳凭据，不依赖调用/结构/服务；快照v2，资源直接登记实体。起点不包含执行节点或授权，目录兼容由执行方核验，准确引用不授权重发。当前接口见[ModelExchanges](packages/model-exchanges/README.md)。
@@ -87,7 +87,7 @@
 
 ## 编码与验证
 
-- 测试按被维护的契约跟随包；跨包组合归真实协调者，不能因使用多个包就放入全局。公共测试工具可放根目录，但不得隐式装配 Runtime 或反向引入上层包；包之间不导入彼此测试夹具。根部仅保留必要的 workspace／测试发现／分发检查。21 包测试位于 packages/*/test，公共工具位于 testing/support，仓库检查位于 testing/repository。单包 test 构建依赖后运行；全仓 check 只构建一次，空测试范围、缺产物或未声明依赖不能静默通过。归属与命令见 [包内测试与框架自证设计](docs/testing-organization-design.md)。
+- 测试按被维护的契约跟随包；跨包组合归真实协调者，不能因使用多个包就放入全局。公共测试工具可放根目录，但不得隐式装配 Runtime 或反向引入上层包；包之间不导入彼此测试夹具。根部仅保留必要的 workspace／测试发现／分发检查。20 包测试位于 packages/*/test，公共工具位于 testing/support，仓库检查位于 testing/repository。单包 test 构建依赖后运行；全仓 check 只构建一次，空测试范围、缺产物或未声明依赖不能静默通过。归属与命令见 [包内测试与框架自证设计](docs/testing-organization-design.md)。
 - Node22.23.2、pnpm10.7.1、TypeScript6.0.3；外部依赖精确版本、内部workspace:*。Prettier printWidth1000，不为窄行宽拆散签名。
 - 每条变量声明一个变量。循环直接表达继续/结束条件，不用while(true)再内部break；流异常或提前结束也释放资源。
 - 类自身ID直接生成，不为ID造无意义别名；不为一次new建立空壳Builder，不为每次检查建立包装层。真实构造协调与对象不变量保留明确归属。

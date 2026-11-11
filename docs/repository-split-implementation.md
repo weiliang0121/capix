@@ -1,5 +1,7 @@
 # 仓库拆分第一版实施记录
 
+后续归属说明：本文保留当轮盘点、包数和验证事实。Observer 内容组合（ActiveView、ConversationContent、同步及测试）现已整体迁至 `capix-lab/services/observer-content`，不再是 CAPiX 包；尚未成为通用公开预设。当前 CAPiX 为 18 个公开包加 2 个私有客户端包，候选分发共 20 包，见 [当前包边界](organization.md) 与 [分发规则](npm-publishing.md)。
+
 日期：2026-11-10。依据：[拆库设计](repository-split-design.md)、[包命名与开源准备](open-source-preparation.md)。来源基线：`ff9bce492c183625851610f838b31189d44cd90f`。
 
 后续边界更新：用户已确定 CAPiX 独立自证、测试跟随包，Lab 是实验与参考装配仓。本文保留初次交接的文件位置与验证事实；其中要求框架改动执行 Lab 验收的工作安排不再适用。当前设计见 [包内测试与框架自证](testing-organization-design.md)，目录与脚本迁移已实施，见[测试迁移记录](testing-migration.md)。

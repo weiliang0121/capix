@@ -24,7 +24,6 @@ const packages = [
   { path: 'packages/checkpoint', allowed: ['@weiliang0121/capix-contracts'] },
   { path: 'packages/invocation', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-changes', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-diagnostics'] },
   { path: 'packages/runtime', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-structure', '@weiliang0121/capix-changes', '@weiliang0121/capix-records', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-invocation', '@weiliang0121/capix-interaction', '@weiliang0121/capix-diagnostics'] },
-  { path: 'packages/observer-content', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-transcript', '@weiliang0121/capix-memory', '@weiliang0121/capix-view'] },
   { path: 'packages/client-runtime', allowed: ['@weiliang0121/capix-protocol'] },
   { path: 'packages/client-http', allowed: ['@weiliang0121/capix-protocol', '@capix/client-runtime'] },
 ];
@@ -37,7 +36,7 @@ test('the boundary inventory covers every workspace package', async () => {
       const path = `${directory}/${entry.name}`;
       try {
         const manifest = JSON.parse(await readFile(resolve(root, path, 'package.json'), 'utf8'));
-        if (directory === 'packages' && !['client-http', 'client-runtime', 'observer-content'].includes(entry.name)) {
+        if (directory === 'packages' && !['client-http', 'client-runtime'].includes(entry.name)) {
           assert.equal(manifest.name, `@weiliang0121/capix-${entry.name}`);
           assert.equal(manifest.private, false);
         } else {

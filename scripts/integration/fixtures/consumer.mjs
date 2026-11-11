@@ -1,8 +1,7 @@
-// Run only against the three installed private candidate packages and public APIs.
+// Run only against the two installed private client candidates and public APIs.
 import assert from 'node:assert/strict';
 import { HttpTransport, HttpError } from '@capix/client-http';
 import { TranscriptReplica, TranscriptSequenceError } from '@capix/client-runtime';
-import { ConversationContent, initialActiveView, appendActiveView } from '@capix/observer-content';
 
 class JsonTransport extends HttpTransport {
   read(path) {
@@ -26,16 +25,4 @@ assert.deepEqual(replica.snapshot.starts, [0]);
 assert.ok(Object.isFrozen(replica.snapshot));
 assert.throws(() => TranscriptReplica.receive(undefined, { type: 'baseline', snapshot: replica.snapshot }, 'other-transcript'), TranscriptSequenceError);
 
-const initial = initialActiveView('transcript', 'memories', 1, 3, ['memory-a']);
-const appended = appendActiveView(initial, [3], ['memory-b']);
-assert.deepEqual(initial.messageIndexes, [1, 2]);
-assert.deepEqual(appended.messageIndexes, [1, 2, 3]);
-assert.deepEqual(appended.memoryIds, ['memory-a', 'memory-b']);
-assert.equal(appended.revision, 1);
-assert.ok(Object.isFrozen(appended.messageIndexes));
-assert.throws(() => appendActiveView(initial, [1], []), /Invalid active content members/);
-const content = new ConversationContent();
-assert.equal(content.closed, false);
-content.close();
-assert.equal(content.closed, true);
-console.log('Verified the three private candidate APIs without external services');
+console.log('Verified the two private client candidate APIs without external services');

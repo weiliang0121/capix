@@ -1,5 +1,7 @@
 # 包内测试与框架自证设计
 
+当前范围为 18 个公开包与 2 个私有客户端包。ActiveView、ConversationContent、默认材料策略和内容同步的组合测试已随实现迁至 Lab 的 `services/observer-content/test`；CAPiX 继续独立验证 Transcript、Memory、View、Resources 等共享契约，不以 Lab 测试为框架门槛。
+
 日期：2026-11-10。状态：已实施。原测试目录、脚本和 CI 已按本设计收敛，具体迁移与验证见[实施记录](testing-migration.md)。
 
 本轮采用用户确定的边界：**测试跟随被维护的包；公共测试基础可以在仓库根目录；CAPiX 独立证明自己的契约；capix-lab 是实验与参考装配仓，不是框架测试仓。** 这替代此前把 Lab 集成回归列为 CAPiX 常规合入或发布前置条件的安排。运行、恢复和资源承诺不因测试整理改变。
@@ -75,28 +77,28 @@ capix/
 
 **跨包不等于全局。** Runner 组织 Scene、资源和 CP 的恢复流程，仍是 Runtime 的测试。不能因为下层包测试方便就引入 Runtime；同样不能把跨包失效都推到 Runtime，使下层对象没有自身的反例。
 
-| 包               | 应在包旁维护的保证                                                         | 需要另外拆出的部分                                            |
-| ---------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| contracts        | 稳定值、共同错误身份和基础契约类型                                         | 真正的调用固定时序归 invocation/runtime                       |
-| protocol         | 跨端值、编码／接纳校验及伪造反例                                           | 记录生成归 records，HTTP 消费归 client-http                   |
-| resources        | Offer/Request、供给、端点、Activity、关闭和操作接收                        | Runner 如何按声明接线归 runtime                               |
-| structure        | Callable/Scene/Group/Node、成员位置、构造与作者类型、Sequence/Dynamic 声明 | 预设在真实 Runner 中的执行组合归 runtime                      |
-| checkpoint       | Frame、块／关系／选择认证、Store 端口、MemoryStore、存储值与回执           | 调用何时捕获和提交归 invocation；结构化恢复归 runtime         |
-| invocation       | Context/Relation、Control、正文与接纳排空、窗口、交付、调用侧 CP           | 需要结构绑定和 Runner 的部分归 runtime                        |
-| runtime          | build、资源范围、Work、Runner、出口及结构／调用／CP／记录组合              | 不替每个依赖重写一套单包测试                                  |
-| interaction      | 请求固定、独立发送、局部等待、反馈、过程流                                 | 接入 Runner 的消费方式归 runtime；供应商协议归 model-provider |
-| transcript       | 消息实体、固定写入、版本、持久调用顺序、资源与 ViewSource 适配             | 多实体策略归 observer-content                                 |
-| memory           | 记忆实体、批次、来源契约、持久边界、资源与 ViewSource 适配                 | 记忆提取质量归 Lab 策略实验                                   |
-| view             | 成员、版本、来源验证、局部操作、资源契约                                   | 真实消息／记忆来源适配分别归其实体包                          |
-| measurement      | 计数与测量实体及资源契约                                                   | 长对话统计与负载表现归 Lab                                    |
-| records          | 记录实体、树、接纳与持久边界                                               | Invocation 到记录的真实接线归 runtime                         |
-| changes          | 变化捕获、转交、隔离与重入                                                 | 各实体何时发布变化归实体包                                    |
-| diagnostics      | PersistenceError、诊断有界性及分类                                         | 真实故障如何归属调用归 invocation/runtime                     |
-| model-provider   | 请求／回复协议、工具、SSE、预算、取消及错误处理                            | 真实模型质量、策略和供应商实测归 Lab                          |
-| model-exchanges  | 交换、反馈槽位、凭据、版本、资源与来源适配                                 | ToolLoop 的决策与宿主流程归 Lab；以后提包再归包               |
-| client-runtime   | 消费生命周期、接纳、重连、队列与投影状态契约                               | 具体页面及服务端装配归 Lab                                    |
-| client-http      | HTTP/SSE 编解码、连接替换、传输错误与接纳                                  | 完整参考服务器与浏览器流程归 Lab                              |
-| observer-content | ActiveView、消息／记忆组合和默认内容策略                                   | 具体对话维护装配与真实模型实验归 Lab                          |
+| 包              | 应在包旁维护的保证                                                         | 需要另外拆出的部分                                            |
+| --------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| contracts       | 稳定值、共同错误身份和基础契约类型                                         | 真正的调用固定时序归 invocation/runtime                       |
+| protocol        | 跨端值、编码／接纳校验及伪造反例                                           | 记录生成归 records，HTTP 消费归 client-http                   |
+| resources       | Offer/Request、供给、端点、Activity、关闭和操作接收                        | Runner 如何按声明接线归 runtime                               |
+| structure       | Callable/Scene/Group/Node、成员位置、构造与作者类型、Sequence/Dynamic 声明 | 预设在真实 Runner 中的执行组合归 runtime                      |
+| checkpoint      | Frame、块／关系／选择认证、Store 端口、MemoryStore、存储值与回执           | 调用何时捕获和提交归 invocation；结构化恢复归 runtime         |
+| invocation      | Context/Relation、Control、正文与接纳排空、窗口、交付、调用侧 CP           | 需要结构绑定和 Runner 的部分归 runtime                        |
+| runtime         | build、资源范围、Work、Runner、出口及结构／调用／CP／记录组合              | 不替每个依赖重写一套单包测试                                  |
+| interaction     | 请求固定、独立发送、局部等待、反馈、过程流                                 | 接入 Runner 的消费方式归 runtime；供应商协议归 model-provider |
+| transcript      | 消息实体、固定写入、版本、持久调用顺序、资源与 ViewSource 适配             | 多实体策略归 Lab 的 observer-content                          |
+| memory          | 记忆实体、批次、来源契约、持久边界、资源与 ViewSource 适配                 | 记忆提取质量归 Lab 策略实验                                   |
+| view            | 成员、版本、来源验证、局部操作、资源契约                                   | 真实消息／记忆来源适配分别归其实体包                          |
+| measurement     | 计数与测量实体及资源契约                                                   | 长对话统计与负载表现归 Lab                                    |
+| records         | 记录实体、树、接纳与持久边界                                               | Invocation 到记录的真实接线归 runtime                         |
+| changes         | 变化捕获、转交、隔离与重入                                                 | 各实体何时发布变化归实体包                                    |
+| diagnostics     | PersistenceError、诊断有界性及分类                                         | 真实故障如何归属调用归 invocation/runtime                     |
+| model-provider  | 请求／回复协议、工具、SSE、预算、取消及错误处理                            | 真实模型质量、策略和供应商实测归 Lab                          |
+| model-exchanges | 交换、反馈槽位、凭据、版本、资源与来源适配                                 | Tool Group 预设的推进与目录规则归 tool；宿主流程归 Lab        |
+| tool            | 普通 Group 预设、工具目录与成员一致性、串行推进、预算及显式 CP             | 具体工具效果与对话宿主装配归 Lab                              |
+| client-runtime  | 消费生命周期、接纳、重连、队列与投影状态契约                               | 具体页面及服务端装配归 Lab                                    |
+| client-http     | HTTP/NDJSON 编解码、连接替换、传输错误与接纳                               | 完整参考服务器与浏览器流程归 Lab                              |
 
 这张表定义责任边界，具体文件按断言拆分；当前去向见实施记录中的一次性迁移清单。
 
@@ -106,7 +108,7 @@ capix/
 - `test/presets.test.mjs` 的成员形状与构造约束归 structure；在 Runner 中检查接纳、输出、取消的用例归 runtime。
 - `test/content-persistence.test.mjs` 按 Transcript 与 Memories 拆入对应实体包；其共用的简单抛错函数不需要升级成公共实体持久化测试平台。
 - `test/progress.test.mjs` 的 ProgressChannel 行为归 changes，Transcript 发布顺序归 transcript，调用事件与装配投影分别归 invocation/runtime。
-- `test/view/fixtures.mjs` 引用了 transcript/memory，而实体包本身依赖 view。View 测试应使用满足 ViewSource 契约的最小来源假体；真实适配用例放实体包，组合策略放 observer-content，避免测试依赖形成反向环。
+- `test/view/fixtures.mjs` 引用了 transcript/memory，而实体包本身依赖 view。View 测试应使用满足 ViewSource 契约的最小来源假体；真实适配用例放实体包，组合策略放 Lab 的 observer-content，避免测试依赖形成反向环。
 - `test/fixtures/resources.mjs` 通过 Runtime 构造供给，其相关用例不能直接归成底层 resources 测试。拆开底层操作与装配，不保留隐式上层依赖。
 
 对从 Lab 提炼的框架回归也使用同一规则。无需搬回 Lab 的整个测试文件、SQLite 实现、数据库计量 helper 或应用 fixture。
@@ -154,7 +156,7 @@ capix/
 | `pnpm test:repository`                                                | 已完成构建后，执行 workspace、依赖边界与仓库脚本检查        |
 | `pnpm test`                                                           | 构建一次，再执行 packages 与 repository 两部分              |
 | `pnpm check`                                                          | 构建一次，完成源码类型、两类正式测试和格式检查              |
-| `pnpm integration:check`                                              | 验证全部 21 个候选 tarball 的隔离安装、出口及运行／类型消费 |
+| `pnpm integration:check`                                              | 验证全部 20 个候选 tarball 的隔离安装、出口及运行／类型消费 |
 | `pnpm release:check`                                                  | 维持最终发布 tarball 的独立消费者验收                       |
 
 一个小的 `scripts/test` 执行器负责发现与构建协调，不承载测试语义。单包模式构建选中包及明确依赖；全仓模式先按依赖顺序构建一次，然后汇总准确测试文件交给 node:test。不要通过递归执行每个包的自带构建入口，造成一次全仓验证重复构建多个依赖闭包。
@@ -171,7 +173,7 @@ CAPiX CI 只检出本仓即可执行上述正式检查；不得读取 Lab 路径
 
 ### 7.1 分发验证也在本仓闭合
 
-当前新增 Tool 后，release:check 验证 18 个经过发布处理的公开包；integration:pack 构建的 21 包候选没有相同的压缩处理，不能把两种产物当成同一份证据。`integration:check` 已在 CAPiX 内为 21 包候选补独立临时消费者的安装与关键出口 smoke，覆盖三个未发布包的分发；无需启动 Lab。
+当前新增 Tool 后，release:check 验证 18 个经过发布处理的公开包；integration:pack 构建的 20 包候选没有相同的压缩处理，不能把两种产物当成同一份证据。`integration:check` 已在 CAPiX 内为 20 包候选补独立临时消费者的安装与关键出口 smoke，覆盖两个私有客户端包的分发；无需启动 Lab。
 
 打包检查除了文件白名单，还应拒绝 `dist/test`、fixture 等误编译产物。build、release:check、integration:pack 都可能重建同一批 dist，需顺序执行，不能和正在读取产物的测试并发。测试版本、源码来源与实际 tarball 摘要分别记录；候选源码摘要不自动代表已包含所有测试工具和验收依据。
 

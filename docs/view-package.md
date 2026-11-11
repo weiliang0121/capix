@@ -4,7 +4,7 @@
 
 包依赖 packages/contracts、resources 与 diagnostics；diagnostics 仅提供必要持久端口的统一错误身份，不引入调用、Runtime 或业务实体依赖。
 
-Observer 的 `ActiveView` 已移入 `@capix/observer-content`。它用 View 处理消息与记忆，同时保留“新内容默认纳入、退出后不因更新重新纳入”的业务策略。两者不是两个内容副本。
+Observer 的 `ActiveView` 已移入 Lab 的 `@capix/observer-content`。它用 View 处理消息与记忆，同时保留“新内容默认纳入、退出后不因更新重新纳入”的业务策略。两者不是两个内容副本。
 
 完整可运行例子见 [examples/view.mjs](../examples/view.mjs)，自定义静态来源见 [examples/view/skills.mjs](../examples/view/skills.mjs)。运行 `pnpm build && node examples/view.mjs`，可以看到消息、记忆、Skill 材料通过资源进入节点，以及后处理调整成员后两次捕获的差异。例子全部使用内存数据，Skill 作为材料读取，具体怎样组织模型输入仍由业务节点决定。
 
@@ -227,7 +227,7 @@ View 内部按 source/key 建立成员索引，成员查询与新增项判断不
 
 ## Observer 的保留策略
 
-`@capix/observer-content` 的 `ActiveView` 使用两个 whole 来源，并转换通用 basis 与旧的 `transcriptId/memoriesId/indexRevision/transcriptRevision/memorySequence`。它负责：
+Lab 的 `@capix/observer-content` 的 `ActiveView` 使用两个 whole 来源，并转换通用 basis 与旧的 `transcriptId/memoriesId/indexRevision/transcriptRevision/memorySequence`。它负责：
 
 1. 初始化时选择当前消息段及已有记忆。
 2. 根据源增量游标把新消息、新记忆纳入，更新已有记忆不重新纳入已退出项。

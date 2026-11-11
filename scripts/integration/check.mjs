@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { command, json, registry, root } from '../release/packages.mjs';
 import { pack } from './pack.mjs';
 
-/** Verify the unminified 21-package candidate independently of public release artifacts. */
+/** Verify the unminified 20-package candidate independently of public release artifacts. */
 export async function check() {
   let temporary;
   let candidateLock;
@@ -20,8 +20,8 @@ export async function check() {
     candidateLock = lock;
     const manifest = await json(join(output, 'manifest.json'));
     assert.deepEqual(manifest.packages, archives, 'Integration manifest does not match the packed batch');
-    assert.equal(archives.length, 21);
-    assert.equal(archives.filter((entry) => entry.private).length, 3);
+    assert.equal(archives.length, 20);
+    assert.equal(archives.filter((entry) => entry.private).length, 2);
     stage = 'preparing an external consumer';
     temporary = await mkdtemp(join(tmpdir(), 'capix-integration-'));
     const location = relative(root, temporary);
@@ -40,7 +40,7 @@ export async function check() {
     const workspace = await json(join(root, 'package.json'));
     const dependencies = Object.fromEntries(archives.map((entry) => [entry.name, `file:${join(artifacts, entry.file)}`]));
     await writeFile(join(consumer, 'package.json'), JSON.stringify({ name: 'capix-integration-consumer', private: true, type: 'module', dependencies, devDependencies: { zod: workspace.devDependencies.zod, typescript: workspace.devDependencies.typescript, '@types/node': workspace.devDependencies['@types/node'] } }, null, 2) + '\n');
-    stage = 'installing all 21 candidate tarballs';
+    stage = 'installing all 20 candidate tarballs';
     command('npm', ['install', '--ignore-scripts', '--package-lock=false', '--no-audit', '--no-fund', '--prefer-online', `--registry=${registry}`, '--fetch-timeout=20000', '--fetch-retries=1'], { cwd: consumer });
     command('npm', ['ls', '--all'], { cwd: consumer, stdio: 'pipe' });
     stage = 'checking installed exports';
@@ -61,7 +61,7 @@ for (const name of ${JSON.stringify(imports)}) {
   assert.ok(fileURLToPath(import.meta.resolve(name)).startsWith(installedRoot), name + ': export escaped the isolated installation');
   await import(name);
 }
-console.log('Loaded ${imports.length} exports from 21 installed candidate tarballs');
+console.log('Loaded ${imports.length} exports from 20 installed candidate tarballs');
 `,
     );
     command(process.execPath, ['exports.mjs'], { cwd: consumer });

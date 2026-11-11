@@ -230,33 +230,6 @@ importers:
 
   packages/model-provider: {}
 
-  packages/observer-content:
-    dependencies:
-      '@weiliang0121/capix-changes':
-        specifier: workspace:*
-        version: link:../changes
-      '@weiliang0121/capix-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@weiliang0121/capix-memory':
-        specifier: workspace:*
-        version: link:../memory
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@weiliang0121/capix-resources':
-        specifier: workspace:*
-        version: link:../resources
-      '@weiliang0121/capix-transcript':
-        specifier: workspace:*
-        version: link:../transcript
-      '@weiliang0121/capix-view':
-        specifier: workspace:*
-        version: link:../view
-      es-toolkit:
-        specifier: 1.52.0
-        version: 1.52.0
-
   packages/protocol:
     dependencies:
       '@weiliang0121/capix-contracts':
@@ -330,9 +303,6 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
     devDependencies:
-      '@capix/observer-content':
-        specifier: workspace:*
-        version: link:../observer-content
       '@weiliang0121/capix-measurement':
         specifier: workspace:*
         version: link:../measurement

@@ -65,12 +65,12 @@ Scene 是入口结构，Group 组合成员，Node 执行具体处理；Resources
 
 ## 能力范围与版本边界
 
-| 状态                      | 范围                                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 已有公开包与当前契约      | 结构、资源、调用、稳定值、有限 CP 恢复、交互、内容实体、记录、原生模型协议适配及 Tool 预设                                      |
-| 私有 workspace / 参考装配 | `@capix/client-runtime`、`@capix/client-http`、`@capix/observer-content`；Conversation / Observer 宿主、ToolLoop 组合与参考页面 |
-| 设计候选                  | 通用 SQLite CP 适配、可嵌入观测 UI；尚未形成新的公开包                                                                          |
-| 当前未实现的产品能力      | MCP 接入、操作系统沙箱、动态调度、外部权限平台                                                                                  |
+| 状态                      | 范围                                                                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 已有公开包与当前契约      | 结构、资源、调用、稳定值、有限 CP 恢复、交互、内容实体、记录、原生模型协议适配及 Tool 预设                                              |
+| 私有 workspace / 参考装配 | CAPiX 的 `@capix/client-runtime`、`@capix/client-http`；Lab 的 Observer 内容组合、Conversation / Observer 宿主、ToolLoop 组合与参考页面 |
+| 设计候选                  | 通用 SQLite CP 适配、可嵌入观测 UI；尚未形成新的公开包                                                                                  |
+| 当前未实现的产品能力      | MCP 接入、操作系统沙箱、动态调度、外部权限平台                                                                                          |
 
 资源访问窗口约束框架内的受控操作，不提供操作系统隔离。模型协议支持范围和预算以对应包契约为准；参考宿主的性能和恢复实验不构成任意业务装配的保证。
 
@@ -80,7 +80,7 @@ CP 只恢复显式声明的 point 和完整依据，不恢复 JavaScript 栈、�
 
 ## 参考装配与实验
 
-完整 Conversation / Observer 服务、页面和大型实验由相邻的 **capix-lab** 承接。当前使用本地交接位置 [../capix-lab/README.md](../capix-lab/README.md)，没有在此假定其远端仓库地址；GitHub 上的源码读者需要另行取得该仓库。这些参考装配不随上述三个 npm 包安装。
+完整 Conversation / Observer 服务、页面和大型实验由相邻的 **capix-lab** 承接。当前使用本地交接位置 [../capix-lab/README.md](../capix-lab/README.md)，没有在此假定其远端仓库地址；GitHub 上的源码读者需要另行取得该仓库。Observer 的 ActiveView、ConversationContent、内容同步及其测试位于 `capix-lab/services/observer-content`，尚未抽象为通用公开预设。CAPiX 继续维护 Transcript、Memory、View、Resources 等共享机制，当前共 18 个公开包和 2 个私有客户端包。这些参考装配不随上述三个 npm 包安装。
 
 离线对话、真实模型配置、宿主数据库与页面启动命令以 capix-lab 的 README 为准。CAPiX 不读取相邻仓库的凭证、配置或源码来运行；跨仓候选验证使用明确的一批打包产物。迁移位置和适用基线见 [仓库拆分设计](docs/repository-split-design.md)。
 

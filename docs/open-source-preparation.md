@@ -1,5 +1,7 @@
 # 包命名与开源准备
 
+后续归属说明：本文保留当轮盘点、包数和验证事实。Observer 内容组合（ActiveView、ConversationContent、同步及测试）现已整体迁至 `capix-lab/services/observer-content`，不再是 CAPiX 包；尚未成为通用公开预设。当前 CAPiX 为 18 个公开包加 2 个私有客户端包，候选分发共 20 包，见 [当前包边界](organization.md) 与 [分发规则](npm-publishing.md)。
+
 状态：第一版已实施；本文保留目标设计及原盘点，实际完成范围、过渡项和验证见 [拆库实施记录](repository-split-implementation.md)。未创建远端、发布新包或改变可见性。
 
 品牌继续使用 **CAPiX**，公开包继续使用 **`@weiliang0121/capix-<职责>`**。17 个 `0.1.0` 包的发布与验收记录见 [npm 发布](npm-publishing.md)；本轮没有重新查询 registry。本文补充 [仓库拆分设计](repository-split-design.md)，不取代当前 [项目组织](organization.md) 和模块契约。

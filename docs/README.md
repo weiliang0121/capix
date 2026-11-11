@@ -4,17 +4,17 @@
 
 ## 当前入口
 
-| 要了解的内容               | 阅读入口                                                                                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 项目对象、包和协作边界     | [项目组织](organization.md)、[契约与协议](contracts-protocol.md)                                                                                      |
-| 结构和资源怎样装配         | [结构包](structure-package.md)、[可调用结构](callable-structures.md)、[资源包](resources-package.md)                                                  |
-| 调用、稳定数据、接纳及退出 | [运行边界](runtime-boundaries.md)、[错误与异常](exceptions.md)、[调用退出](invocation-exit-contract.md)                                               |
-| CP 保存和有限恢复          | [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)                                                                                 |
-| 支持哪些旧数据             | [开发期兼容](development-compatibility.md)：只接收当前格式，不迁移旧库或保留旧 CP 解码支路                                                            |
-| 独立外部交互与模型         | [交互](interactions.md)、[ModelProvider](../packages/model-provider/README.md)、[工具预设](../../capix-lab/services/conversation/src/tools/README.md) |
-| 内容、视图与策略           | [实体包](content-entities-packages.md)、[消息](transcript.md)、[记忆](memory.md)、[View](view-package.md)、[活跃材料](active-content.md)              |
-| 记录、观测和运行出口       | [记录](recording.md)、[增量观测](observation-increments.md)、[运行出口](runtime-ports.md)                                                             |
-| 客户端与跨端协议           | [客户端运行能力](client-runtime.md)、[协议](protocol.md)                                                                                              |
+| 要了解的内容               | 阅读入口                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 项目对象、包和协作边界     | [项目组织](organization.md)、[契约与协议](contracts-protocol.md)                                                                                 |
+| 结构和资源怎样装配         | [结构包](structure-package.md)、[可调用结构](callable-structures.md)、[资源包](resources-package.md)                                             |
+| 调用、稳定数据、接纳及退出 | [运行边界](runtime-boundaries.md)、[错误与异常](exceptions.md)、[调用退出](invocation-exit-contract.md)                                          |
+| CP 保存和有限恢复          | [Checkpoint](checkpoints.md)、[增量引用选择](checkpoint-selection.md)                                                                            |
+| 支持哪些旧数据             | [开发期兼容](development-compatibility.md)：只接收当前格式，不迁移旧库或保留旧 CP 解码支路                                                       |
+| 独立外部交互与模型         | [交互](interactions.md)、[ModelProvider](../packages/model-provider/README.md)、[Tool 预设](../packages/tool/README.md)                          |
+| 内容、视图与策略           | [实体包](content-entities-packages.md)、[消息](transcript.md)、[记忆](memory.md)、[View](view-package.md)、[Lab 活跃材料边界](active-content.md) |
+| 记录、观测和运行出口       | [记录](recording.md)、[增量观测](observation-increments.md)、[运行出口](runtime-ports.md)                                                        |
+| 客户端与跨端协议           | [客户端运行能力](client-runtime.md)、[协议](protocol.md)                                                                                         |
 
 CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer 是 **schema 6 加完整当前表形状**。格式版本、业务声明版本和实体修订分别核验，不能互相替代。恢复只消费已保存依据，不恢复草稿、任意执行栈或未确认的外部效果。
 
@@ -23,11 +23,12 @@ CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer �
 - npm 发布：[分发范围、产物验证、版本 PR 与本地发布](npm-publishing.md)。17 个 `@weiliang0121/capix-*` 包已发布 `0.1.0`；新增 [Tool 预设](../packages/tool/README.md) 已纳入分发配置但尚未发布；其余私有 workspace 不在首发范围。
 - 最小资源／结构示例：[dictionary.mjs](../examples/dictionary.mjs)；Runner：[runner.mjs](../examples/runner.mjs)。
 - 新内核的典型服务：[Conversation README](../../capix-lab/services/conversation/README.md)、[宿主与持久化](../../capix-lab/docs/conversation-host.md)、[浏览器体验](../../capix-lab/docs/conversation-web.md)、[显式恢复](../../capix-lab/docs/conversation-recovery.md)。
-- 原 Observer 参考服务：[装配](../../capix-lab/docs/service-assembly.md)、[对话身份](../../capix-lab/docs/conversations.md)、[持久化](../../capix-lab/docs/persistence.md)。两个服务的数据库和业务恢复资格独立。
+- 原 Observer 参考服务：[装配](../../capix-lab/docs/service-assembly.md)、[对话身份](../../capix-lab/docs/conversations.md)、[持久化](../../capix-lab/docs/persistence.md)。两个服务的数据库和业务恢复资格独立。ActiveView、ConversationContent、内容同步及其测试由 [Lab observer-content](../../capix-lab/services/observer-content/README.md) 维护，当前不属于框架公开预设。
 - 原生工具：[可运行示例](../../capix-lab/examples/tool-conversation.mjs)、[工具预设](../../capix-lab/services/conversation/src/tools/README.md)。设计过程保留在[协议设计](native-tool-integration.md)和[宿主设计](../../capix-lab/docs/native-tool-host-integration.md)，现行存储以服务文档为准。
 
 ## 仓库组织与开源准备
 
+- [客户端、协议与实体边界收敛计划](kernel-boundary-migration-plan.md)：近期迁移顺序、阶段完成条件和测试归属；从客户端交接、共同能力接缝到 Memory、领域类型与业务协议归位，最后验证通用实体作者入口。计划尚未实施。
 - [仓库拆分设计](repository-split-design.md)：框架与实验／参考装配两个仓库的目标目录、能力归属、验证交接和分阶段迁移。第一版已实施，后续候选仍需逐项明确边界。
 - [包命名与开源准备](open-source-preparation.md)：统一 `packages/` 的长期布局、保留真实客户端职责、已发布包身份，以及公共入口、贡献说明与公开历史的逐步准备。已落实公开入口与包目录；未改变仓库可见性。
 
@@ -36,6 +37,9 @@ CP 当前是 **Frame v6**；Conversation 数据库是 **schema 8**；Observer �
 - [本地内容审阅](open-source-content-audit.md)：Git 历史／当前树的审阅范围和未确认的公开事项。
 
 ## 实验与实施记录
+
+- [实体能力契约盘点与迁移候选](entity-capabilities-audit.md)：共同能力、现有专用实体、固定读取、领域观测及协议归属的源码盘点。设计候选，尚未迁移生产 API。
+- [Memory 收敛设计](memory-convergence-design.md)：记忆领域边界、固定读取、整批写入、固定凭据及持久不确定处理；候选形状，尚未修改生产 API。
 
 以下历史报告与完整参考服务已交接到相邻 `capix-lab`。跨仓链接用于本地并排检出；Lab 尚无远端地址，不将这些链接宣称为已经公开的网页。
 

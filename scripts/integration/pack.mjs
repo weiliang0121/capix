@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { command, files, isDistributionFile, json, packages, root } from '../release/packages.mjs';
 
-const privateDirectories = ['packages/client-http', 'packages/client-runtime', 'packages/observer-content'];
+const privateDirectories = ['packages/client-http', 'packages/client-runtime'];
 const output = join(root, '.capix/integration');
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -32,8 +32,8 @@ export async function pack() {
   const privateEntries = await Promise.all(privateDirectories.map(async (directory) => ({ directory, path: join(root, directory), manifest: await json(join(root, directory, 'package.json')) })));
   for (const entry of privateEntries) assert.equal(entry.manifest.private, true);
   const entries = [...publicEntries, ...privateEntries];
-  assert.equal(entries.length, 21);
-  assert.equal(new Set(entries.map((entry) => entry.manifest.name)).size, 21);
+  assert.equal(entries.length, 20);
+  assert.equal(new Set(entries.map((entry) => entry.manifest.name)).size, 20);
   await mkdir(join(root, '.capix'), { recursive: true });
   const lock = join(root, '.capix/integration.lock');
   await mkdir(lock);

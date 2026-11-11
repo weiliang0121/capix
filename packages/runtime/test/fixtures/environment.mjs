@@ -1,4 +1,3 @@
-import { ActiveView } from '@capix/observer-content';
 import { Transcript } from '@weiliang0121/capix-transcript';
 import { Memories } from '@weiliang0121/capix-memory';
 import { MessageUsage } from '@weiliang0121/capix-measurement';
@@ -11,5 +10,5 @@ export function createEnvironment(options = {}) {
   const transcript = new Transcript(messages, { observation: runtime.recording?.transcript, changes });
   const memories = new Memories(transcript, { observation: runtime.recording?.memory, changes });
   const messageUsage = new MessageUsage();
-  return { runtime, transcript, memories, messageUsage, active: new ActiveView(transcript, memories) };
+  return { runtime, transcript, memories, messageUsage };
 }
