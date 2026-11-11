@@ -1,4 +1,4 @@
-import type { MemoryEvent, TranscriptEvent } from '@weiliang0121/capix-protocol';
+import type { TranscriptEvent } from '@weiliang0121/capix-protocol';
 import type { InvocationObservationSetup, ObservationInstallation } from '../../binding/observation.js';
 import type { ObservationDeclarationScope } from '../../definition/observation.js';
 import { ObservationError, type InvocationObserver } from '@weiliang0121/capix-invocation';
@@ -27,7 +27,7 @@ export class RecordingInstallation implements ObservationInstallation {
   readonly records: ResourceBinding<{ record: RecordWriter }>;
   readonly provides = Object.freeze({ record: InvocationRecordAccess.request() });
   readonly transcript: EventConsumer<TranscriptEvent> = this.consumer((event, writer) => writer.add(transcriptRecord(event)));
-  readonly memory: EventConsumer<MemoryEvent> = this.consumer((event, writer) => writer.add(memoryRecord(event)));
+  readonly memory: EventConsumer<Parameters<typeof memoryRecord>[0]> = this.consumer((event, writer) => writer.add(memoryRecord(event)));
   readonly failure: 'isolate' | 'propagate';
   constructor(
     readonly recorder: Recorder,

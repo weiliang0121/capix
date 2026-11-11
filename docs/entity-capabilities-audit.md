@@ -1,5 +1,7 @@
 # 实体能力契约盘点与迁移候选
 
+后续状态：P2／P3 已完成领域事实转交与 Memory 独立迁移；本文保留盘点时的源码形状，涉及旧 Memory、来源约束和专用观察端口的描述不再代表当前 API。当前实现见 [Memory](memory.md) 与 [迁移计划](kernel-boundary-migration-plan.md)。
+
 状态：2026-11-11，源码基线 `ea6d5b3` 加当前未提交工作。本轮是源码盘点与设计整理，未修改生产 API、包身份、持久格式或运行行为。下文的「候选」「需补」不表示已经实现，也不要求所有实体实现全部能力。
 
 后续进度：共同调用来源、类型化领域事实转交与普通业务固定材料已在 P2 落地；当前接口见[资源包](resources-package.md)、[记录](recording.md)，实施与限制见[迁移计划](kernel-boundary-migration-plan.md#8-p2-实施记录2026-11-11)。以下保留初始盘点，Memory 与其余协议归属仍待后续阶段迁移。
@@ -104,7 +106,7 @@ type FixedMaterial<Basis, Value> = {
 
 来源与操作证据可以有价值，但它们属于这套记忆预设选择的规则。业务画像、推进状态或普通笔记不必为进入 View 满足这些规则。需要整理的是：哪些保留在记忆预设，哪些由业务策略／具体值 schema 实现；不能把必填字段改成 optional 就声称已经完成能力分解。
 
-证据：[Memory.prepare](../packages/memory/src/memory.ts)、[MemoryChange](../packages/memory/src/change.ts)、[结果来源](../packages/memory/src/source.ts)、[当前 MemoryContent](../packages/protocol/src/content/memory.ts)。
+证据：[Memory.prepare](../packages/memory/src/memory.ts)、[MemoryChange](../packages/memory/src/change.ts)、`packages/memory/src/source.ts`（P3 已删除）、[当前 MemoryContent](../packages/protocol/src/content/memory.ts)。
 
 Transcript 的 user/assistant、非空文本、分段与相邻配对同样是具体消息能力；ModelExchanges 的回复与反馈槽完整性是专用实体不变量。它们都可保留，但不进入通用内容约束。
 

@@ -78,3 +78,20 @@ test('deep task projections require the complete ancestor path and its live boun
   missingRootBoundary.boundaries.shift();
   assert.throws(() => validateExecutionRecordSnapshot(missingRootBoundary));
 });
+
+test('callable snapshots accept narrow memory display records and reject old or metadata-bearing bodies', () => {
+  const value = snapshot();
+  const memory = { id: 'memory-record', kind: 'memory', memoryId: 'memory', memoriesId: 'collection', sequence: 1, parentId: value.execution.id, callId: value.execution.id, contextId: value.execution.contextId, value: { action: 'create', result: { content: 'current' } } };
+  value.memories.push(memory);
+  validateExecutionRecordSnapshot(value);
+  for (const body of [
+    { action: 'create', change: 'old', sourceIndexes: [0], result: { topic: 'old', content: 'current', sourceIndexes: [0] } },
+    { action: 'create', result: { content: 'current', metadata: {} } },
+    { action: 'create', reason: undefined, result: { content: 'current' } },
+    { action: 'delete', result: { content: 'current' } },
+    { action: 'update', result: {} },
+  ]) {
+    memory.value = body;
+    assert.throws(() => validateExecutionRecordSnapshot(value), /memory/);
+  }
+});

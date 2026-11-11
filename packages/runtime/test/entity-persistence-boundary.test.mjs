@@ -3,10 +3,12 @@ import { test } from 'node:test';
 import { ChangeCaptureError } from '@weiliang0121/capix-changes';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
-import { Memories, MemoryResource } from '@weiliang0121/capix-memory';
+import { Memories, memoryResources } from '@weiliang0121/capix-memory';
 import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 import { Group, Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
 import { Transcript, TranscriptResource } from '@weiliang0121/capix-transcript';
+
+const memoryOffers = memoryResources();
 
 const entities = [
   {
@@ -23,12 +25,12 @@ const entities = [
   {
     name: 'Memories',
     operation: 'memories.commit',
-    create: (options) => new Memories(new Transcript([{ role: 'user', content: 'original evidence' }]), options),
-    offer: MemoryResource.apply,
+    create: (options) => new Memories(options),
+    offer: memoryOffers.apply,
     write: (endpoint, input) => endpoint.apply(input),
     direct: (entity, input) => entity.apply(input),
-    input: [{ action: 'create', memoryId: null, change: 'remember evidence', sourceIndexes: [0], result: { topic: 'evidence', content: 'accepted memory', sourceIndexes: [0] } }],
-    invalid: [{ action: 'create', memoryId: null, change: '', sourceIndexes: [0], result: { topic: 'evidence', content: 'accepted memory', sourceIndexes: [0] } }],
+    input: [{ action: 'create', value: { content: 'accepted memory' } }],
+    invalid: [{ action: 'create', value: { content: '' } }],
     version: (entity) => entity.sequence,
   },
 ];
@@ -78,7 +80,8 @@ function childWriter(spec, fixture) {
 
 function assertUninstalled(fixture, attempts = 1) {
   assert.equal(fixture.commits.length, attempts);
-  assert.deepEqual(fixture.entity.exportState(), fixture.before);
+  if (fixture.entity instanceof Memories && attempts) assert.throws(() => fixture.entity.exportState(), PersistenceError);
+  else assert.deepEqual(fixture.entity.exportState(), fixture.before);
   assert.deepEqual(fixture.events, []);
 }
 
@@ -183,9 +186,9 @@ test('post-commit change capture failure stays a capture failure and preserves i
     assert.equal(fixture.commits.length, 1);
     assert.equal(fixture.events.length, 1);
     assert.equal(spec.version(fixture.entity), 1);
-    const saved = fixture.entity.snapshot();
+    const saved = spec.name === 'Transcript' ? fixture.entity.snapshot() : fixture.entity.snapshot().items;
     assert.equal(saved.length, 1);
-    assert.equal(saved[0].content, spec.name === 'Transcript' ? spec.input[0].content : spec.input[0].result.content);
+    assert.equal(spec.name === 'Transcript' ? saved[0].content : saved[0].value.content, spec.input[0].value?.content ?? spec.input[0].content);
     assert.equal(runner.isRunning, false);
   }
 });
@@ -239,9 +242,9 @@ test('classifying a lost commit acknowledgement does not imply that storage stay
     await assert.rejects(runner.run(spec.input), (error) => error instanceof PersistenceError && error.operation === spec.operation && error.cause === cause);
     assert.deepEqual(failures, []);
     assertUninstalled(fixture);
-    const restored = spec.name === 'Transcript' ? Transcript.restore(saved) : Memories.restore(saved, fixture.entity.transcript);
+    const restored = spec.name === 'Transcript' ? Transcript.restore(saved) : Memories.restore(saved);
     assert.equal(spec.version(restored), 1);
-    assert.equal(restored.snapshot().length, 1, 'only the authoritative saved state confirms the effect');
+    assert.equal(spec.name === 'Transcript' ? restored.snapshot().length : restored.snapshot().items.length, 1, 'only the authoritative saved state confirms the effect');
     assert.equal(fixture.commits.length, 1, 'classification does not schedule another commit');
   }
 });

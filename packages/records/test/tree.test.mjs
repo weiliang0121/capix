@@ -19,7 +19,7 @@ const operationDefinition = (executionId, contextId, parentOperationId) => ({ ex
 
 const attemptDefinition = (operationId) => ({ operationId, contextId: 'attempt', name: 'apply', label: 'Apply', source: 'test', caller: 'operation', callee: 'processing' });
 
-const memoryValue = { action: 'create', change: '新增约束', sourceIndexes: [0], result: { topic: '偏好', content: '步行', sourceIndexes: [0] } };
+const memoryValue = { action: 'create', reason: '新增约束', result: { content: '步行' } };
 
 function fixture(book = new RecordBook()) {
   const recorder = new Recorder(book);

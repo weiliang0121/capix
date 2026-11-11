@@ -81,7 +81,11 @@ Memories 和 Transcript 负责审查与落实内容，自身不依赖 Recorder�
 
 TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UID 和绝对 index 用于跨端定位；TranscriptRangeRef/MessageRef 只可在内部实体适配中使用，不能进入记录正文。snapshotValue 对普通记录数据执行复制、检查、冻结，不再识别并保留这些实体引用。
 
-`observeMemory` 从 `@weiliang0121/capix-records` 导入，按结构兼容的只读输入组合当前记忆内容与已有 MemoryRecord。它只要求集合提供 `transcript.id` 和 `values()`，使用协议中的记忆值，不持有或恢复 Memories。records 的默认内容适配另外依赖 memory 的公开事实类型身份；Memory 字段和剩余协议归属将在后续阶段收敛。
+`observeMemory` 从 `@weiliang0121/capix-records` 导入，只要求集合提供自身 `id` 和返回固定 `{id,value}` 项的 `values()`，按准确 memoriesId 过滤已有 MemoryRecord，再组合当前项。它不读取 Transcript 或推导消息来源，不持有或恢复 Memories。
+
+MemoryEvent 与 MemoryFacts 归 memory，事件 change 为 `{action,memoryId,value,reason?}`。默认 `memoryRecord` 将完整领域值显式投影为 `MemoryRecordValue = {action,reason?,result:{content}}`；`observeMemory.items` 为 `{id,value:{content},records}`，baseline 与增量使用相同的 content 投影。更新替换当前 value，不合并保留旧字段。未知 metadata 不复制到记录或 wire：Stable 支持的值比 Records/JSON 更宽，默认展示不能冒充完整实体快照或恢复依据。需要其他字段时由业务提供自己的显式投影。旧 topic/sourceIndexes/sourceResults 正文形状在记录构造、恢复和协议接纳时拒绝。
+
+默认 `recordContentFact` 只匹配公开 FactType 的准确身份，并核对转交 contextId 与事件 origin.contextId 后才登记有调用来源的记录；未知类型忽略。独立更新没有来源就保持未知，不从当前调用或时间邻近补线。Lab 的业务记录和客户端接纳另行迁移，P3 不表示该装配已经适配。
 
 ## 资源运行事实
 

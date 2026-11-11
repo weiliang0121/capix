@@ -4,8 +4,6 @@ import { test } from 'node:test';
 
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 
-import { Transcript } from '@weiliang0121/capix-transcript';
-
 import { Memories, MemoryViewSource } from '@weiliang0121/capix-memory';
 
 const changed = (error) => error instanceof RuntimeError && error.code === 'VIEW_SOURCE_CONFLICT';
@@ -18,17 +16,16 @@ function keyWithGetter(read) {
 }
 
 test('memory reads cannot adopt a new version supplied by a reentrant key getter', () => {
-  const transcript = new Transcript([{ role: 'user', content: 'memory evidence' }]);
-  const memories = new Memories(transcript);
-  const content = (value) => ({ topic: 'topic', content: value, sourceIndexes: [0] });
-  const [memory] = memories.apply([{ action: 'create', memoryId: null, change: 'initial', sourceIndexes: [0], result: content('original') }]);
+  const memories = new Memories();
+  const content = (value) => ({ content: value });
+  const [memory] = memories.apply([{ action: 'create', value: content('original') }]).changed;
   const source = new MemoryViewSource(memories);
   const expected = { ...source.index().stamp };
   const initial = expected.version;
   let reads = 0;
   const keys = keyWithGetter(() => {
     reads++;
-    memories.apply([{ action: 'update', memoryId: memory.id, change: 'updated', sourceIndexes: [0], result: content('changed during key access') }]);
+    memories.apply([{ action: 'update', memoryId: memory.id, value: content('changed during key access') }]);
     expected.version = String(memories.sequence);
     return memory.id;
   });
@@ -36,23 +33,22 @@ test('memory reads cannot adopt a new version supplied by a reentrant key getter
   assert.throws(() => source.read(keys, expected), changed);
   assert.equal(reads, 1);
   assert.notEqual(expected.version, initial);
-  assert.equal(memories.get(memory.id).content, 'changed during key access');
+  assert.equal(memories.read(memory.id).value.content, 'changed during key access');
   const current = source.index();
   const snapshot = source.read([memory.id], current.stamp);
-  assert.equal(snapshot.entries[0].value.content, 'changed during key access');
+  assert.equal(snapshot.entries[0].value.value.content, 'changed during key access');
   assert.ok(Object.isFrozen(snapshot.entries[0].value));
 });
 
 test('memory inspection does not enumerate the collection and enforces its fixed key scope', () => {
-  const transcript = new Transcript([{ role: 'user', content: 'memory evidence' }]);
-  const memories = new Memories(transcript);
-  const changes = ['first', 'second'].map((topic) => ({ action: 'create', memoryId: null, change: 'initial', sourceIndexes: [0], result: { topic, content: topic, sourceIndexes: [0] } }));
-  const [first, second] = memories.apply(changes);
+  const memories = new Memories();
+  const changes = ['first', 'second'].map((content) => ({ action: 'create', value: { content } }));
+  const [first, second] = memories.apply(changes).changed;
   const source = new MemoryViewSource(memories);
   const scoped = new MemoryViewSource(memories, [second.id]);
-  const get = memories.get.bind(memories);
+  const get = memories.read.bind(memories);
   const reads = [];
-  memories.get = (key) => {
+  memories.read = (key) => {
     reads.push(key);
     return get(key);
   };
@@ -64,15 +60,19 @@ test('memory inspection does not enumerate the collection and enforces its fixed
   const inspected = source.inspect([second.id, first.id]);
   assert.deepEqual(reads, [second.id, first.id]);
   assert.deepEqual(inspected.entries, [
-    { key: second.id, summary: { topic: 'second' } },
-    { key: first.id, summary: { topic: 'first' } },
+    { key: second.id, summary: undefined },
+    { key: first.id, summary: undefined },
   ]);
   assert.deepEqual(inspected.stamp, empty.stamp);
-  assert.ok(Object.isFrozen(inspected.entries[0].summary));
+  assert.equal(inspected.entries[0].summary, undefined);
+  assert.deepEqual(source.read([second.id], inspected.stamp).entries, [{ key: second.id, value: second }]);
+  assert.deepEqual(scoped.index().entries, [{ key: second.id, summary: undefined }]);
+  assert.deepEqual(scoped.read([second.id], scoped.index().stamp).entries, [{ key: second.id, value: second }]);
+  assert.throws(() => scoped.read([first.id], scoped.index().stamp), RangeError);
   assert.throws(() => source.inspect([first.id, first.id]), TypeError);
   assert.throws(() => source.inspect(['']), TypeError);
   assert.throws(() => source.inspect([0]), TypeError);
   assert.throws(() => source.inspect(['missing']), RangeError);
   assert.throws(() => scoped.inspect([first.id]), RangeError);
-  assert.deepEqual(scoped.inspect([second.id]).entries, [{ key: second.id, summary: { topic: 'second' } }]);
+  assert.deepEqual(scoped.inspect([second.id]).entries, [{ key: second.id, summary: undefined }]);
 });

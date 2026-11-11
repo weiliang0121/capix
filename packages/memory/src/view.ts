@@ -1,25 +1,20 @@
-import { RuntimeError } from '@weiliang0121/capix-contracts';
+import { type Stable, RuntimeError } from '@weiliang0121/capix-contracts';
 import type { SyncViewSource } from '@weiliang0121/capix-view';
 import type { Memories } from './memories.js';
-import type { Memory } from './memory.js';
-import type { MemoryState } from './persistence.js';
+import type { MemoryItem } from './memory.js';
 
-export interface MemoryViewSummary {
-  readonly topic: string;
-}
-
-type MemoryViewContract = SyncViewSource<string, MemoryViewSummary, MemoryState>;
-type SourceStamp = Parameters<MemoryViewContract['read']>[1];
+type MemoryViewContract<Metadata> = SyncViewSource<string, undefined, Stable<MemoryItem<Metadata>>>;
+type SourceStamp = Parameters<MemoryViewContract<never>['read']>[1];
 
 /** A complete directory of one memory collection, or of an explicitly fixed ordered subset. */
-export class MemoryViewSource implements MemoryViewContract {
+export class MemoryViewSource<Metadata = never> implements MemoryViewContract<Metadata> {
   readonly id: string;
   readonly scope: string;
-  readonly #memories: Memories;
+  readonly #memories: Memories<Metadata>;
   readonly #keys?: readonly string[];
   readonly #allowed?: ReadonlySet<string>;
 
-  constructor(memories: Memories, keys?: readonly string[]) {
+  constructor(memories: Memories<Metadata>, keys?: readonly string[]) {
     this.#memories = memories;
     this.id = memories.id;
     if (keys !== undefined) {
@@ -31,35 +26,35 @@ export class MemoryViewSource implements MemoryViewContract {
     Object.freeze(this);
   }
 
-  index(): ReturnType<MemoryViewContract['index']> {
+  index(): ReturnType<MemoryViewContract<Metadata>['index']> {
     const stamp = this.stamp();
     const keys = this.#keys ?? this.#memories.values().map((memory) => memory.id);
-    const entries = Object.freeze(keys.map((key) => Object.freeze({ key, summary: Object.freeze({ topic: this.requireMemory(key).topic }) })));
+    const entries = Object.freeze(keys.map((key) => Object.freeze({ key, summary: this.summary(key) })));
     this.requireCurrent(stamp);
     return Object.freeze({ stamp, entries });
   }
 
-  inspect(keys: readonly string[]): ReturnType<MemoryViewContract['inspect']> {
+  inspect(keys: readonly string[]): ReturnType<MemoryViewContract<Metadata>['inspect']> {
     const stamp = this.stamp();
     const selected = this.acceptKeys(keys);
     const entries = Object.freeze(
       selected.map((key) => {
         if (this.#allowed && !this.#allowed.has(key)) throw new RangeError('Memory is outside the view source scope');
-        return Object.freeze({ key, summary: Object.freeze({ topic: this.requireMemory(key).topic }) });
+        return Object.freeze({ key, summary: this.summary(key) });
       }),
     );
     this.requireCurrent(stamp);
     return Object.freeze({ stamp, entries });
   }
 
-  read(keys: readonly string[], expected: SourceStamp): ReturnType<MemoryViewContract['read']> {
+  read(keys: readonly string[], expected: SourceStamp): ReturnType<MemoryViewContract<Metadata>['read']> {
     const basis = Object.freeze({ id: expected.id, scope: expected.scope, version: expected.version });
     this.requireCurrent(basis);
     const selected = this.acceptKeys(keys);
     const entries = Object.freeze(
       selected.map((key) => {
         if (this.#allowed && !this.#allowed.has(key)) throw new RangeError('Memory is outside the view source scope');
-        return Object.freeze({ key, value: Object.freeze(this.requireMemory(key).toJSON()) });
+        return Object.freeze({ key, value: this.requireMemory(key) });
       }),
     );
     this.requireCurrent(basis);
@@ -85,9 +80,14 @@ export class MemoryViewSource implements MemoryViewContract {
     return Object.freeze(accepted);
   }
 
-  private requireMemory(key: string): Memory {
-    const memory = this.#memories.get(key);
+  private summary(key: string): undefined {
+    this.requireMemory(key);
+    return undefined;
+  }
+
+  private requireMemory(key: string): Stable<MemoryItem<Metadata>> {
+    const memory = this.#memories.read(key);
     if (!memory) throw new RangeError('Memory view member does not exist');
-    return memory;
+    return Object.freeze({ id: memory.id, value: memory.value });
   }
 }

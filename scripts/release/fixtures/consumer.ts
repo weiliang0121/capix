@@ -12,6 +12,7 @@ import { Tool, type ToolMember } from '@weiliang0121/capix-tool';
 import { FactType } from '@weiliang0121/capix-changes';
 import type { ResourceEventConsumer } from '@weiliang0121/capix-resources';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
+import * as memory from '@weiliang0121/capix-memory';
 
 const dictionary = new ResourceOffer({
   methods: {
@@ -137,3 +138,48 @@ if (false) {
   const widened: ResourceEventConsumer<{ count: number } | { text: string }> | undefined = counterPublisher;
   void widened;
 }
+
+// Standalone memory metadata remains typed through installed entity/resource declarations.
+type MemoryMetadata = { label: string; tags: string[] };
+const memoryCollection = new memory.Memories<MemoryMetadata>({ contentContract: { key: 'release.memory', version: 1 } });
+const memoryOffers = memory.memoryResources<MemoryMetadata>();
+const memoryNode = defineNode<string, string>()({
+  deps: { read: memoryOffers.read.request(), write: memoryOffers.apply.request() },
+  run(work) {
+    const application = work.resources.write.apply([{ action: 'create', value: { content: work.input, metadata: { label: 'typed', tags: ['installed'] } } }], work.resources.read.snapshot().basis);
+    const item = work.resources.read.read(application.changed[0]!.id)!;
+    const label: string = item.value.metadata!.label;
+    return `${label}:${item.value.content}`;
+  },
+});
+const memoryScene = new Scene<string, string>().add({ memory: memoryNode });
+memoryScene.run = (work) => work.children.memory.invoke(work.input);
+const memoryResources = new Resources().register(new Resource(memoryCollection), memoryOffers.read).register(new Resource(memoryCollection), memoryOffers.apply);
+const memoryResult: Promise<string> = new Runner(memoryScene, memoryResources).build().run('summary');
+const memorySource = new memory.MemoryViewSource(memoryCollection);
+const memorySnapshot = memorySource.read([], memorySource.index().stamp);
+if (false) {
+  // @ts-expect-error removed live item API is not exported
+  memory.Memory;
+  // @ts-expect-error removed singleton offers cannot erase the metadata contract
+  memory.MemoryResource;
+  // @ts-expect-error author metadata must match its declared contract
+  memoryCollection.apply([{ action: 'create', value: { content: 'summary', metadata: { label: 42, tags: [] } } }]);
+  // @ts-expect-error an untyped offer cannot erase a typed collection's metadata
+  new Resources().register(new Resource(memoryCollection), memory.memoryResources().read);
+  // @ts-expect-error fixed View metadata is deeply readonly
+  memorySnapshot.entries[0]!.value.value.metadata!.tags.push('change');
+  const event = {} as memory.MemoryEvent<MemoryMetadata>;
+  // @ts-expect-error domain event metadata is deeply readonly
+  event.change.value.metadata!.tags.push('change');
+}
+void memoryResult;
+
+const exactMemoryRequest: memory.MemoryFixedApply<MemoryMetadata> = {
+  contract: { key: 'memories.apply', version: 2 },
+  contentContract: memoryCollection.contentContract,
+  memoriesId: memoryCollection.id,
+  operation: { contextId: 'installed-consumer' },
+  command: { position: 'typed', changes: [] },
+};
+if (false) memoryCollection.confirmFixed(exactMemoryRequest);

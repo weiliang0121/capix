@@ -1,8 +1,6 @@
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { View } from '@weiliang0121/capix-view';
 
-export const createMemory = (content) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
-
 // A third source defined by a consumer, not a new production entity or plugin registry.
 export function skillSource() {
   let version = 0;

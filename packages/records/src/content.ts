@@ -11,8 +11,10 @@ export function transcriptRecord(event: TranscriptEvent, source?: RecordChangeSo
   return new TranscriptRecord({ transcriptId: event.transcriptId, revision: event.revision, occurredAt: event.occurredAt, ...(source ? { source } : {}) }, change.kind === 'messages-appended' ? { action: 'append', start: change.start, end: change.start + change.messages.length } : { action: 'segment', previousStart: change.previousStart, start: change.start, end: change.end });
 }
 
-export function memoryRecord(event: MemoryEvent, source?: RecordChangeSource): MemoryRecord {
-  return new MemoryRecord({ memoriesId: event.memoriesId, memoryId: event.change.memoryId, sequence: event.sequence, ...(source ? { source } : {}) }, { action: event.change.action, change: event.change.explanation, sourceIndexes: event.change.sourceIndexes, ...(event.change.sourceResults ? { sourceResults: event.change.sourceResults } : {}), result: event.change.result });
+export function memoryRecord(event: MemoryEvent<unknown>, source?: RecordChangeSource): MemoryRecord {
+  // Metadata may contain Stable values that Records and JSON do not encode faithfully.
+  // This adapter promises only the public display projection.
+  return new MemoryRecord({ memoriesId: event.memoriesId, memoryId: event.change.memoryId, sequence: event.sequence, ...(source ? { source } : {}) }, { action: event.change.action, ...(event.change.reason !== undefined ? { reason: event.change.reason } : {}), result: { content: event.change.value.content } });
 }
 
 /** Optional content projection. Domain origin and the forwarding operation must agree

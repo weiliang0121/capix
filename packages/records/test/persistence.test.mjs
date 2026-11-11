@@ -40,7 +40,7 @@ function recordedFixture() {
   recorder.update(failedAttempt, (record) => record.fail({ code: 'DECLARED_FAILURE', message: 'Unavailable', cause: { code: 'SOURCE', message: 'Source unavailable' } }, { kind: 'exception', contextId: failedAttempt.contextId, phase: 'execute', contract: 'unavailable' }));
   boundary(failedAttempt, 'throw');
   const source = { contextId: operation.contextId, callId: operation.id, executionId: execution.id, operationId: operation.id };
-  recorder.add(new MemoryRecord({ memoryId: 'memory', memoriesId: 'memories', sequence: 1, source }, { action: 'create', change: 'Remember accepted answer', sourceIndexes: [0, 1], result: { topic: 'answer', content: 'saved', sourceIndexes: [0, 1] } }));
+  recorder.add(new MemoryRecord({ memoryId: 'memory', memoriesId: 'memories', sequence: 1, source }, { action: 'create', reason: 'Remember accepted answer', result: { content: 'saved' } }));
   recorder.add(new TranscriptRecord({ transcriptId: 'transcript', revision: 2, occurredAt, source: { contextId: execution.contextId, callId: execution.id, executionId: execution.id } }, { action: 'append', start: 1, end: 2 }));
   recorder.update(operation, (record) => record.complete({ written: true }));
   boundary(operation, 'return');

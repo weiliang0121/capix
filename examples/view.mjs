@@ -13,14 +13,14 @@ const transcript = new Transcript([
   { role: 'user', content: '翻译时请用简短的中文。' },
   { role: 'assistant', content: '好的，我会简短回答。' },
 ]);
-const memories = new Memories(transcript);
-const [preference] = memories.apply([
+const memories = new Memories();
+const {
+  changed: [preference],
+} = memories.apply([
   {
     action: 'create',
-    memoryId: null,
-    change: '记录用户明确表达的翻译偏好',
-    sourceIndexes: [0],
-    result: { topic: '翻译偏好', content: '使用简短的中文。', sourceIndexes: [0] },
+    reason: '记录用户明确表达的翻译偏好',
+    value: { content: '使用简短的中文。' },
   },
 ]);
 
@@ -85,7 +85,7 @@ const first = await runner.run('hello');
 const second = await runner.run('good morning');
 
 console.log('第一次准备的材料：');
-console.table(first.snapshot.entries.map(({ source, value }) => ({ source, content: value.content ?? value.instructions })));
+console.table(first.snapshot.entries.map(({ source, value }) => ({ source, content: value.content ?? value.value?.content ?? value.instructions })));
 console.log(`两次捕获的成员数：${first.snapshot.entries.length} → ${second.snapshot.entries.length}`);
 console.log(`原始实体仍保留：${transcript.length} 条消息、${memories.values().length} 条记忆`);
 console.log(`首份快照仍包含：${first.snapshot.entries.length} 项`);

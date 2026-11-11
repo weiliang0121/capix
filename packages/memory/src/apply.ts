@@ -1,21 +1,25 @@
-import type { MemoryChange } from './change.js';
+import type { MemoryMutation } from './change.js';
+import type { MemoryBasis, MemoryContentContractIdentity } from './memory.js';
 
-/** A fixed batch belongs to one actual applying invocation, not to a model proposal ID. */
-export interface MemoryFixedApply {
-  readonly contract: { readonly key: 'memories.apply'; readonly version: 1 };
-  readonly operation: { readonly contextId: string; readonly position: string };
+/** An actual applying operation, including the exact content contract and original basis. */
+export interface MemoryFixedApply<Metadata = never> {
+  readonly contract: { readonly key: 'memories.apply'; readonly version: 2 };
+  readonly contentContract: MemoryContentContractIdentity;
+  readonly operation: { readonly contextId: string };
   readonly memoriesId: string;
-  readonly changes: readonly MemoryChange[];
+  readonly command: { readonly position: string; readonly changes: readonly MemoryMutation<Metadata>[] };
+  readonly expected?: MemoryBasis;
 }
 
 export interface MemoryApplyReceipt {
   readonly memoriesId: string;
   readonly startSequence: number;
   readonly sequence: number;
-  readonly memoryIds: readonly string[];
+  /** Sparse, ordered correspondence: equal updates have no entry. */
+  readonly changes: readonly { readonly commandIndex: number; readonly memoryId: string }[];
 }
 
-export interface MemoryApplyState {
-  readonly request: MemoryFixedApply;
+export interface MemoryApplyState<Metadata = never> {
+  readonly request: MemoryFixedApply<Metadata>;
   readonly receipt: MemoryApplyReceipt;
 }

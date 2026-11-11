@@ -4,7 +4,20 @@
 
 `@weiliang0121/capix-protocol` 是跨端协议入口。共同的种类与诊断纯值从零实现依赖的 `@weiliang0121/capix-contracts` 显式重导；进程内 Work/子调用端口不会进入协议出口。只公开可序列化数据、记录引用解析与完整性校验；不包含运行实体、HTTP 实现、模型供应商格式或图谱投影。所有跨包导入使用公开出口。
 
-`@weiliang0121/capix-structure` 持有 Callable/Scene/Group/Node，`@weiliang0121/capix-runtime` 负责构建和运行并持有 Context、Invocation、RecordBook、Transcript 与 Memory 等现有运行对象，不依赖服务或应用。Lab 的 `services/observer` 装配当前筛选、回答、提取场景及模型适配器。Lab 的 `packages/client-runtime` 通过 packages/protocol 读取和提交，保存本地提交状态与已观测数据，不依赖 React 或服务端。Lab 的 `packages/client-http` 的 HttpTransport 基类处理 HTTP，ConversationHttpTransport 与 ObservationHttpTransport 两个子类分别通过公开接口实现 ConversationTransport 与 ObservationTransport，接纳具体响应与 NDJSON 消息，客户端 Runtime 不反向依赖它。Lab 的 `apps/observer` 装配客户端 Runtime 与 HTTP 实现，负责 React 界面与前端投影，不导入服务端。对话交付与观测分别接入，见 [客户端 Runtime](client-runtime.md)。
+`@weiliang0121/capix-structure` 持有 Callable/Scene/Group/Node，`@weiliang0121/capix-runtime` 负责结构构建与调用运行，宿主分别持有 RecordBook、Transcript、Memories 等独立实体；这些实体不进入 protocol，也不因装配而由 Runtime 统一拥有。Lab 的 `services/observer` 装配当前筛选、回答、提取场景及模型适配器。Lab 的 `packages/client-runtime` 通过 packages/protocol 读取和提交，保存本地提交状态与已观测数据，不依赖 React 或服务端。Lab 的 `packages/client-http` 的 HttpTransport 基类处理 HTTP，ConversationHttpTransport 与 ObservationHttpTransport 两个子类分别通过公开接口实现 ConversationTransport 与 ObservationTransport，接纳具体响应与 NDJSON 消息，客户端 Runtime 不反向依赖它。Lab 的 `apps/observer` 装配客户端 Runtime 与 HTTP 实现，负责 React 界面与前端投影，不导入服务端。对话交付与观测分别接入，见 [客户端 Runtime](client-runtime.md)。
+
+## 记忆展示 DTO 与 P3 边界
+
+Memory 的领域内容、变化与持久材料归 `@weiliang0121/capix-memory`，protocol 不导入或重导该服务端包。当前默认 wire 明确采用较窄的展示值：
+
+- `MemoryViewValue = {content}`。
+- `MemoryChangeEvent.change = {action,memoryId,value:MemoryViewValue,reason?}`，外层保留 memoriesId、sequence、occurredAt 和可选 origin。
+- `MemoryObservation.items = [{id,value:MemoryViewValue,records}]`；`ConversationInspection.memories.items` 同样使用 `{id,value}`。
+- `MemoryRecordValue = {action,reason?,result:MemoryViewValue}`；执行简介的 memoryChanges 使用可选 reason。
+
+baseline 与增量必须采用相同投影，更新替换 value，不能保留旧项已经去掉的可选字段。默认 DTO 不包含 topic、消息来源、文件来源或未知 metadata；旧记忆记录正文拒绝。需要展示其他字段由业务显式定义投影和接纳契约。该投影不是完整实体快照、固定效果确认或 CP 恢复依据；完整 Stable 内容与请求需要自己的保真 codec，普通 JSON 不能保留 undefined、-0 或 null 原型差异。
+
+P3 已更新 CAPiX 的实体、记录和协议。下述 HTTP 与客户端章节描述 Lab 参考服务的既有装配职责；其提取策略、持久 codec、HTTP decoder 与副本需后续独立迁移，本文不宣称 P4 已完成。
 
 ## HTTP
 
@@ -21,7 +34,7 @@
 - GET `/api/execution?conversationId=对话ID&id=记录ID` → ExecutionRecordSnapshot。仅在打开详情时请求；返回当前完整记录。
 - GET `/api/interactions?conversationId=对话ID&callId=调用ID` → CallInteractionLinks，仅提供该调用资源访问明确关联的外部交互 ID。
 - GET `/api/interaction/observe?conversationId=对话ID&callId=调用ID&id=交互ID` → NDJSON InteractionUpdate。先读取所选调用关联，再交付累计元数据 snapshot；received/unavailable 是本次订阅终态。模型请求/回复正文不包含在此投影中，revision 属于交互已提交状态，保存失败可在同一 revision 表达 unavailable。连接失败与交互失败分别处理，不能由断流推断业务结束。恢复历史仅按 ID 读取，不触发模型或重发。
-- GET `/api/memory?conversationId=对话ID` → MemoryObservation。记忆正文、来源与已生成的变更记录。
+- GET `/api/memory?conversationId=对话ID` → MemoryObservation。当前 content 展示投影与该集合已生成的变更记录，不隐含来源字段。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
 - POST `/api/run` 接受 ConversationSubmissionRequest `{ conversationId, submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是 ConversationSubmissionFrame（baseline/submission/answer）；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
 - GET `/api/submissions/:id` 返回 ConversationSubmissionBaseline（当前累计提交投影与可选预览）；GET `/api/submissions/:id/follow` 同步衔接当前投影与后续变化。关闭任意反馈连接仅解除消费，不取消已启动的服务运行。终态或进展解释不完整时本次连接结束；后者仍可显式查询最终任务结果。
@@ -122,11 +135,11 @@ ObserverOverview 可带 archives（sourceId、rootIds、revision、state），�
 
 ## 变化与交付
 
-ObserverChange 是已知来源的联合：TranscriptEvent、MemoryEvent、InvocationEvent、RecordChangeEvent。生产者仅依赖本类的 ChangeCapture<E>；联合类型用于装配与跨端接纳，不赋予公共捕获器业务分派职责。InvocationEvent 包含 contextId、可选 parentContextId、kind 及开始、进度、子关系和终态元数据，不再有特化 E entry 事件。成员建立前的失败保留已存在的父调用及内容事实，不伪造成员 Context 或记录。任意业务 IO 留在业务通道或记录中。
+ObserverChange 是已知来源的联合：TranscriptEvent、MemoryChangeEvent、InvocationEvent、RecordChangeEvent。领域生产者仅依赖自身的 ChangeCapture<E>，MemoryEvent 需在装配边界显式投影成 MemoryChangeEvent；wire 联合不直接承载完整 metadata，不赋予公共捕获器业务分派职责。InvocationEvent 包含 contextId、可选 parentContextId、kind 及开始、进度、子关系和终态元数据，不再有特化 E entry 事件。成员建立前的失败保留已存在的父调用及内容事实，不伪造成员 Context 或记录。任意业务 IO 留在业务通道或记录中。
 
 RecordMutation 分为 added、process-appended、relation-appended、finished、replaced。added 携带新记录与直接父级新增引用；process-appended 与 relation-appended 分别只携带本次新增过程或关系条目；finished 保持 resultOf 正文复用。replaced 是通用显式更新的后备形式，不是快照 diff。record entry 的 kind 由具体记录类声明。
 
-ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Transcript revision、Memories sequence 和 Recorder revision。后续非空批次递增连接 sequence。ObservationDelta 使用 ObservationChange：原文 append 转为 start/end 通知，原文正文只走实体通道；其余确定性变化保持原契约。ObservationDelta.changes 保留捕获顺序，整批交付不等于跨源事务。客户端先检查交付位置，再检查各来源顺序，整批成功才公开新状态。
+ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Transcript revision、Memories sequence 和 Recorder revision。后续非空批次递增连接 sequence。ObservationDelta 使用 ObservationChange：原文 append 转为 start/end 通知，原文正文只走实体通道；记忆领域变化需转换为上述 MemoryChangeEvent 展示形状，不能直接转交完整领域值。ObservationDelta.changes 保留捕获顺序，整批交付不等于跨源事务。客户端先检查交付位置，再检查各来源顺序，整批成功才公开新状态。
 
 服务环境只由一个 ChangeConsumer 排空变化捕获器，记录来源与消息实体出口共享消费结果。RecordSource 在事实产生前建立，并经 open({ change, incomplete }) 固定基线和来源水位；每条连接有独立交付范围，重连更换 scopeId，不重置来源 revision。失效来源永久拒绝新基线，发送层丢弃尚未发送的普通批次，等待连接可写后发送 SOURCE_INCOMPLETE 并结束；不会撤回已经交给网络的字节。HTTP 连接的待发数据与 writableLength 合计上限为 16 MiB，超限断开连接，不等待慢客户端拖住运行。捕获器不持有已交付历史，不支持游标重放、消费确认或持久化恢复。
 
@@ -136,7 +149,7 @@ ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Trans
 
 静态申请/供给不产生记录。调用内资源端点兑现及方法执行才产生事实。描述函数不会在关闭记录时运行；供给失败与已完成工作后的记录失败保持不同证据，不把后者重新解释成业务失败。
 
-消息定位使用 MessageLocator / TranscriptRangeLocator，记录不包含活 Ref。范围可带捕获时的 revision；客户端允许用更新的追加型消息副本读取旧范围，但不能因此扩大原范围。没有加载、加载失败、版本/位置缺失与空消息分别表达。MemoryObservation.sources 同样只提供消息定位符；记忆变更结果保持既有不可变记录。
+消息定位使用 MessageLocator / TranscriptRangeLocator，记录不包含活 Ref。范围可带捕获时的 revision；客户端允许用更新的追加型消息副本读取旧范围，但不能因此扩大原范围。没有加载、加载失败、版本/位置缺失与空消息分别表达。默认 MemoryObservation 没有 sources，只有独立集合的项及其 content 投影和不可变记录；消息跳转由业务自己的投影提供。
 
 客户端 TranscriptReplica 在首基线之后检查集合身份、严格连续 revision 和追加/分段边界；重复版本不推进副本。消息连接中断与修订缺口由 TranscriptReceiver 有限退避重建基线，主动停止后须显式再次订阅；策略见客户端文档。基线不能改写已接纳正文或分段前缀，身份/内容冲突及来源失效停止自动恢复。不对未加载集合缓存无限增量。当前端点提供完整集合基线，不实现分页、历史重放、持久化或跨集合事务。
 

@@ -17,7 +17,7 @@ const packages = [
   { path: 'packages/structure', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-resources'] },
   { path: 'packages/tool', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-structure', '@weiliang0121/capix-resources', '@weiliang0121/capix-interaction', '@weiliang0121/capix-model-provider', '@weiliang0121/capix-model-exchanges'] },
   { path: 'packages/transcript', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-view'] },
-  { path: 'packages/memory', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-transcript', '@weiliang0121/capix-view'] },
+  { path: 'packages/memory', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-changes', '@weiliang0121/capix-resources', '@weiliang0121/capix-view'] },
   { path: 'packages/view', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-diagnostics', '@weiliang0121/capix-resources'] },
   { path: 'packages/measurement', allowed: ['@weiliang0121/capix-protocol', '@weiliang0121/capix-resources'] },
   { path: 'packages/records', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-changes', '@weiliang0121/capix-resources', '@weiliang0121/capix-transcript', '@weiliang0121/capix-memory'] },

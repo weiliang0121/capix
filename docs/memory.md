@@ -1,161 +1,108 @@
-# 记忆体与记忆记录
+# 独立记忆实体
 
-## 当前串行运行链路
+状态：2026-11-11，P3 当前契约。`@weiliang0121/capix-memory` 保存有持续身份、可修订的一段总结。它不依赖 Transcript，不要求 topic、消息来源、文件凭据或变更解释；内容是否真实、应提取什么、保留多久及怎样进入 View，由业务策略决定。
 
-```text
-正式输入 + ActiveView → prepareContext O（可先维护）→ 固定消息 / 记忆材料
-固定材料                 → 决策 / GenerateAnswer → 正式回答
-固定记忆 + 本轮 QA + 固定历史 + 已接纳的保存凭据 → ExtractMemory → 记忆落实
-已落实内容               → 可选 after-content 维护 → 下次准备时捕获
-```
-
-E 的准备 O 在可选维护之后捕获活跃消息及记忆值。该输出是本次理解、回答和提取的唯一基础材料，不从 E 建立时的旧固定范围或当前实体再次装载。记忆正文已有不可变语义，后续 Memory.update 不会改写已经捕获的内容；当前工作继续使用原快照，下次准备才读取届时活跃的内容。材料不从记录恢复或查询。
-
-默认 `prepareContext` 输出 `material/context/selection`；其中 selection 只为观测保留实际材料索引，不表示运行了模型筛选。理解请求接收固定 history，回答接收固定 context，提取使用同一份历史与记忆，并加入本轮正式 QA 和已接纳结果。所有请求检查完整实际材料的容量，不自动分段、截断或丢弃记忆；超限明确失败。显式维护策略可让消息或记忆退出活跃索引，不要求生成替代内容，也不删除实体。详见 [活跃材料与维护](active-content.md)。
-
-## 两种对象
-
-Memory 是当前可消费的理解。它有持续身份及原文归属；正文更新保持同一个实例和 ID。内部当前内容为不可变值，通过 update 一次替换，不允许外部零散改写。
+`Memories<Metadata = never>` 是唯一写拥有者。单项是固定的 `MemoryItem`，没有第二个可变 Memory 实例：
 
 ```ts
-Memory {
-  id: string;
-  transcript: Transcript;
-  topic: string;
-  content: string;
-  sourceIndexes: readonly number[];
-  sourceResults?: readonly MemoryResultSource[];
-}
+type MemoryContent<Metadata = never> = { readonly content: string; readonly metadata?: Metadata };
+type MemoryItem<Metadata = never> = { readonly id: string; readonly value: MemoryContent<Metadata> };
+type MemoryBasis = { readonly memoriesId: string; readonly sequence: number };
 ```
 
-MemoryRecord 是本次已经落实的变化，继承 BaseRecord。记录自身有独立 ID，正文生成后不可改写。
+集合和单项分别生成 UUID；更新保持单项 ID，不根据正文或主题合并。正文非空，不隐式 trim 或改写。metadata 是业务定义的稳定数据，不授予执行、授权、历史查询或事务能力；画像和业务推进等无需文字总结的对象可以使用自己的实体。
+
+## 读取和写入
 
 ```ts
-MemoryRecord extends BaseRecord<{
-  action: 'create' | 'update';
-  change: string;                  // 本次明确发生了什么，不从两份正文推断
-  sourceIndexes: readonly number[]; // 本次变化依据
-  sourceResults?: readonly MemoryResultSource[]; // 本次采用的已接纳操作结果
-  result: MemoryContent;           // 落实之后的完整内容快照
-}> {
-  memoryId: string;
-  executionId?: string;            // 有记录的调用来源：ExecutionRecord.id
-  operationId?: string;            // 有记录的调用来源：OperationRecord.id
-}
+const memories = new Memories<{ topic?: string }>();
+const {
+  changed: [item],
+} = memories.apply([{ action: 'create', value: { content: '用户偏好简短回答', metadata: { topic: '偏好' } } }]);
+const first = memories.read(item.id)!; // { id, basis, value }
+memories.apply([{ action: 'update', memoryId: item.id, value: { content: '复杂问题可以详细展开' } }], { expected: first.basis });
+// first 保留旧正文；这次更新主动去掉了旧 metadata。
 ```
 
-例如同一个 M：第一次创建预算200元，第二次改为150元。M 的当前正文是150元；记录A保存创建说明和200元快照，记录B保存“200改为150”的说明及150元快照。变化说明由本次处理明确给出，不在观测时猜测。记录按实际登记顺序查询，不保存前后指针。
+- `read(id)` 返回当前单项固定材料，未知 ID 返回 undefined；不扫描全集、不提供历史读。
+- `values()` 明确取得所有固定项；`snapshot()` 返回固定 `{basis, items}` 全集。
+- `apply(changes, {expected?, origin?, observation?})` 返回固定 `{before, after, changed}`，changed 只含实际变化项。
+- `expected` 核对集合身份和 sequence，包含空批也核对；省略表示不提供旧依据冲突保护。跨模型等待时应保留原 basis，不能临提交时用新 sequence 替代。
+- `reason?: string` 是单次变更说明。只改变 reason 不构成内容变化，但会影响固定请求是否相同。
 
-记忆体没有关系数组；“记忆之记忆”本轮不设计。topic 是可变场景名称，不是身份，也不以字符串相同自动合并记忆。
+更新替换完整 value。metadata 的缺失、显式 undefined、-0、普通／null 原型记录均保留差异；对象键插入顺序不单独构成变化。原输入修改不能改写已经形成的项、材料或事件。
 
-## 提取与落实
+写入先进入本实体的重入保护，再固定请求和依据、核验全批、准备固定结果及事件、检查组合容量；可选持久提交成功后安装完整批次，再尝试发布全部实际变化。后项非法、重复更新同一项、缺失目标或 sequence 溢出不能留下前项效果。首条通知出现时整批已安装，不承诺每个中间集合版本都可读取。
 
-消息分组、记忆提取或视图保留等策略由上层函数或节点组织。记忆包只负责所有写入共同遵守的接纳：包内 `prepareMemoryChange` 固定一项变更的说明、来源及完整结果；`Memories` 检查整批目标、重复更新及既有来源凭据，再持久提交、落实并发布。普通 `apply` 和固定 `applyFixed` 使用相同的值接纳规则，后续提案或 getter 不能改写已经接纳项的事件依据。此函数不作为可替换策略或公开写入口。
+按项写入只检查当前批次及涉及的项，已有内容保留认证稳定子图。显式全集读取、导出和 View 目录按实际规模计算，不隐含每次写入导出所有历史。
 
-记忆实体接纳更新后的完整来源，不强制结果累加全部旧 `sourceIndexes` 或 `sourceResults`。原文来源仍须真实、非空且唯一，完整结果须包含本次变更依据；结果中沿用目标当前快照的凭据 ID 时，其内容不得改写。业务提取预设可以决定保留哪些旧来源，但不能把自己的保留策略当作所有记忆或内核的永久约束。
-
-```text
-准备固定材料 → 决策 / 组装 → 生成 → 追加正式 assistant 消息
-                         ↓
-固定活跃记忆 + 本轮 QA + 固定历史原文 + 本轮已接纳保存结果（如有）
-                         ↓
-ExtractMemory
-  → PrepareModelRequest：准备请求并检查容量
-  → RequestModel：通过 A 发起/读取模型交互，保留原始返回
-  → AcceptModelOutput：解析与整批接纳
-  → ApplyMemory
-      ├─ Memories.apply 审查、创建/更新并发布当前事实
-      └─ 可选记录预设消费事实并登记 MemoryRecord
-```
-
-输出示例：
-
-```json
-{
-  "memories": [
-    {
-      "action": "update",
-      "memoryId": "已有记忆体ID",
-      "change": "聚餐预算从200元改为150元，其余条件不变",
-      "sourceIndexes": [4],
-      "result": {
-        "topic": "聚餐安排",
-        "content": "周日晚上，北京海淀，人均150元，清汤涮羊肉，不吃辣。",
-        "sourceIndexes": [0, 4]
-      }
-    }
-  ]
-}
-```
-
-创建使用 action=create、memoryId=null；无需变化则返回空数组。最多四项。更新必须引用当前可见、同 Transcript 的记忆 ID，同批不能重复更新一个目标。本次依据至少包含一条本轮消息，完整内容依据必须包含本次依据。本次依据必须是可见原文；更新的 result.sourceIndexes 还可以保留该目标记忆的已有来源，不借用其他记忆的未加载来源。Schema 在提示词中声明，并有对应本地检查，不是供应商强制 Schema 输出。
-
-接纳先检查候选结构、目标与引用合法性，以及原始候选是否重复更新同一 ID。若 update 的 result 与本轮旧记忆的 topic/content/sourceIndexes 完全相同（索引顺序也相同），将其作为无操作过滤，不要求它额外引用本轮消息，不修改 Memory 或新增 MemoryRecord。是否无变化不依据 change 的文字，不做语义相似判断；正文、主题或来源发生变化时仍必须提供本轮依据。未知引用、正文依据不包含变化依据等错误不能借无操作绕过。剩余变更整批检查通过后才落实，仍不接受部分有效批次。
-
-模型原始候选保留在 RequestModel 的返回记录；独立 Interaction 也保存未经业务解释的 ModelOutput。AcceptModelOutput 保留实际接纳的变更，ApplyMemory 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
-
-## 已接纳的保存结果
-
-文件能力返回真实创建凭据，E 经子调用接纳后保存到本轮 `state.saved`。进入记忆提取时，服务从该凭据复制一份 `MemoryResultSource`，给它一次生成的来源 ID；提取输入的 `results` 提供这些值。不从调用记录、客户端投影、候选路径或助手文本反推文件创建。
+## 资源与 View
 
 ```ts
-MemoryResultSource {
-  id: string;                  // 来源值身份，不是记录 ID
-  kind: 'file-created';
-  answerIndex: number;          // 此 Memory 所属 Transcript 内的回答位置
-  receipt: { path; bytes; digest };
-}
+const memory = memoryResources<{ topic?: string }>();
+const resource = new Resource(memories);
+const resources = new Resources().register(resource, memory.read).register(resource, memory.apply);
+const summarize = new Node({
+  deps: { memory: memory.read.request() },
+  run(work) {
+    if (typeof work.input !== 'string') throw new TypeError('Expected a memory ID');
+    return work.resources.memory.read(work.input);
+  },
+});
 ```
 
-`answerIndex` 说明来源关联到哪次回答，不把回答文本当成文件创建凭据。凭据只证明当时创建了对应字节；以后文件可能被删除或修改，再次操作必须按当时环境检查。来源值只保存不可变数据，不持有文件句柄或调用实例。
+`memoryResources<Metadata>()` 只创建一组类型一致的 Offer；宿主与作者共享这一组对象，按需登记／申请 read 和 apply。没有新实体或装配生命周期。read 端点提供 `read(id)` 和显式 `snapshot()`；apply 端点提供 `apply(changes, expected?)` 和 `applyFixed({position, changes}, expected?)`。绑定不预先捕获全集。
 
-模型在变更及 `result` 中分别使用可选 `sourceResultIds` 引用来源，不能返回或重写凭据。变更引用只能来自本次 `results`；完整结果还可继承目标记忆已有来源，不能借用其他记忆的来源。接纳端将 ID 解析为对应真实 `sourceResults`，变化所用来源必须完整包含于结果中。未知、重复或不在允许集合的 ID 拒绝整批提案；继承旧来源不表示本轮重新访问了文件。无操作比较包含结果来源，因此新增来源本身也属于变化。
+`MemoryViewSource<Metadata>` 复用现有 ViewSource。默认 summary 为 undefined，不替业务决定主题或摘要；read 返回 `{id,value}`。来源可以覆盖 whole 或固定有序 keys 子集，版本取集合 sequence，稀疏 inspect/read 不枚举其他项。更新 Memory 不自动增加 View 成员，退出 View 不删除 Memory，两个提交不构成事务。
 
-本轮保留原有 `sourceIndexes` 及本轮消息依据规则，结果来源作为补充，不设计脱离消息的纯操作记忆。Memories 在统一落实入口校验来源结构、回答位置、变化依据包含关系以及同一来源身份不可改写，并复制冻结正文。来源所述操作是否确实发生，由传入已接纳结果的服务契约保证；实体不读取文件系统，也不建立证据注册表。
+## 内容契约与持久材料
 
-来源随当前记忆、变化事件和可选记忆记录同步，客户端基线、增量及详情都保留相同内容。关闭 Recorder 不影响保存结果进入提取及后续记忆使用。没有操作来源的普通记忆保持原有结构。
+集合可绑定 `contentContract: {key, version, check?}`。默认身份为 `memory.content` v1，只执行内建正文／稳定值约束。自定义 check 同步检查固定的完整 MemoryContent，返回值不替换内容，Promise／thenable 拒绝；check 只依赖固定内容及绑定参数。元信息业务校验变化需更换契约版本。TypeScript 泛型本身不提供运行期字段验证。
 
-记忆仍是可取舍的理解，提取可以返回空数组；本功能不保证每次保存生成记忆，也不承担全部操作事实的可靠留存。记忆提取失败不撤销已创建的文件或正式回答。没有增加通用证据系统或新的受理/审查实体；持久化只保存已经正式接纳的内容和来源，见 [持久化](../../capix-lab/docs/persistence.md)。
+`exportState()` 返回当前格式 v2：集合 ID、contentContract、sequence、items 和可选 applies；`Memories.restore(state, options?)` 只接受当前格式及相同内容契约，静默重新核验，不重新 apply、不发布变化、不持久写入。旧格式和无版本材料拒绝，不做自动迁移。
 
-提取请求装载当前记忆内容及来源索引，不沿引用加载来源原文，不消费 MemoryRecord。原文仍只增不改删。固定历史是提取可用依据，不宣称模型实际使用了每条材料。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
+这些是完整 Stable 材料，**不是 JSON 编码承诺**。持久适配器负责自己支持的 metadata codec，并在外部写入前检查编码容量和保真性。JSON 会丢失 undefined、-0 和 null 原型差异；允许这些数据的业务必须明确编码。CP 同理使用作者 codec，不扩大 Frame 值域，也不从当前实体补造过去正文。
 
-## 归属与边界
+`persistence.commit(change)` 是同步增量提交：`{memoriesId, contentContract, expectedSequence, sequence, upserts, fixed?}`。适配器应核对准确实体和旧序号，保持原有项顺序，并将内容和 fixed 凭据一起提交。正常返回 undefined。
 
-- 环境独立建立 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并发布正式变化。R 仅绑定其正式资源，不拥有实体生命周期。业务没有原集合引用或 Memory.update 旁路。
-- ApplyMemory 通过本层 memory.apply 资源提交已接纳提案，不传递记录来源、不自行修改内容或补写记录。资源绑定注入本次调用的来源。
-- Memories 发布确定的 MemoryEvent，实体自身不持有 Recorder。必要捕获与可选观察独立消费事件；调用中的资源绑定提供 origin 与本次观察端口，记录预设在自己内部形成 RecordChangeSource 及 MemoryRecord。独立变化使用环境端口，不虚构调用来源。
-- MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。不另加索引；memoriesId/sequence 表达集合内正式变化顺序。
-- E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 不持有调用 Context 实例、调用状态或虚构事件。
-- GET /api/memory 返回当前事实和变化记录的只读投影，原文依据使用 transcriptId/index 定位。客户端从独立消息副本组合原文，未加载时按需取得；页面展示记录正文、依据、结果快照、执行与操作 ID，不做差异推断。本轮保留 MemoryRecord 的不可变结果证据，不扩展记忆历史实体仓库。
+## 固定效果确认
 
-无 Recorder 时事实照常变化，不产生记录。接纳及批次预检查失败不改变记忆。整批预检查通过后，先经可选 persistence 端口提交，再整批安装内存状态，最后逐项通知；提交失败不改变内存。通知异常发生在整个批次成立之后，仍尝试其余项的事实发布，按安装的 isolate/propagate 处理并保留真实变更，不虚构回滚。已经生成的回答同样不会被删除。请求超预算直接失败，不自动裁剪、重试或压缩。
+固定请求使用 `memories.apply` v2：
 
-Memories.exportState / restore 保存并静默恢复集合和 Memory 身份、sequence、正文及来源。没有实现记忆召回、关系组织、自动并发合并、用户审核或记录补偿。有限 CP 恢复只核对原快照和准确子树中的固定落实凭据，见 [Checkpoint](checkpoints.md)。
+```ts
+const request = {
+  contract: { key: 'memories.apply', version: 2 } as const,
+  contentContract: memories.contentContract,
+  memoriesId: memories.id,
+  operation: { contextId },
+  command: { position: 'remember-answer', changes },
+  expected,
+};
+const receipt = memories.applyFixed(request);
+// { memoriesId, startSequence, sequence, changes: [{commandIndex, memoryId}] }
+```
 
-## 普通写入的资源结果与依据
+资源端点从准确调用建立 contextId，业务只提供 command 的 position 和 changes；整个 command 与 expected 在实体同一写入保护内固定。低层实体接收宿主已确定的身份；字符串本身不构成授权。
 
-`MemoryResource.apply` 的同步端点 `apply(changes, expected?)` 返回冻结的 `MemoryApplication`：`{memoriesId, transcriptId, startSequence, sequence, items}`。items 仅含实体实际变动记忆的纯值快照，ID 由实体产生；等值更新不产生变动项。返回值不会随下一次更新漂移，不泄露活 Memory，也不代表固定操作凭据。
+同操作键先核对完整原请求，包括内容契约、expected 和 reason，再返回原回执；后续实体更新不改变已确认结果。同键不同请求拒绝。首次固定空批／等值更新仍提交凭据，但 sequence 不变、无内容事件；普通空批不需要持久提交。
 
-调用方可提供 `MemoryBasis {memoriesId, transcriptId, sequence}`，资源在正式同步 apply 前核对准确集合与版本；包括空批次在内，冲突都拒绝且不重试。直接实体 apply 保持原语义；既有绑定期 snapshot 与 applyFixed 不变。需要跨模型等待维护原依据时，应将捕获的 basis 保留至写入，而非提交前重新读取最新 sequence。
+回执的 changes 只列真实变化位置：create 对应新 ID，update 对应指定 ID，无变化更新无条目。restore 核对位置、唯一性、范围、目标和序号等可证明约束，不用当前正文猜过去是不是 no-op，也不把回执当作完整历史数据库。
 
-新的对照服务提供显式选装的普通记忆维护 Group，读取完整消息前缀和记忆全集，提出并校验变更、提交后按真实新 ID 纳入 View。更新允许根据当前记忆内容保留或移除旧 `sourceIndexes`；结果仍须包含本次变更依据，原文索引须在捕获前缀内真实、非空且唯一。当前服务对 `sourceResults` 则原样继承目标记忆的全部旧凭据，模型不能选择或生成它们；这只是本业务预设，不是实体的永久累加规则，也不增加凭据选择 API。该策略与上文 Observer 的固定材料、提取规则和 CP 链路分别维护，详见 [对照服务](../../capix-lab/services/conversation/README.md#从正式回答形成后续记忆)。
+## 故障后的边界
 
-消息退出 View、记忆退出 View 与修改记忆来源互不自动级联。退出消息不删除记忆来源，更新来源不改变成员资格，更新记忆也不自动重新纳入已退出项。记忆写入和 View 成员提交不是跨实体事务，后一步失败不能抹去前一步已成立的事实。
+持久端口抛错或违反同步返回契约，实体报告 PersistenceError，并标记该实例提交结果不确定：
 
-## 观测展示
+- 拒绝新写入和当前 read／values／snapshot／export，宿主从权威存储重新载入。
+- 已交付固定材料继续有效；准确匹配的旧回执仍可确认。
+- 未找到回执时拒绝，不能返回“未执行”；不自动重试、清空或重新生成身份补写。
+- 端口可能已经提交，不能把本地尚未安装解释为外部未提交。
 
-QA 是一次 E 调用的观测视角，不新增运行实体。导航对应执行轮次，主图上下文行聚合选中历史、可见记忆与变化入口，全文由右侧对话和详情提供。用户输入、生成结果和原文关联来自既有事实，不按相邻文本猜测配对；提取失败仍展示已经正式追加的回答。
+变化捕获或观察失败发生在安装之后，保持整个批次和回执，继续尝试其余通知。相同固定操作随后可以确认原效果，不重写、不重发事件。此时实例仍可正常读取，不能与持久提交不确定混为一类。
 
-记忆详情区分当前 Memory 正文与 MemoryRecord 当时的结果快照，沿调用 ID 查看本轮变化和依据。累计选择次数不代表过去某一时刻的热度，也不代表生成模型实际使用。GET /api/executions 提供轻量关联与计时，GET /api/execution?id=... 按需取得记录详情，GET /api/memory 组合当前正文与历史变化。查询不新建事实；切换详情时丢弃过期响应。UI 布局由应用负责，不作为实体或记录契约。
+## 领域事实、记录与展示
 
-## 提取目标与表达边界
+MemoryEvent 归 memory：集合 ID、sequence、时间、可选调用来源，以及 `{action,memoryId,value,reason?}`。MemoryFacts 通过 P2 的类型化事实端口转交；没有来源的独立更新仍无来源，不由全局当前调用补线。
 
-提取目标是维护准确、可延续的理解：吸收有效信息，修正过时认识，保留有效条件与不确定性，减少无意义重复。如何划分、采用什么粒度、是否综合已有理解由模型判断，不预设主题分类或抽象层级，也不为“记忆之记忆”增加一种实体。现有结构和索引校验保留；create/update 是当前可落实的操作范围，不是对模型知识组织方式的要求。当前尚无删除或合并旧记忆的实体操作；退出活跃索引只改变后续材料成员，不销毁 Memory。维护策略与提取策略都不保证语义一定达到最优收敛。
+默认 records 适配只投影 content 和可选 reason，MemoryRecord 保留集合／项身份及实际调用关系；`observeMemory` 按准确 memoriesId 关联当前项和记录。baseline 和增量使用同一个正文投影，不夹带未知 metadata，不伪称完整快照。业务需展示或保存其他字段时，使用显式适配。
 
-运行与内容生命周期的完整边界见 [runtime-boundaries.md](runtime-boundaries.md)。
-
-## 变化捕获
-
-Memories 可注入 ChangeCapture<MemoryEvent>。整批语义检查并固定不可变事件后，先提交并安装整个批次，再逐项尝试必要捕获与可选观察；记录预设消费观察事实生成 MemoryRecord。空批次、无变化和预检查失败不占序号。必要捕获失败或 propagate 观察失败保留已经落实的完整批次，仍尝试剩余通知后报告错误；isolate 观察失败停用对应观察者，业务可继续。通知不构成跨项事务或回滚。
-
-MemoryEvent 与 MemoryRecord 通过 memoriesId/sequence 对应；前者同步当前事实，后者提供变化依据及调用归属。客户端分别更新当前记忆与历史记录，不重复落实内容。无 Recorder 时仍可捕获变化，无捕获器时仍可正常使用记忆。网络交付规则见 [观测增量](observation-increments.md)。
+protocol 的 MemoryViewValue／MemoryChangeEvent 是上述展示 DTO，独立于领域值域；旧 topic、sourceIndexes、sourceResults 已退出默认形状。Lab 的提取规则、来源跳转、服务持久编码与客户端需要另行适配；本仓没有修改它们或导入旧数据。

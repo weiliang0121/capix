@@ -1,21 +1,30 @@
-import { isString } from 'es-toolkit/predicate';
-import { isArray } from 'es-toolkit/compat';
+/** Internal validators only inspect already fixed data. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
-/** Validate content without trimming or otherwise changing it. */
 export function isNonBlankString(value: unknown): value is string {
-  return isString(value) && /\S/.test(value);
+  return typeof value === 'string' && /\S/u.test(value);
 }
 
-export function isNonEmptyArray(value: unknown): value is [unknown, ...unknown[]] {
-  return isArray(value) && value.length > 0;
+export function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/iu.test(value);
 }
 
-/** Empty arrays are unique; object elements are compared by identity. */
-export function hasUniqueItems(values: readonly unknown[]): boolean {
-  return new Set(values).size === values.length;
+export function hasOnlyKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
+  return required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => required.includes(key) || optional.includes(key));
 }
 
-/** Object-shaped content does not need to have a plain-object prototype. */
-export function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !isArray(value);
+/** Complete Stable equality: key order is immaterial, prototypes and absent fields are not. */
+export function equalStable(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') return false;
+  if (Object.getPrototypeOf(left) !== Object.getPrototypeOf(right)) return false;
+  if (Array.isArray(left)) {
+    if (!Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => equalStable(value, right[index]));
+  }
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every((key) => Object.hasOwn(right, key) && equalStable((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]));
 }

@@ -1,86 +1,61 @@
 import assert from 'node:assert/strict';
-
 import { test } from 'node:test';
-
 import { RuntimeError } from '@weiliang0121/capix-contracts';
-
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
-
-import { ChangeCaptureError, ChangeBuffer } from '@weiliang0121/capix-changes';
-
+import { ChangeCaptureError } from '@weiliang0121/capix-changes';
 import { Resource, Resources } from '@weiliang0121/capix-resources';
+import { Memories, MemoryFacts, memoryResources } from '@weiliang0121/capix-memory';
+import { create, fixed } from './support.mjs';
 
-import { Transcript } from '@weiliang0121/capix-transcript';
+const failures = { isProtected: (error) => error instanceof RuntimeError, isCancellation: () => false, describe: () => ({ message: 'failed' }) };
+function accessFor(memories, extra = {}) {
+  const offers = memoryResources();
+  return new Resources()
+    .register(new Resource(memories), offers.apply)
+    .bind({ memory: offers.apply.request() })
+    .open({ contextId: 'memory-test-call', failures, validate() {}, ...extra });
+}
 
-import { Memories, MemoryFacts, MemoryResource } from '@weiliang0121/capix-memory';
-
-const create = (content) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
-
-const fixedRequest = (memories, input, contextId = 'content-host') => ({ contract: { key: 'memories.apply', version: 1 }, operation: { contextId, position: input.position }, memoriesId: memories.id, changes: input.changes });
-
-const failures = { isProtected: (error) => error instanceof RuntimeError, isCancellation: () => false, describe: (error) => ({ message: error.message }) };
-
-const owner = (extra = {}) => ({ contextId: 'content-host', failures, validate() {}, ...extra });
-
-const memoryBinding = (memories) => new Resources().register(new Resource(memories), MemoryResource.apply).bind({ memory: MemoryResource.apply.request() });
-
-test('memory storage failure is classified by the entity and crosses the offer without installing content or a receipt', () => {
-  const transcript = new Transcript([{ role: 'user', content: 'input' }]);
-  const cause = new Error('storage unavailable');
-  const changes = new ChangeBuffer();
-  let reject = true;
-  const writes = [];
-  const memories = new Memories(transcript, {
-    changes,
+test('entity persistence failure crosses resource as protected and does not grant retry on the uncertain instance', () => {
+  const cause = new Error('commit result unknown');
+  let writes = 0;
+  const memories = new Memories({
     persistence: {
-      commit(change) {
-        if (reject) throw cause;
-        writes.push(change);
+      commit() {
+        writes++;
+        throw cause;
       },
     },
   });
+  const before = memories.snapshot();
   const reported = [];
-  const access = memoryBinding(memories).open(
-    owner({
-      error: (error) => {
-        reported.push(error);
-      },
-    }),
-  );
+  const access = accessFor(memories, {
+    error: (error) => {
+      reported.push(error);
+    },
+  });
   try {
-    const input = { position: 'remember', changes: [create('remembered')] };
-    let failure;
     assert.throws(
-      () => access.endpoints.memory.applyFixed(input),
-      (error) => {
-        failure = error;
-        return error instanceof PersistenceError && error.operation === 'memories.commit' && error.cause === cause;
-      },
+      () => access.endpoints.memory.apply([create('candidate')]),
+      (error) => error instanceof PersistenceError && error.cause === cause,
     );
-    assert.equal(memories.sequence, 0);
-    assert.deepEqual(memories.values(), []);
-    assert.equal(memories.confirmFixed(fixedRequest(memories, input)), undefined);
-    assert.equal(changes.size, 0);
-    assert.ok(reported.includes(failure));
-    reject = false;
-    const receipt = access.endpoints.memory.applyFixed(input);
-    assert.equal(receipt.sequence, 1);
-    assert.equal(writes.length, 1);
-    assert.equal(changes.size, 1);
+    assert.ok(reported.some((error) => error instanceof PersistenceError));
+    assert.deepEqual(before.items, []);
+    assert.throws(() => access.endpoints.memory.apply([]), PersistenceError);
+    assert.equal(writes, 1);
   } finally {
     access.close();
   }
 });
 
-test('post-commit capture failure retains shared error identity and can confirm the fixed result without replay', () => {
-  const transcript = new Transcript([{ role: 'user', content: 'input' }]);
+test('post-commit capture error retains identity and confirms the old effect without republishing', () => {
   const cause = new Error('capture unavailable');
   const writes = [];
   const events = [];
   const observed = [];
-  const memories = new Memories(transcript, {
+  const memories = new Memories({
     persistence: {
-      commit: (change) => {
+      commit(change) {
         writes.push(change);
       },
     },
@@ -91,56 +66,41 @@ test('post-commit capture failure retains shared error identity and can confirm 
       },
     },
   });
-  const reported = [];
-  const access = memoryBinding(memories).open(
-    owner({
-      facts: {
-        publish: (fact) => {
-          assert.equal(fact.contextId, 'content-host');
-          assert.equal(
-            MemoryFacts.match(fact.fact, (event) => observed.push(event)),
-            true,
-          );
-        },
+  const access = accessFor(memories, {
+    facts: {
+      publish(fact) {
+        assert.equal(
+          MemoryFacts.match(fact.fact, (event) => {
+            observed.push(event);
+          }),
+          true,
+        );
       },
-      error: (error) => {
-        reported.push(error);
-      },
-    }),
-  );
+    },
+  });
   const input = { position: 'remember', changes: [create('remembered')] };
   try {
-    let failure;
     assert.throws(
       () => access.endpoints.memory.applyFixed(input),
-      (error) => {
-        failure = error;
-        return error instanceof ChangeCaptureError && error instanceof RuntimeError && error.code === 'CHANGE_CAPTURE_FAILED' && error.cause === cause;
-      },
+      (error) => error instanceof ChangeCaptureError && error.cause === cause && error.event === events[0],
     );
-    assert.ok(reported.includes(failure));
-    assert.equal(failure.event, events[0]);
-    assert.deepEqual(observed[0], events[0], 'optional observation still receives the fixed committed fact');
-    assert.ok(Object.isFrozen(observed[0].change.result));
-    assert.equal(events[0].origin.contextId, 'content-host');
     assert.equal(memories.sequence, 1);
+    assert.deepEqual(observed, events);
     const receipt = access.endpoints.memory.applyFixed(input);
-    assert.equal(receipt, memories.confirmFixed(fixedRequest(memories, input)));
+    assert.equal(receipt, memories.confirmFixed(fixed(memories, input.changes)));
     assert.equal(writes.length, 1);
     assert.equal(events.length, 1);
-    assert.equal(observed.length, 1, 'confirming an old effect does not publish a second change');
-    const restoredTranscript = Transcript.restore(transcript.exportState());
-    const restored = Memories.restore(memories.exportState(), restoredTranscript, {
+    assert.equal(observed.length, 1);
+    const restored = Memories.restore(memories.exportState(), {
       persistence: {
         commit() {
-          assert.fail('fixed result must not be written again');
+          assert.fail('known effect cannot be rewritten');
         },
       },
     });
-    const recovery = memoryBinding(restored).open(owner());
+    const recovery = accessFor(restored);
     try {
       assert.deepEqual(recovery.endpoints.memory.applyFixed(input), receipt);
-      assert.equal(restored.values()[0].transcript, restoredTranscript);
     } finally {
       recovery.close();
     }

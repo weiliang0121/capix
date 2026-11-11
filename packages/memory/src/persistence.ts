@@ -1,33 +1,32 @@
-import type { MemoryContent } from '@weiliang0121/capix-protocol';
+import type { Stable } from '@weiliang0121/capix-contracts';
 import type { MemoryApplyState } from './apply.js';
+import type { MemoryContentContractIdentity, MemoryItem } from './memory.js';
 
-export interface MemoryState extends MemoryContent {
+/** Current format only. This is Stable material, not an implicit JSON encoding. */
+export interface MemoriesState<Metadata = never> {
+  readonly version: 2;
   readonly id: string;
-}
-
-/** Items retain creation order even when individual memories are updated. */
-export interface MemoriesState {
-  readonly id: string;
-  readonly transcriptId: string;
+  readonly contentContract: MemoryContentContractIdentity;
   readonly sequence: number;
-  readonly items: readonly MemoryState[];
-  readonly applies?: readonly MemoryApplyState[];
+  readonly items: readonly MemoryItem<Metadata>[];
+  readonly applies?: readonly MemoryApplyState<Metadata>[];
 }
 
-/** One validated apply batch. The store preserves existing item positions on update. */
-export interface MemoriesCommit {
+/** An incremental batch. Preserve existing item positions on update. */
+export interface MemoriesCommit<Metadata = never> {
   readonly memoriesId: string;
-  readonly transcriptId: string;
+  readonly contentContract: MemoryContentContractIdentity;
   readonly expectedSequence: number;
   readonly sequence: number;
-  readonly upserts: readonly MemoryState[];
-  readonly fixed?: MemoryApplyState;
+  readonly upserts: readonly MemoryItem<Metadata>[];
+  readonly fixed?: MemoryApplyState<Metadata>;
 }
 
 /**
- * Commit before installing the batch. The entity marks port failures and invalid
- * synchronous returns as PersistenceError; that classification does not establish commit outcome.
+ * The adapter explicitly owns a faithful codec for its supported metadata domain.
+ * Commit content and fixed confirmation together, synchronously, returning undefined.
+ * Any failure leaves outcome uncertain: reload from authoritative storage before reuse.
  */
-export interface MemoriesPersistence {
-  commit(change: MemoriesCommit): undefined;
+export interface MemoriesPersistence<Metadata = never> {
+  commit(change: Stable<MemoriesCommit<Metadata>>): undefined;
 }

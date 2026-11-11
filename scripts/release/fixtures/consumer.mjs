@@ -18,6 +18,7 @@ import { Tool, ToolModelResource } from '@weiliang0121/capix-tool';
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
 import { requireModelRequest, requireModelReply } from '@weiliang0121/capix-model-provider';
 import { MemoryCheckpointStore, cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
+import { Memories, MemoryViewSource, memoryResources } from '@weiliang0121/capix-memory';
 
 const { Scene, Group, Node, Runner, Resources, checkpointPoint } = runtime;
 const { RuntimeError, StableValueError, stableValue } = contracts;
@@ -249,4 +250,40 @@ assert.equal(
   TranscriptFacts.match(sampleFacts.create({ input: 'other' }), () => assert.fail('wrong producer')),
   false,
 );
-console.log('CAPiX installed consumer smoke passed (identity, resources, typed facts, invocation, cold checkpoint restore, offline Tool)');
+// Memory is independent of Transcript and preserves author content through installed offers.
+const memoryContract = { key: 'release.memory', version: 1 };
+const memories = new Memories({ contentContract: memoryContract });
+const memoryOffers = memoryResources();
+let retainedMemoryReader;
+const memoryNode = new Node({
+  deps: { read: memoryOffers.read.request(), write: memoryOffers.apply.request() },
+  run(work) {
+    retainedMemoryReader = work.resources.read;
+    const expected = retainedMemoryReader.snapshot().basis;
+    const input = { position: 'installed', changes: [{ action: 'create', value: { content: work.input, metadata: { label: 'consumer', tags: ['installed'] } } }] };
+    const receipt = work.resources.write.applyFixed(input, expected);
+    assert.equal(work.resources.write.applyFixed(input, expected), receipt);
+    const item = retainedMemoryReader.read(receipt.changes[0].memoryId);
+    assert.equal(item.basis.sequence, 1);
+    assert.ok(Object.isFrozen(item.value.metadata.tags));
+    return { id: item.id, value: item.value };
+  },
+});
+const memoryScene = new Scene().add({ memory: memoryNode });
+memoryScene.run = (work) => work.children.memory.invoke(work.input);
+const memorySupply = new Resources().register(new Resource(memories), memoryOffers.read).register(new Resource(memories), memoryOffers.apply);
+const memoryRunner = new Runner(memoryScene, memorySupply).build();
+const memoryItem = await memoryRunner.run('installed summary');
+assert.deepEqual(memoryItem.value, { content: 'installed summary', metadata: { label: 'consumer', tags: ['installed'] } });
+assert.equal(memories.sequence, 1);
+const savedMemory = memories.exportState();
+assert.deepEqual(savedMemory.applies[0].request.command, { position: 'installed', changes: [{ action: 'create', value: memoryItem.value }] });
+assert.deepEqual(Object.keys(savedMemory.applies[0].request.operation), ['contextId']);
+assert.throws(() => Memories.restore(savedMemory), /content contract/);
+assert.deepEqual(Memories.restore(savedMemory, { contentContract: memoryContract }).confirmFixed(savedMemory.applies[0].request), savedMemory.applies[0].receipt);
+assert.throws(() => retainedMemoryReader.read(memoryItem.id), ResourceAccessClosed);
+const memorySource = new MemoryViewSource(memories, [memoryItem.id]);
+const memoryDirectory = memorySource.index();
+assert.deepEqual(memoryDirectory.entries, [{ key: memoryItem.id, summary: undefined }]);
+assert.deepEqual(memorySource.read([memoryItem.id], memoryDirectory.stamp).entries, [{ key: memoryItem.id, value: memoryItem }]);
+console.log('CAPiX installed consumer smoke passed (identity, resources, typed facts, invocation, cold checkpoint restore, offline Tool, standalone Memory)');

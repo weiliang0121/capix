@@ -6,7 +6,7 @@ import { readFile, readdir } from 'node:fs/promises';
 
 import { fileURLToPath } from 'node:url';
 
-const packages = [{ name: '@weiliang0121/capix-memory', exports: ['Memory', 'Memories', 'MemoryResource', 'MemoryViewSource'] }];
+const packages = [{ name: '@weiliang0121/capix-memory', exports: ['Memories', 'memoryResources', 'MemoryViewSource', 'MemoryFacts'] }];
 
 test('content packages load through public roots without importing callable structures or runtime', async () => {
   async function inspect(directory) {
@@ -23,12 +23,12 @@ test('content packages load through public roots without importing callable stru
     const directory = new URL('../', import.meta.url);
     const manifest = JSON.parse(await readFile(new URL('package.json', directory), 'utf8'));
     assert.equal(manifest.name, pkg.name);
-    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@weiliang0121/capix-structure', '@weiliang0121/capix-runtime', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
+    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@weiliang0121/capix-structure', '@weiliang0121/capix-runtime', '@weiliang0121/capix-transcript', '@weiliang0121/capix-protocol', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
     await inspect(new URL('src/', directory));
     await inspect(new URL('dist/', directory));
     const exported = await import(pkg.name);
     for (const name of pkg.exports) assert.ok(name in exported, `${pkg.name} must export ${name}`);
-    for (const name of ['Runner', 'Invocation', 'Scene', 'Group', 'Node', 'Recorder', 'updateMemory', 'restoreMemory']) assert.equal(name in exported, false, `${pkg.name} must not expose ${name}`);
+    for (const name of ['Runner', 'Invocation', 'Scene', 'Group', 'Node', 'Recorder', 'Memory', 'MemoryResource', 'updateMemory', 'restoreMemory']) assert.equal(name in exported, false, `${pkg.name} must not expose ${name}`);
   }
   for (const path of ['@weiliang0121/capix-memory/memory', '@weiliang0121/capix-memory/src/memory.js', '@weiliang0121/capix-memory/dist/memory.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 });

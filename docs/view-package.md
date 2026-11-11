@@ -99,7 +99,7 @@ const memories = new MemoryViewSource(memoryCollection);
 const selectedMessages = new TranscriptViewSource(transcript, [4, 1]);
 ```
 
-无 keys 时 scope 为 `whole`；固定子集的 scope 包含准确 key 顺序。Transcript 的版本来自 revision，Memory 来源的版本来自集合 sequence。消息 summary 只含 role，记忆 summary 只含 topic；真正正文在 read 时取得。适配器固定范围，不因后续实体增长扩大原来的 keys 子集。
+无 keys 时 scope 为 `whole`；固定子集的 scope 包含准确 key 顺序。Transcript 的版本来自 revision，Memory 来源的版本来自集合 sequence。消息 summary 只含 role；`MemoryViewSource<Metadata>` 的 summary 为 undefined，不从业务 metadata 推断 topic。记忆 read 返回固定 `{id,value:{content,metadata?}}`，完整正文与业务元信息只在读取所选项时取得。适配器固定范围，不因后续实体增长扩大原来的 keys 子集。
 
 ## 从成员到材料
 
@@ -227,7 +227,7 @@ View 内部按 source/key 建立成员索引，成员查询与新增项判断不
 
 ## Observer 的保留策略
 
-Lab 的 `@capix/observer-content` 的 `ActiveView` 使用两个 whole 来源，并转换通用 basis 与旧的 `transcriptId/memoriesId/indexRevision/transcriptRevision/memorySequence`。它负责：
+以下为 Lab 参考装配原有策略；P3 未修改该装配或完成其新 Memory 适配。Lab 的 `@capix/observer-content` 的 `ActiveView` 使用两个 whole 来源，并转换通用 basis 与旧的 `transcriptId/memoriesId/indexRevision/transcriptRevision/memorySequence`。它负责：
 
 1. 初始化时选择当前消息段及已有记忆。
 2. 根据源增量游标把新消息、新记忆纳入，更新已有记忆不重新纳入已退出项。
@@ -235,5 +235,7 @@ Lab 的 `@capix/observer-content` 的 `ActiveView` 使用两个 whole 来源，�
 4. 把显式成员变更转换为旧宿主持久端口，提交完成后才安装 View 状态。
 
 自动纳入仍属于源写入的持久事务，内存 View 同步时不再重复提交一份独立写入。SQL `active_content`、保存字段 `active`、既有 CP 的业务 state、冲突码及恢复拒绝规则保持。通用 View 没有自动纳入、淘汰、容量策略、后台监听、固定效果凭据或调用恢复能力。
+
+Memory 的当前集合不依赖 Transcript，来源身份为 memoriesId，版本取集合 sequence。单项更新不自动改变 View 成员；旧 stamp 拒绝，已经取得的固定材料保持原值。View 保留完整 Stable 值，不承担 metadata 的持久或 CP 编码，也不以默认展示 DTO 替代完整材料。
 
 现行 Observer 维护链与恢复边界见 [活跃材料](active-content.md)，包归属和入口迁移见 [内容实体与独立包](content-entities-packages.md)。

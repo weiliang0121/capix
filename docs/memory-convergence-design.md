@@ -1,6 +1,6 @@
 # Memory 收敛设计：领域预设与共同能力
 
-状态：2026-11-11 领域边界已收敛，迁移接缝已审查，尚未实施。基于当前 `packages/memory` 源码、包内回归及 [Lab 能力验证](../../capix-lab/examples/entity-capabilities-study/README.md)。本文不改变现行 API；类型和方法写法用于收敛职责，不是已实施承诺。
+状态：2026-11-11，P3 已按本设计落地，当前 API 与故障边界见 [独立记忆实体](memory.md)，阶段结果见 [迁移计划](kernel-boundary-migration-plan.md#9-p3-实施记录2026-11-11)。下文保留实施前的分析、候选与接缝审查；其中“现有”“当前实现”“尚未实施”均指设计基线，不代表迁移后的源码。Lab 的业务装配仍待独立适配。
 
 ## 1. 先确定 Memory 的边界
 

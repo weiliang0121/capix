@@ -17,7 +17,7 @@ function transcriptEvent(change) {
 }
 
 function memoryEvent(action) {
-  return { type: 'memory', memoriesId: 'memories', sequence: 3, occurredAt, origin: { contextId: source.contextId }, change: { action, memoryId: 'memory', explanation: 'changed understanding', sourceIndexes: [2], sourceResults: [], result: { topic: 'topic', content: 'content', sourceIndexes: [2] } } };
+  return { type: 'memory', memoriesId: 'memories', sequence: 3, occurredAt, origin: { contextId: source.contextId }, change: { action, memoryId: 'memory', reason: 'changed understanding', value: { content: 'content', metadata: { omitted: undefined, zero: -0 } } } };
 }
 
 test('content projection preserves transcript append and segment record semantics', () => {
@@ -65,7 +65,7 @@ test('content projection preserves memory content and uses only record hierarchy
     assert.equal(record.contextId, source.contextId);
     assert.equal(record.executionId, source.executionId);
     assert.equal(record.operationId, index === 0 ? undefined : 'operation-record');
-    assert.deepEqual(record.value, { action: index === 0 ? 'create' : 'update', change: 'changed understanding', sourceIndexes: [2], sourceResults: [], result: create.change.result });
+    assert.deepEqual(record.value, { action: index === 0 ? 'create' : 'update', reason: 'changed understanding', result: { content: create.change.value.content } });
   }
   assert.equal(records.length, 2);
 });
@@ -97,4 +97,50 @@ test('content projection ignores unknown type identities without interpreting th
   }
   recordContentFact(delivery(new FactType('business'), { value: 42 }), source, writer);
   assert.deepEqual(records, []);
+});
+
+test('memory baseline and real entity changes share the narrow projection and scope records by collection', async () => {
+  const { Memories } = await import('@weiliang0121/capix-memory');
+  const { RecordBook, Recorder, observeMemory, memoryRecord } = await import('@weiliang0121/capix-records');
+  const book = new RecordBook();
+  const recorder = new Recorder(book);
+  const events = [];
+  const collection = new Memories({
+    observation: {
+      publish(event) {
+        events.push(event);
+        recorder.add(memoryRecord(event));
+      },
+    },
+  });
+  const created = collection.apply([{ action: 'create', value: { content: 'before', metadata: { absent: undefined, signed: -0 } }, reason: 'initial' }]);
+  const id = created.changed[0].id;
+  const first = observeMemory(collection, book);
+  assert.deepEqual(first.items[0].value, { content: 'before' });
+  assert.deepEqual(first.items[0].records[0].value, { action: 'create', reason: 'initial', result: first.items[0].value });
+  assert.equal(first.items[0].records[0].callId, undefined);
+  assert.equal(events[0].origin, undefined);
+  assert.equal(events[0].change.value.metadata.absent, undefined);
+  assert.ok(Object.is(events[0].change.value.metadata.signed, -0));
+  recorder.add(new MemoryRecord({ memoriesId: 'other-collection', memoryId: id, sequence: 1 }, { action: 'create', result: { content: 'unrelated' } }));
+  collection.apply([{ action: 'update', memoryId: id, value: { content: 'after' } }]);
+  const current = observeMemory(collection, book);
+  assert.deepEqual(
+    current.items.map((item) => item.value),
+    [{ content: 'after' }],
+  );
+  assert.equal(current.items[0].records.length, 2);
+  assert.deepEqual(current.items[0].records[1].value, { action: 'update', result: current.items[0].value });
+  assert.deepEqual(first.items[0].value, { content: 'before' });
+  const restored = RecordBook.restore(JSON.parse(JSON.stringify(book.exportState())));
+  assert.deepEqual(observeMemory(collection, restored), current);
+});
+
+test('memory record restoration rejects the old domain-shaped record value', async () => {
+  const { RecordBook, Recorder } = await import('@weiliang0121/capix-records');
+  const book = new RecordBook();
+  new Recorder(book).add(new MemoryRecord({ memoriesId: 'collection', memoryId: 'item', sequence: 1 }, { action: 'create', result: { content: 'current' } }));
+  const saved = structuredClone(book.exportState());
+  saved.entries[0].data.value = { action: 'create', change: 'old', sourceIndexes: [0], result: { topic: 'old', content: 'current', sourceIndexes: [0] } };
+  assert.throws(() => RecordBook.restore(saved), /memory/);
 });

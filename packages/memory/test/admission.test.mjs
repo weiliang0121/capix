@@ -1,178 +1,148 @@
 import assert from 'node:assert/strict';
-
 import { test } from 'node:test';
-
 import { ChangeBuffer } from '@weiliang0121/capix-changes';
+import { Memories } from '@weiliang0121/capix-memory';
+import { create, update, fixed } from './support.mjs';
 
-import { Memories, Memory } from '@weiliang0121/capix-memory';
-
-import { Transcript } from '@weiliang0121/capix-transcript';
-
-const create = (content) => ({ action: 'create', memoryId: null, change: 'retain evidence', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
-
-const fixed = (memories, changes) => ({ contract: { key: 'memories.apply', version: 1 }, operation: { contextId: 'applying-call', position: 'memory' }, memoriesId: memories.id, changes });
-
-for (const method of ['apply', 'applyFixed']) {
-  const apply = (memories, changes) => memories[method](method === 'apply' ? changes : fixed(memories, changes));
-
-  test(`${method} fixes each proposal before a later proposal getter can rewrite its event evidence`, () => {
-    const events = new ChangeBuffer();
+for (const mode of ['apply', 'applyFixed']) {
+  test(`${mode} rejects accessors without executing them or committing an earlier command`, () => {
+    let getters = 0;
     const commits = [];
-    const transcript = new Transcript([{ role: 'user', content: 'evidence' }]);
-    const memories = new Memories(transcript, {
-      changes: events,
+    const changes = new ChangeBuffer();
+    const memories = new Memories({
+      changes,
       persistence: {
-        commit(value) {
+        commit: (value) => {
           commits.push(value);
         },
       },
     });
-    const first = create('first');
-    const accepted = structuredClone(first);
-    const second = create('second');
-    const secondResult = second.result;
-    Object.defineProperty(second, 'result', {
-      get() {
-        first.action = 'update';
-        first.memoryId = 'foreign';
-        first.change = 'rewritten';
-        first.sourceIndexes[0] = 99;
-        first.result.content = 'rewritten';
-        first.result.sourceIndexes[0] = 99;
-        return secondResult;
+    const invalid = {
+      action: 'create',
+      get value() {
+        getters++;
+        return { content: 'hidden' };
       },
-    });
-
-    const result = apply(memories, [first, second]);
-    const [event, next] = events.take();
-    const [memory, following] = memories.values();
-    assert.equal(memories.sequence, 2);
-    assert.equal(commits.length, 1);
-    assert.deepEqual(event.change, { action: accepted.action, memoryId: memory.id, explanation: accepted.change, sourceIndexes: accepted.sourceIndexes, result: accepted.result });
-    assert.deepEqual(memory.snapshot(), accepted.result);
-    assert.deepEqual(commits[0].upserts[0], { id: memory.id, ...accepted.result });
-    assert.deepEqual(next.change.result, secondResult);
-    if (method === 'apply') {
-      assert.equal(result[0], memory);
-      assert.equal(result[1], following);
-    } else {
-      const replay = fixed(memories, [accepted, { ...second, result: secondResult }]);
-      assert.deepEqual(commits[0].fixed.request.changes[0], accepted);
-      assert.equal(memories.applyFixed(replay), result);
-      assert.deepEqual(Memories.restore(memories.exportState(), transcript).confirmFixed(replay), result);
-      assert.equal(commits.length, 1);
-      assert.deepEqual(events.take(), []);
-    }
-  });
-
-  test(`${method} fixes explanation and evidence before reading the result getter`, () => {
-    const events = new ChangeBuffer();
-    const memories = new Memories(new Transcript([{ role: 'user', content: 'evidence' }]), { changes: events });
-    const proposal = create('accepted');
-    const result = proposal.result;
-    Object.defineProperty(proposal, 'result', {
-      get() {
-        proposal.change = 'rewritten';
-        proposal.sourceIndexes[0] = 99;
-        return result;
-      },
-    });
-
-    apply(memories, [proposal, create('next')]);
-    const [event] = events.take();
-    assert.equal(event.change.explanation, 'retain evidence');
-    assert.deepEqual(event.change.sourceIndexes, [0]);
-    assert.deepEqual(event.change.result.sourceIndexes, [0]);
-  });
-
-  test(`${method} keeps content and source indexes fixed while reading optional result sources`, () => {
-    const events = new ChangeBuffer();
-    const memories = new Memories(new Transcript([{ role: 'user', content: 'evidence' }]), { changes: events });
-    const proposal = create('accepted');
-    Object.defineProperty(proposal.result, 'sourceResults', {
-      get() {
-        proposal.result.topic = '';
-        proposal.result.content = '';
-        proposal.result.sourceIndexes[0] = 99;
-        return undefined;
-      },
-    });
-
-    apply(memories, [proposal, create('next')]);
-    assert.deepEqual(memories.values()[0].snapshot(), { topic: 'topic', content: 'accepted', sourceIndexes: [0] });
-    assert.deepEqual(events.take()[0].change.result, memories.values()[0].snapshot());
-  });
-
-  test(`${method} rejects a later invalid proposal without persisting or publishing any of the batch`, () => {
-    const events = new ChangeBuffer();
-    const commits = [];
-    const memories = new Memories(new Transcript([{ role: 'user', content: 'evidence' }]), {
-      changes: events,
-      persistence: {
-        commit(value) {
-          commits.push(value);
-        },
-      },
-    });
-    const first = create('first');
-    const invalid = create('invalid');
-    Object.defineProperty(invalid, 'result', {
-      get() {
-        first.sourceIndexes[0] = 99;
-        return { topic: 'invalid', content: 'invalid', sourceIndexes: [99] };
-      },
-    });
-
-    assert.throws(() => apply(memories, [first, invalid]));
+    };
+    const mutations = [create('first'), invalid];
+    assert.throws(() => (mode === 'apply' ? memories.apply(mutations) : memories.applyFixed(fixed(memories, mutations))));
+    assert.equal(getters, 0);
     assert.equal(memories.sequence, 0);
     assert.deepEqual(memories.values(), []);
     assert.deepEqual(commits, []);
-    assert.deepEqual(events.take(), []);
-    assert.equal(memories.exportState().applies, undefined);
+    assert.equal(changes.size, 0);
+  });
+  test(`${mode} rejects an invalid later command and duplicate updates atomically`, () => {
+    const memories = new Memories();
+    const id = memories.apply([create('old')]).changed[0].id;
+    const before = memories.exportState();
+    for (const mutations of [
+      [create('new'), create('')],
+      [update(id, 'first'), update(id, 'second')],
+      [create('new'), update('missing', 'bad')],
+    ]) {
+      assert.throws(() => (mode === 'apply' ? memories.apply(mutations) : memories.applyFixed(fixed(memories, mutations))));
+      assert.deepEqual(memories.exportState(), before);
+    }
   });
 }
 
-test('fixed memory application captures its operation before reading changes', () => {
-  const events = new ChangeBuffer();
-  const memories = new Memories(new Transcript([{ role: 'user', content: 'evidence' }]), { changes: events });
-  const changes = [create('accepted')];
-  const request = () => {
-    const value = fixed(memories, changes);
-    Object.defineProperty(value, 'changes', {
-      get() {
-        value.operation.contextId = 'rewritten';
-        value.operation.position = '';
-        return changes;
-      },
-    });
-    return value;
+test('expected basis is fixed inside the entity mutation guard, not in a resource precheck', () => {
+  const memories = new Memories();
+  let getters = 0;
+  const expected = {
+    memoriesId: memories.id,
+    get sequence() {
+      getters++;
+      memories.apply([create('reentry')]);
+      return 0;
+    },
   };
-
-  const receipt = memories.applyFixed(request());
-  assert.equal(memories.confirmFixed(request()), receipt);
-  assert.equal(memories.applyFixed(fixed(memories, changes)), receipt);
-  assert.deepEqual(memories.exportState().applies[0].request.operation, { contextId: 'applying-call', position: 'memory' });
+  assert.throws(() => memories.apply([create('outside')], { expected }));
+  assert.equal(getters, 0);
+  assert.equal(memories.sequence, 0);
+  let attempted = 0;
+  const proxy = new Proxy(
+    { memoriesId: memories.id, sequence: 0 },
+    {
+      ownKeys(target) {
+        attempted++;
+        assert.throws(() => memories.apply([create('nested')]), /reenter|mutation/i);
+        return Reflect.ownKeys(target);
+      },
+    },
+  );
+  memories.apply([create('valid')], { expected: proxy });
+  assert.equal(attempted, 1);
   assert.equal(memories.sequence, 1);
-  assert.equal(events.take().length, 1);
 });
 
-test('memory result sources keep their validated identity and receipt while reading later fields', () => {
-  const transcript = new Transcript([
-    { role: 'user', content: 'request' },
-    { role: 'assistant', content: 'answer' },
-  ]);
-  const source = { id: 'file-result', kind: 'file-created', answerIndex: 1, receipt: { path: 'answer.md', bytes: 12 } };
-  Object.defineProperty(source.receipt, 'digest', {
+test('fixed operation rejects accessor-bearing identities without publishing or installing a receipt', () => {
+  const memories = new Memories();
+  const request = fixed(memories, [create('accepted')]);
+  let reads = 0;
+  Object.defineProperty(request.command, 'changes', {
+    enumerable: true,
     get() {
-      source.id = '';
-      source.kind = 'rewritten';
-      source.answerIndex = 99;
-      source.receipt.path = '';
-      source.receipt.bytes = -1;
-      return 'a'.repeat(64);
+      reads++;
+      request.command.position = 'changed';
+      return [];
     },
   });
+  assert.throws(() => memories.applyFixed(request));
+  assert.equal(reads, 0);
+  assert.equal(memories.sequence, 0);
+  assert.equal(memories.exportState().applies?.length ?? 0, 0);
+});
 
-  const memory = new Memory(transcript, { topic: 'topic', content: 'accepted', sourceIndexes: [0], sourceResults: [source] });
-  assert.deepEqual(memory.sourceResults, [{ id: 'file-result', kind: 'file-created', answerIndex: 1, receipt: { path: 'answer.md', bytes: 12, digest: 'a'.repeat(64) } }]);
+test('content contract is fixed, synchronous and validates a stable value without replacing it', async () => {
+  const definition = {
+    key: 'notes.positive',
+    version: 1,
+    check(value) {
+      assert.ok(Object.isFrozen(value));
+      if (value.metadata.score < 0) throw new TypeError('negative score');
+      return { content: 'not a transformation' };
+    },
+  };
+  const memories = new Memories({ contentContract: definition });
+  definition.key = 'mutated';
+  definition.check = () => assert.fail('binding must retain original check');
+  const item = memories.apply([create('original', { score: 1 })]).changed[0];
+  assert.equal(item.value.content, 'original');
+  assert.equal(memories.contentContract.key, 'notes.positive');
+  assert.throws(() => memories.apply([create('invalid', { score: -1 })]), /negative score/);
+  const saved = memories.exportState();
+  assert.throws(() => Memories.restore(saved), /contract/i);
+  let checks = 0;
+  Memories.restore(saved, {
+    contentContract: {
+      key: 'notes.positive',
+      version: 1,
+      check() {
+        checks++;
+      },
+    },
+  });
+  assert.ok(checks > 0);
+  for (const check of [async () => {}, () => Promise.reject(new Error('late rejection'))]) {
+    const invalid = new Memories({ contentContract: { key: 'async', version: 1, check } });
+    assert.throws(() => invalid.apply([create('candidate')]));
+    assert.equal(invalid.sequence, 0);
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('fixed request requires the current command boundary without accepting flattened or extra author fields', () => {
+  const memories = new Memories();
+  const request = fixed(memories, []);
+  const { command, ...envelope } = request;
+  for (const invalid of [
+    { ...envelope, operation: { ...envelope.operation, position: command.position }, changes: command.changes },
+    { ...request, command: { ...command, topic: 'unsupported' } },
+    { ...request, operation: { ...request.operation, position: command.position } },
+  ])
+    assert.throws(() => memories.applyFixed(invalid));
+  assert.equal(memories.sequence, 0);
+  assert.equal(memories.exportState().applies, undefined);
 });

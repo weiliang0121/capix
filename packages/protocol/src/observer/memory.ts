@@ -1,14 +1,11 @@
-import type { MessageLocator } from '../content/transcript.js';
 import type { MemoryRecord } from '../recording/memory.js';
-import type { MemoryResultSource } from '../content/memory.js';
+import type { MemoryViewValue } from '../content/memory.js';
 
+/** Current display values and available change records, without metadata or implied sources. */
 export interface MemoryObservation {
   readonly items: readonly {
-    id: string;
-    topic: string;
-    content: string;
-    sources: readonly MessageLocator[];
-    sourceResults?: readonly MemoryResultSource[];
-    records: readonly MemoryRecord[];
+    readonly id: string;
+    readonly value: MemoryViewValue;
+    readonly records: readonly MemoryRecord[];
   }[];
 }

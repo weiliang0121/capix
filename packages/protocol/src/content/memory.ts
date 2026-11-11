@@ -1,20 +1,6 @@
-import type { FileReceipt } from '../conversation/files.js';
-
-/** An accepted file creation, copied into memory rather than linked to optional records.
- * answerIndex locates the answer in this memory's Transcript; it is not proof of creation.
- * The receipt describes the historical write, not the file's current existence or contents.
+/** Deliberately narrow display DTO; this is not complete Memory content or recovery material.
+ * Applications that expose metadata must define their own projection and encoding contract.
  */
-export interface MemoryResultSource {
-  readonly id: string;
-  readonly kind: 'file-created';
-  readonly answerIndex: number;
-  readonly receipt: FileReceipt;
-}
-
-/** Current understanding content, also used by HTTP views and immutable record snapshots. */
-export interface MemoryContent {
-  readonly topic: string;
+export interface MemoryViewValue {
   readonly content: string;
-  readonly sourceIndexes: readonly number[];
-  readonly sourceResults?: readonly MemoryResultSource[];
 }

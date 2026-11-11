@@ -1,34 +1,90 @@
 import assert from 'node:assert/strict';
-
 import { test } from 'node:test';
-
 import { Memories } from '@weiliang0121/capix-memory';
+import { create, update, fixed } from './support.mjs';
 
-import { Transcript } from '@weiliang0121/capix-transcript';
-
-const message = (content, role = 'user') => ({ role, content });
-
-const create = (content, indexes = [0]) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: indexes, result: { topic: 'topic', content, sourceIndexes: indexes } });
-
-test('restoration rejects broken identities, positions and sources without submitting persistence writes', () => {
-  const transcript = new Transcript([message('input'), message('answer', 'assistant')]);
+test('restore rejects old formats, malformed content and impossible request/receipt correspondences without writing', () => {
   let writes = 0;
-  const persistence = {
-    commit() {
-      writes++;
+  const options = {
+    persistence: {
+      commit() {
+        writes++;
+      },
     },
   };
-  const memories = new Memories(transcript);
-  const [memory] = memories.apply([create('understanding')]);
+  const memories = new Memories();
+  const request = fixed(memories, [create('one'), create('two')]);
+  memories.applyFixed(request);
   const saved = memories.exportState();
-  for (const state of [
-    { ...saved, id: '' },
-    { ...saved, transcriptId: 'other' },
+  const invalid = [
+    { ...saved, version: 1 },
+    { ...saved, version: undefined },
+    { ...saved, id: 'not-uuid' },
     { ...saved, sequence: 0 },
-    { ...saved, items: [memory.toJSON(), memory.toJSON()], sequence: 2 },
-    { ...saved, items: [{ ...memory.toJSON(), sourceIndexes: [20] }] },
-    { ...saved, items: [{ ...memory.toJSON(), sourceResults: [{ id: 'bad-source', kind: 'file-created', answerIndex: 0, receipt: { path: 'x', bytes: 1, digest: 'a'.repeat(64) } }] }] },
-  ])
-    assert.throws(() => Memories.restore(state, transcript, { persistence }));
+    { ...saved, sequence: Number.MAX_SAFE_INTEGER + 1 },
+    { ...saved, transcriptId: 'legacy' },
+    { ...saved, items: [saved.items[0], saved.items[0]] },
+    { ...saved, items: [{ ...saved.items[0], value: { content: '' } }, saved.items[1]] },
+  ];
+  const tamper = (edit) => {
+    const state = structuredClone(saved);
+    edit(state.applies[0]);
+    invalid.push(state);
+  };
+  tamper((entry) => {
+    entry.request.command.changes = [];
+  });
+  tamper((entry) => {
+    entry.receipt.changes = [];
+  });
+  tamper((entry) => {
+    entry.receipt.changes[0].commandIndex = 2;
+  });
+  tamper((entry) => {
+    entry.receipt.changes[1].commandIndex = 0;
+  });
+  tamper((entry) => {
+    entry.receipt.changes[1].memoryId = entry.receipt.changes[0].memoryId;
+  });
+  tamper((entry) => {
+    entry.receipt.memoriesId = 'foreign';
+  });
+  tamper((entry) => {
+    entry.request.command.changes[0] = update(saved.items[1].id, 'wrong target');
+  });
+  tamper((entry) => {
+    entry.request.expected = { memoriesId: saved.id, sequence: 1 };
+  });
+  for (const state of invalid) assert.throws(() => Memories.restore(state, options));
   assert.equal(writes, 0);
+});
+
+test('old receipt validation does not compare against subsequently changed current content', () => {
+  const memories = new Memories();
+  const id = memories.apply([create('original')]).changed[0].id;
+  const request = fixed(memories, [update(id, 'fixed')]);
+  const receipt = memories.applyFixed(request);
+  memories.apply([update(id, 'subsequent')]);
+  const restored = Memories.restore(memories.exportState());
+  assert.deepEqual(restored.confirmFixed(request), receipt);
+  assert.equal(restored.read(id).value.content, 'subsequent');
+});
+
+test('exhausted sequence rejects before persistence or ID installation', () => {
+  const first = new Memories();
+  first.apply([create('base')]);
+  let writes = 0;
+  const memories = Memories.restore(
+    { ...first.exportState(), sequence: Number.MAX_SAFE_INTEGER },
+    {
+      persistence: {
+        commit() {
+          writes++;
+        },
+      },
+    },
+  );
+  assert.throws(() => memories.apply([create('overflow')]), RangeError);
+  assert.equal(writes, 0);
+  assert.equal(memories.values().length, 1);
 });

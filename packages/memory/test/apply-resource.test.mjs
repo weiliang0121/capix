@@ -1,36 +1,21 @@
 import assert from 'node:assert/strict';
-
 import { test } from 'node:test';
-
-import { RuntimeError } from '@weiliang0121/capix-contracts';
-
+import { Memories, MemoryFacts, memoryResources } from '@weiliang0121/capix-memory';
+import { Resource, Resources, ResourceAccessClosed } from '@weiliang0121/capix-resources';
+import { StableValueError } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 
-import { Memories, Memory, MemoryResource } from '@weiliang0121/capix-memory';
-
-import { Resource, Resources, ResourceAccessClosed } from '@weiliang0121/capix-resources';
-
-import { Transcript } from '@weiliang0121/capix-transcript';
-
-const create = (content) => ({ action: 'create', memoryId: null, change: 'create memory', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
-
-const update = (memory, content) => ({ ...create(content), action: 'update', memoryId: memory.id });
-
-const transcript = () =>
-  new Transcript([
-    { role: 'user', content: 'input' },
-    { role: 'assistant', content: 'answer' },
-  ]);
-
-const basis = (memories) => ({ memoriesId: memories.id, transcriptId: memories.transcript.id, sequence: memories.sequence });
-
-const conflict = (error) => error instanceof RuntimeError && !(error instanceof PersistenceError) && error.code === 'MEMORY_BASIS_CONFLICT';
+const create = (content, metadata) => ({ action: 'create', value: { content, ...(metadata === undefined ? {} : { metadata }) } });
+const update = (item, content) => ({ action: 'update', memoryId: item.id, value: { content } });
+const basis = (memories) => memories.snapshot().basis;
 
 function open(memories, publish = () => {}) {
+  const offers = memoryResources();
   const facts = [];
   const access = new Resources()
-    .register(new Resource(memories), MemoryResource.apply)
-    .bind({ memory: MemoryResource.apply.request() })
+    .register(new Resource(memories), offers.apply)
+    .register(new Resource(memories), offers.read)
+    .bind({ memory: offers.apply.request(), read: offers.read.request() })
     .open({
       contextId: 'memory-application',
       failures: { isProtected: (error) => error instanceof PersistenceError, isCancellation: () => false, describe: (error) => ({ message: error.message }) },
@@ -41,285 +26,226 @@ function open(memories, publish = () => {}) {
           publish(fact);
         },
       },
+      facts: {
+        publish(fact) {
+          facts.push(fact);
+        },
+      },
     });
-  return { access, endpoint: access.endpoints.memory, facts };
+  return { access, endpoint: access.endpoints.memory, reader: access.endpoints.read, facts };
 }
 
-test('memory resource returns the real identities and snapshots of only applied changes in batch order', () => {
-  const memories = new Memories(transcript());
-  const { access, endpoint } = open(memories);
-  try {
-    const initial = endpoint.apply([create('one'), create('two'), create('untouched')], basis(memories));
-    assert.deepEqual(initial, { memoriesId: memories.id, transcriptId: memories.transcript.id, startSequence: 0, sequence: 3, items: memories.snapshot() });
-    const [first, second] = initial.items;
-    const application = endpoint.apply([update(first, 'one'), update(second, 'changed'), create('new')], basis(memories));
-    assert.equal(application.startSequence, 3);
-    assert.equal(application.sequence, 5);
-    assert.equal(application.memoriesId, memories.id);
-    assert.equal(application.transcriptId, memories.transcript.id);
-    assert.deepEqual(
-      application.items.map((item) => item.content),
-      ['changed', 'new'],
-    );
-    assert.equal(application.items[0].id, second.id);
-    assert.notEqual(application.items[1].id, first.id);
-    assert.notEqual(application.items[1].id, second.id);
-    for (const item of application.items) {
-      assert.deepEqual(item, memories.get(item.id).toJSON());
-      assert.notEqual(item, memories.get(item.id));
-      assert.equal(item instanceof Memory, false);
-    }
-  } finally {
-    access.close();
-  }
-});
-
-test('empty and unchanged applications return an empty frozen increment without advancing sequence or persisting', () => {
-  let commits = 0;
-  const memories = new Memories(transcript(), {
-    persistence: {
-      commit() {
-        commits++;
-      },
-    },
-  });
-  const { access, endpoint } = open(memories);
-  try {
-    const [memory] = endpoint.apply([create('same')]).items;
-    for (const changes of [[], [update(memory, 'same')]]) {
-      const application = endpoint.apply(changes, basis(memories));
-      assert.deepEqual(application, { ...basis(memories), startSequence: 1, items: [] });
-      assert.equal(commits, 1);
-      assert.equal(memories.sequence, 1);
-      assert.ok(Object.isFrozen(application));
-      assert.ok(Object.isFrozen(application.items));
-    }
-  } finally {
-    access.close();
-  }
-});
-
-test('stale and foreign bases reject a complete batch before writing, including otherwise empty applications', () => {
-  const commits = [];
-  const memories = new Memories(transcript(), {
-    persistence: {
-      commit(change) {
-        commits.push(change);
-      },
-    },
-  });
-  const { access, endpoint } = open(memories);
-  try {
-    const stale = basis(memories);
-    const [memory] = endpoint.apply([create('original')], stale).items;
-    const current = basis(memories);
-    const before = memories.exportState();
-    for (const expected of [stale, { ...current, memoriesId: new Memories(memories.transcript).id }, { ...current, transcriptId: transcript().id }, { ...current, sequence: current.sequence + 1 }]) {
-      for (const changes of [[], [update(memory, 'changed'), create('new')]]) {
-        assert.throws(() => endpoint.apply(changes, expected), conflict);
-        assert.deepEqual(memories.exportState(), before);
-        assert.equal(commits.length, 1);
-      }
-    }
-  } finally {
-    access.close();
-  }
-});
-
-test('invalid expected basis values fail before any application or persistence', () => {
-  let commits = 0;
-  const memories = new Memories(transcript(), {
-    persistence: {
-      commit() {
-        commits++;
-      },
-    },
-  });
-  const { access, endpoint } = open(memories);
-  try {
-    const valid = basis(memories);
-    const invalid = [null, [], false, 0, 'basis', {}, { ...valid, memoriesId: '' }, { ...valid, memoriesId: 1 }, { ...valid, transcriptId: ' ' }, { ...valid, transcriptId: null }, ...[-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, '0', undefined].map((sequence) => ({ ...valid, sequence }))];
-    for (const expected of invalid) assert.throws(() => endpoint.apply([create('rejected')], expected), TypeError);
-    assert.equal(memories.sequence, 0);
-    assert.deepEqual(memories.values(), []);
-    assert.equal(commits, 0);
-  } finally {
-    access.close();
-  }
-});
-
-test('expected basis is checked inside the operation after its started observation', () => {
-  const memories = new Memories(transcript());
-  const expected = basis(memories);
-  let changed = false;
-  const { access, endpoint } = open(memories, (fact) => {
-    if (fact.phase === 'started' && !changed) {
-      changed = true;
-      memories.apply([create('concurrent change')]);
-    }
-  });
-  try {
-    assert.throws(() => endpoint.apply([create('stale proposal')], expected), conflict);
-    assert.equal(memories.sequence, 1);
-    assert.deepEqual(
-      memories.values().map((memory) => memory.content),
-      ['concurrent change'],
-    );
-  } finally {
-    access.close();
-  }
-});
-
-test('persistence failure preserves the original state and never returns a successful application', () => {
-  const failure = new Error('store unavailable');
-  let reject = false;
-  let commits = 0;
-  const memories = new Memories(transcript(), {
-    persistence: {
-      commit() {
-        commits++;
-        if (reject) throw failure;
-      },
-    },
-  });
-  const { access, endpoint, facts } = open(memories);
-  try {
-    const [memory] = endpoint.apply([create('original')]).items;
-    const before = memories.exportState();
-    reject = true;
-    assert.throws(
-      () => endpoint.apply([update(memory, 'changed'), create('new')], basis(memories)),
-      (error) => error instanceof PersistenceError && error.cause === failure,
-    );
-    assert.equal(commits, 2);
-    assert.deepEqual(memories.exportState(), before);
-    assert.equal(facts.filter((fact) => fact.phase === 'returned').length, 1);
-    assert.equal(facts.at(-1).phase, 'threw');
-  } finally {
-    access.close();
-  }
-});
-
-test('expired access rejects apply before checking the basis or changing memory', () => {
-  const memories = new Memories(transcript());
-  const { access, endpoint } = open(memories);
+test('resource writes return only fixed changed items and reads explicitly capture current content', () => {
+  const memories = new Memories();
+  const { access, endpoint, reader } = open(memories);
+  const original = basis(memories);
+  const proposed = create('one', { tags: ['a'] });
+  const first = endpoint.apply([proposed, create('two')], original);
+  assert.deepEqual(first.before, original);
+  assert.equal(first.after.sequence, 2);
+  assert.deepEqual(first.changed, memories.values());
+  const [one, two] = first.changed;
+  const captured = reader.read(one.id);
+  proposed.value.metadata.tags.push('mutated');
+  const second = endpoint.apply([update(one, 'one'), update(two, 'changed')]);
+  assert.equal(second.changed.length, 2, 'removing metadata changes content');
+  assert.equal(captured.value.content, 'one');
+  assert.deepEqual(captured.value.metadata.tags, ['a']);
+  assert.equal(Object.isFrozen(captured.value.metadata.tags), true);
+  assert.deepEqual(reader.snapshot(), memories.snapshot());
+  assert.equal(reader.read('absent'), undefined);
+  assert.equal(reader.read(two.id).value.content, 'changed');
   access.close();
-  for (const expected of [undefined, basis(memories), null]) assert.throws(() => endpoint.apply([create('closed')], expected), ResourceAccessClosed);
-  assert.equal(memories.sequence, 0);
-  assert.deepEqual(memories.values(), []);
+  assert.throws(() => reader.read(one.id), ResourceAccessClosed);
+  assert.throws(() => reader.snapshot(), ResourceAccessClosed);
+  assert.throws(() => endpoint.apply([]), ResourceAccessClosed);
+  assert.equal(captured.value.content, 'one');
 });
 
-test('a started observation that closes the window prevents the application', () => {
-  const memories = new Memories(transcript());
+test('read binding and single reads do not enumerate all content', () => {
+  const memories = new Memories();
+  const [item] = memories.apply([create('single')]).changed;
+  memories.snapshot = () => assert.fail('single read must not take a snapshot');
+  memories.values = () => assert.fail('single read must not enumerate');
+  const { access, reader } = open(memories);
+  assert.equal(reader.read(item.id).value.content, 'single');
+  access.close();
+});
+
+test('entity checks stale and foreign bases inside the actual operation, even for empty writes', () => {
+  const memories = new Memories();
+  const stale = basis(memories);
+  let injected = false;
+  const { access, endpoint } = open(memories, (fact) => {
+    if (fact.phase === 'started' && !injected) {
+      injected = true;
+      memories.apply([create('concurrent')]);
+    }
+  });
+  assert.throws(() => endpoint.apply([create('stale')], stale), { code: 'MEMORY_BASIS_CONFLICT' });
+  assert.throws(() => endpoint.apply([], stale), { code: 'MEMORY_BASIS_CONFLICT' });
+  assert.throws(() => endpoint.apply([], { ...basis(memories), memoriesId: new Memories().id }), { code: 'MEMORY_BASIS_CONFLICT' });
+  assert.equal(memories.sequence, 1);
+  access.close();
+});
+
+test('accessor basis is rejected without reentrant writes', () => {
+  const memories = new Memories();
+  const { access, endpoint } = open(memories);
+  let reads = 0;
+  const expected = {
+    memoriesId: memories.id,
+    get sequence() {
+      reads++;
+      memories.apply([create('injected')]);
+      return 0;
+    },
+  };
+  assert.throws(() => endpoint.apply([create('proposal')], expected), StableValueError);
+  assert.equal(reads, 0);
+  assert.equal(memories.sequence, 0);
+  access.close();
+});
+
+test('fixed operations confirm original request and basis after later writes', () => {
+  let commits = 0;
+  const memories = new Memories({
+    persistence: {
+      commit() {
+        commits++;
+      },
+    },
+  });
+  const { access, endpoint } = open(memories);
+  const expected = basis(memories);
+  const input = { position: 'maintenance', changes: [create('fixed')] };
+  const receipt = endpoint.applyFixed(input, expected);
+  assert.deepEqual(receipt.changes, [{ commandIndex: 0, memoryId: memories.values()[0].id }]);
+  endpoint.apply([create('later')]);
+  assert.equal(endpoint.applyFixed(input, expected), receipt);
+  assert.equal(commits, 2);
+  assert.throws(() => endpoint.applyFixed(input, basis(memories)), { code: 'MEMORY_APPLY_CONFLICT' });
+  assert.throws(() => endpoint.applyFixed({ ...input, changes: [{ ...create('fixed'), reason: 'different request' }] }, expected), { code: 'MEMORY_APPLY_CONFLICT' });
+  assert.throws(() => endpoint.applyFixed({ ...input, position: 'absent' }, expected), { code: 'MEMORY_BASIS_CONFLICT' });
+  const emptyBasis = basis(memories);
+  const empty = { position: 'empty', changes: [] };
+  const emptyReceipt = endpoint.applyFixed(empty, emptyBasis);
+  assert.equal(emptyReceipt.startSequence, emptyReceipt.sequence);
+  assert.deepEqual(emptyReceipt.changes, []);
+  assert.equal(endpoint.applyFixed(empty, emptyBasis), emptyReceipt);
+  assert.equal(commits, 3);
+  access.close();
+});
+
+test('facts retain exact operation provenance and metadata while operation descriptions omit content', () => {
+  const memories = new Memories();
+  const { access, endpoint, facts } = open(memories);
+  endpoint.apply([create('private content', { label: 'private metadata' })]);
+  const domain = [];
+  for (const fact of facts) if ('fact' in fact) MemoryFacts.match(fact.fact, (event) => domain.push({ event, fact }));
+  assert.equal(domain.length, 1);
+  assert.equal(domain[0].event.change.value.content, 'private content');
+  assert.deepEqual(domain[0].event.change.value.metadata, { label: 'private metadata' });
+  assert.equal(domain[0].fact.operationId, facts.find((fact) => fact.phase === 'started').interactionId);
+  assert.equal(domain[0].event.origin.contextId, domain[0].fact.contextId);
+  assert.equal(domain[0].event.origin.contextId, 'memory-application');
+  const operations = facts.filter((fact) => fact.phase === 'started' || fact.phase === 'returned').map((fact) => fact.describe());
+  assert.equal(JSON.stringify(operations).includes('private'), false);
+  access.close();
+});
+
+test('closing the access during started observation prevents entity mutation', () => {
+  const memories = new Memories();
   const { access, endpoint } = open(memories, (fact) => {
     if (fact.phase === 'started') access.close();
   });
-  assert.throws(() => endpoint.apply([create('closed')], basis(memories)), ResourceAccessClosed);
+  assert.throws(() => endpoint.apply([create('closed')]), ResourceAccessClosed);
+  assert.equal(memories.sequence, 0);
+});
+
+test('fixed input accessors never run, including through interested operation observers', () => {
+  const memories = new Memories();
+  const { access, endpoint } = open(memories, (fact) => fact.describe());
+  let getters = 0;
+  const inject = () => {
+    getters++;
+    memories.apply([create('injected')]);
+    return 'position';
+  };
+  assert.throws(
+    () =>
+      endpoint.applyFixed({
+        get position() {
+          return inject();
+        },
+        changes: [],
+      }),
+    StableValueError,
+  );
+  assert.throws(
+    () =>
+      endpoint.applyFixed({
+        position: 'position',
+        get changes() {
+          inject();
+          return [];
+        },
+      }),
+    StableValueError,
+  );
+  assert.equal(getters, 0);
   assert.equal(memories.sequence, 0);
   assert.deepEqual(memories.values(), []);
-});
-
-test('application snapshots remain frozen and independent of later changes to proposals or live memories', () => {
-  const memories = new Memories(transcript());
-  const { access, endpoint } = open(memories);
-  const proposed = create('original');
-  proposed.result.sourceIndexes.push(1);
-  proposed.result.sourceResults = [{ id: 'creation-1', kind: 'file-created', answerIndex: 1, receipt: { path: 'answer.md', bytes: 12, digest: 'a'.repeat(64) } }];
-  const application = endpoint.apply([proposed]);
-  const item = application.items[0];
-  for (const value of [application, application.items, item, item.sourceIndexes, item.sourceResults, item.sourceResults[0], item.sourceResults[0].receipt]) assert.ok(Object.isFrozen(value));
-  assert.throws(() => {
-    item.content = 'rewritten';
-  }, TypeError);
-  assert.throws(() => {
-    application.items.push(item);
-  }, TypeError);
-  proposed.result.content = 'changed proposal';
-  proposed.result.sourceIndexes.push(99);
-  proposed.result.sourceResults[0].receipt.path = 'rewritten.md';
-  endpoint.apply([update(item, 'new live content')]);
   access.close();
-  assert.equal(memories.get(item.id).content, 'new live content');
-  assert.equal(item.content, 'original');
-  assert.deepEqual(item.sourceIndexes, [0, 1]);
-  assert.equal(item.sourceResults[0].receipt.path, 'answer.md');
-  assert.equal(application.sequence, 1);
 });
 
-test('resource observation retains actual counts, sequences and changed IDs without exposing memory content', () => {
-  const memories = new Memories(transcript());
-  let injected = false;
-  const { access, endpoint, facts } = open(memories, (fact) => {
-    if (fact.phase === 'started' && !injected) {
-      injected = true;
-      memories.apply([create('outside write')]);
-    }
-  });
-  try {
-    const initial = endpoint.apply([create('private original')]);
-    const [item] = initial.items;
-    endpoint.apply([update(item, 'private original')]);
-    endpoint.apply([update(item, 'private changed')]);
-    const operations = facts.filter((fact) => fact.phase === 'started' || fact.phase === 'returned').map((fact) => ({ phase: fact.phase, detail: fact.describe() }));
-    assert.deepEqual(operations, [
-      { phase: 'started', detail: { action: 'apply', input: { count: 1 } } },
-      { phase: 'returned', detail: { action: 'apply', output: { memoriesId: memories.id, startSequence: 1, endSequence: 2, memoryIds: [item.id] } } },
-      { phase: 'started', detail: { action: 'apply', input: { count: 1 } } },
-      { phase: 'returned', detail: { action: 'apply', output: { memoriesId: memories.id, startSequence: 2, endSequence: 2, memoryIds: [] } } },
-      { phase: 'started', detail: { action: 'apply', input: { count: 1 } } },
-      { phase: 'returned', detail: { action: 'apply', output: { memoriesId: memories.id, startSequence: 2, endSequence: 3, memoryIds: [item.id] } } },
-    ]);
-    assert.equal(JSON.stringify(operations).includes('private'), false);
-    assert.equal(initial.startSequence, 1);
-    assert.equal(initial.sequence, 2);
-  } finally {
-    access.close();
-  }
-});
-
-test('fixed memory application confirms its exact original receipt before checking current sequence', () => {
-  const memories = new Memories(transcript());
-  const { access, endpoint } = open(memories);
-  try {
-    const expected = basis(memories);
-    const batch = { position: 'maintenance', changes: [create('fixed')] };
-    const receipt = endpoint.applyFixed(batch, expected);
-    endpoint.apply([create('later unrelated write')]);
-    assert.equal(endpoint.applyFixed(batch, expected), receipt);
-    assert.equal(memories.values().length, 2);
-    assert.equal(memories.sequence, 2);
-    assert.throws(() => endpoint.applyFixed(batch, { ...expected, sequence: 1 }), conflict);
-    assert.throws(() => endpoint.applyFixed(batch, { ...expected, transcriptId: 'foreign' }), conflict);
-    assert.throws(() => endpoint.applyFixed({ ...batch, changes: [create('different')] }, expected), { code: 'MEMORY_APPLY_CONFLICT' });
-    assert.throws(() => endpoint.applyFixed({ position: 'new', changes: [create('stale')] }, expected), conflict);
-    assert.equal(memories.values().length, 2);
-  } finally {
-    access.close();
-  }
-});
-
-test('fixed empty batch confirms without advancing sequence and stale absent receipt cannot establish an effect', () => {
-  let commits = 0;
-  const memories = new Memories(transcript(), {
-    persistence: {
-      commit() {
-        commits++;
-      },
+test('ordinary write descriptions do not inspect raw arrays before the entity guard', () => {
+  const memories = new Memories();
+  const { access, endpoint } = open(memories, (fact) => fact.describe());
+  let lengthReads = 0;
+  const commands = new Proxy([], {
+    get(target, key, receiver) {
+      if (key === 'length') {
+        lengthReads++;
+        memories.apply([create('unguarded')]);
+      }
+      return Reflect.get(target, key, receiver);
     },
   });
-  const { access, endpoint } = open(memories);
   try {
-    const expected = basis(memories);
-    const batch = { position: 'empty', changes: [] };
-    const receipt = endpoint.applyFixed(batch, expected);
-    assert.equal(commits, 1, 'an empty fixed effect still has a durable receipt');
-    assert.equal(endpoint.applyFixed(batch, expected), receipt);
-    assert.equal(commits, 1);
-    endpoint.apply([create('later')]);
-    assert.equal(endpoint.applyFixed(batch, expected), receipt);
-    assert.throws(() => endpoint.applyFixed({ position: 'another-empty', changes: [] }, expected), conflict);
-    assert.equal(commits, 2);
+    assert.deepEqual(endpoint.apply(commands).changed, []);
+    assert.equal(lengthReads, 0);
+    assert.equal(memories.sequence, 0);
   } finally {
     access.close();
   }
 });
+
+for (const location of ['command', 'metadata']) {
+  test(`fixed ${location} Proxy inspection runs inside the entity mutation guard`, () => {
+    const memories = new Memories();
+    const { access, endpoint } = open(memories, (fact) => fact.describe());
+    let attempts = 0;
+    const guarded = (value) =>
+      new Proxy(value, {
+        ownKeys(target) {
+          attempts++;
+          assert.throws(() => memories.apply([create('nested')]), /reenter|mutation/i);
+          return Reflect.ownKeys(target);
+        },
+      });
+    const input = location === 'command' ? guarded({ position: 'guarded', changes: [] }) : { position: 'guarded', changes: [create('accepted', guarded({ label: 'fixed' }))] };
+    try {
+      const receipt = endpoint.applyFixed(input);
+      assert.equal(attempts, 1);
+      assert.equal(memories.sequence, location === 'command' ? 0 : 1);
+      assert.equal(endpoint.applyFixed(input), receipt);
+      assert.equal(
+        memories.values().some((item) => item.value.content === 'nested'),
+        false,
+      );
+    } finally {
+      access.close();
+    }
+  });
+}

@@ -4,29 +4,25 @@ import { test } from 'node:test';
 
 import { Memories } from '@weiliang0121/capix-memory';
 
-import { Transcript } from '@weiliang0121/capix-transcript';
-
 import { bindRecording } from '@weiliang0121/capix-runtime';
 
 import { Recorder, RecordBook, MemoryRecord, observeMemory } from '@weiliang0121/capix-records';
 
 import { ChangeBuffer } from '@weiliang0121/capix-changes';
 
-const create = (text) => ({ action: 'create', memoryId: null, change: 'create', sourceIndexes: [0], result: { topic: 'topic', content: text, sourceIndexes: [0] } });
+const create = (text) => ({ action: 'create', value: { content: text } });
 
 const update = (memory, text) => ({ ...create(text), action: 'update', memoryId: memory.id });
-
-const transcript = () => new Transcript([{ role: 'user', content: 'input' }]);
 
 test('Memories sequences actual changes across different memories and preserves scope identity on records', () => {
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
-  const memories = new Memories(transcript(), { observation: recording.memory });
-  const [first, second] = memories.apply([create('one'), create('two')]);
+  const memories = new Memories({ observation: recording.memory });
+  const [first, second] = memories.apply([create('one'), create('two')]).changed;
   assert.equal(memories.sequence, 2);
-  assert.deepEqual(memories.apply([update(first, 'one')]), []);
+  assert.deepEqual(memories.apply([update(first, 'one')]).changed, []);
   assert.equal(memories.sequence, 2);
-  assert.throws(() => memories.apply([create('three'), update({ id: 'missing' }, 'bad')]), /does not exist/);
+  assert.throws(() => memories.apply([create('three'), update({ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff' }, 'bad')]), /does not exist/);
   assert.equal(memories.sequence, 2);
   memories.apply([update(first, 'changed')]);
   const records = [...recorder.book.values()].filter((record) => record instanceof MemoryRecord);
@@ -59,12 +55,12 @@ test('recording failure does not reuse a memory change position or undo the appl
   const faults = [];
   const changes = new ChangeBuffer();
   const recording = bindRecording(new Recorder(book), { failure: 'propagate', invalidate: (error) => faults.push(error) });
-  const memories = new Memories(transcript(), { observation: recording.memory, changes });
+  const memories = new Memories({ observation: recording.memory, changes });
   assert.throws(
     () => memories.apply([create('one')]),
     (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'record rejected',
   );
-  assert.equal(memories.values()[0].content, 'one');
+  assert.equal(memories.values()[0].value.content, 'one');
   assert.equal(memories.sequence, 1);
   book.reject = false;
   memories.apply([update(memories.values()[0], 'two')]);

@@ -8,7 +8,7 @@ export function createEnvironment(options = {}) {
   const { messages = [], recorder, changes } = options;
   const runtime = createBoundRuntime({ recorder, changes });
   const transcript = new Transcript(messages, { observation: runtime.recording?.transcript, changes });
-  const memories = new Memories(transcript, { observation: runtime.recording?.memory, changes });
+  const memories = new Memories({ observation: runtime.recording?.memory, changes });
   const messageUsage = new MessageUsage();
   return { runtime, transcript, memories, messageUsage };
 }

@@ -1,4 +1,4 @@
-import { hasOutput, validateInvocationRecordValue, type RecordEntry } from '@weiliang0121/capix-protocol';
+import { hasOutput, validateInvocationRecordValue, validateMemoryRecordValue, type RecordEntry } from '@weiliang0121/capix-protocol';
 import { isPlainObject } from 'es-toolkit/predicate';
 
 type Fields = Record<string, unknown>;
@@ -22,26 +22,6 @@ function integer(value: unknown, minimum = 0): asserts value is number {
 function time(value: unknown): void {
   text(value);
   if (!Number.isFinite(Date.parse(value))) fail();
-}
-function indexes(value: unknown, nonempty = true): void {
-  if (!Array.isArray(value) || (nonempty && !value.length) || new Set(value).size !== value.length) fail();
-  for (const index of value) integer(index);
-}
-function sources(value: unknown): void {
-  if (value === undefined) return;
-  if (!Array.isArray(value)) fail();
-  const ids = new Set<string>();
-  for (const item of value) {
-    const source = object(item);
-    text(source.id);
-    if (ids.has(source.id) || source.kind !== 'file-created') fail();
-    ids.add(source.id);
-    integer(source.answerIndex);
-    const receipt = object(source.receipt);
-    text(receipt.path);
-    integer(receipt.bytes);
-    if (typeof receipt.digest !== 'string' || !/^[a-f0-9]{64}$/u.test(receipt.digest)) fail();
-  }
 }
 function children(value: unknown): void {
   if (!Array.isArray(value) || new Set(value).size !== value.length) fail();
@@ -134,16 +114,7 @@ export function checkEntry(entry: RecordEntry): void {
       integer(data.sequence, 1);
       optionalText(data.operationId);
       checkContentSource(data);
-      const value = object(data.value);
-      if (value.action !== 'create' && value.action !== 'update') fail();
-      text(value.change);
-      indexes(value.sourceIndexes);
-      sources(value.sourceResults);
-      const result = object(value.result);
-      text(result.topic);
-      text(result.content);
-      indexes(result.sourceIndexes);
-      sources(result.sourceResults);
+      validateMemoryRecordValue(data.value);
       break;
     }
     case 'custom':

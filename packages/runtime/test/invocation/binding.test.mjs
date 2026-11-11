@@ -1,7 +1,7 @@
 import { ResourceBindings, bindResources } from '../fixtures/resources.mjs';
 
 import { TranscriptResource } from '@weiliang0121/capix-transcript';
-import { MemoryResource } from '@weiliang0121/capix-memory';
+import { memoryResources } from '@weiliang0121/capix-memory';
 
 import { createEnvironment } from '../fixtures/environment.mjs';
 
@@ -23,12 +23,13 @@ const identity = { maxRounds: 1, execute: (context) => context.currentInput };
 
 test('live nested calls and content sources use their bound records without Context lookup', async (t) => {
   const recorder = new Recorder(new RecordBook());
+  const memoryOffers = memoryResources();
   const { runtime, transcript, memories } = createEnvironment({ recorder, messages: [{ role: 'user', content: 'Beijing' }] });
   let outer;
   let nested;
   let leaf;
   const append = { append: TranscriptResource.append.request() };
-  const apply = { apply: MemoryResource.apply.request() };
+  const apply = { apply: memoryOffers.apply.request() };
   const root = runtime.executionInvocationBuilder.create('root', {
     context: { settings: {} },
     deps: append,
@@ -53,12 +54,12 @@ test('live nested calls and content sources use their bound records without Cont
                       input: 'leaf',
                       description: attempt,
                       deps: apply,
-                      resources: bindResources(apply, [MemoryResource.apply.provide(() => memories)])(undefined),
+                      resources: bindResources(apply, [memoryOffers.apply.provide(() => memories)])(undefined),
                       work: {
                         maxRounds: 1,
                         execute(context, invocation) {
                           assert.equal(invocation.context, context);
-                          context.resources.values.apply.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }]);
+                          context.resources.values.apply.apply([{ action: 'create', value: { content: 'Beijing' } }]);
                           return 'done';
                         },
                         accept(context, output, invocation) {

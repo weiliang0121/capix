@@ -1,7 +1,7 @@
 import { isSafeInteger } from 'es-toolkit/compat';
 import { isString, isUndefined } from 'es-toolkit/predicate';
 import { pick, omitBy } from 'es-toolkit/object';
-import type { MemoryRecord as MemoryRecordData, MemoryRecordValue } from '@weiliang0121/capix-protocol';
+import { validateMemoryRecordValue, type MemoryRecord as MemoryRecordData, type MemoryRecordValue } from '@weiliang0121/capix-protocol';
 import type { RecordChangeSource } from '../source.js';
 import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';
@@ -25,6 +25,7 @@ export class MemoryRecord extends BaseRecord<MemoryRecordValue> implements Memor
   readonly callId?: string;
   constructor(options: MemoryRecordOptions, value: MemoryRecordValue) {
     super(snapshotValue(value), options.source?.callId);
+    validateMemoryRecordValue(this.value);
     if (!isString(options.memoriesId) || !/\S/u.test(options.memoriesId) || !isSafeInteger(options.sequence) || options.sequence < 1) throw new Error('Memory change requires a scope and a positive sequence');
     this.memoryId = options.memoryId;
     this.memoriesId = options.memoriesId;

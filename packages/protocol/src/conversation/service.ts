@@ -1,4 +1,4 @@
-import type { MemoryContent } from '../content/memory.js';
+import type { MemoryViewValue } from '../content/memory.js';
 import type { MessageLocator } from '../content/transcript.js';
 import type { CallableRecord, InvocationBoundaryRecord } from '../recording/types.js';
 import type { ResourceRecord } from '../recording/resource.js';
@@ -39,7 +39,7 @@ export interface ConversationInspection {
   readonly memories: {
     readonly id: string;
     readonly sequence: number;
-    readonly items: readonly (MemoryContent & { readonly id: string })[];
+    readonly items: readonly { readonly id: string; readonly value: MemoryViewValue }[];
   };
   readonly view: {
     readonly revision: number;

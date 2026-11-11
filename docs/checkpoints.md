@@ -56,7 +56,7 @@ Store 保持同步宿主端口，未强制放入普通业务 deps。最终交付
 | `runner.resume(contextId, options)`                                                               | 核对绑定归属、当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守该 Runner 入口占用边界。                                                   |
 | `work.children.resume(saved.ref)`                                                                 | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                   |
 | `TranscriptResource.append.applyFixed({position,messages})`                                       | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                          |
-| `MemoryResource.apply.applyFixed({position,changes})`                                             | 由资源端点取得当前 A 身份；整个批次与凭据同事务保存，重复确认不修改记忆或占用新顺序。                                                                       |
+| `memoryResources().apply` 端点的 `applyFixed({position,changes})`                                 | 由已登记资源端点取得准确调用身份；整个批次与凭据由实体同次提交，重复确认不修改记忆或占用新顺序。                                                            |
 
 资源端点与 CP writer 保持 phase/round 访问窗口。直接子接纳通过私有异步范围关联固定操作，支持并行接纳；逸出已结束接纳的回调不能借用后续接纳身份。没有增加新的恢复编排器或通用 resume/run/accept 预设，声明共享自己的正常阶段函数，Invocation 仍处理父子运行机制。
 
