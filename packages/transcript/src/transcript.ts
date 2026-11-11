@@ -5,7 +5,7 @@ import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from './validation.js';
 import { isObject } from './validation.js';
 import { MessageRef, TranscriptRangeRef } from './ref.js';
-import type { Message } from '@weiliang0121/capix-protocol';
+import type { Message } from './types.js';
 import type { ChangeCapture } from '@weiliang0121/capix-changes';
 import { createTranscriptEvent, type TranscriptEvent } from './event.js';
 import type { ProgressChannel } from '@weiliang0121/capix-changes';

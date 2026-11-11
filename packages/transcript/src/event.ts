@@ -1,6 +1,9 @@
 import { FactType } from '@weiliang0121/capix-changes';
-import type { TranscriptEvent } from '@weiliang0121/capix-protocol';
-export type { TranscriptEvent } from '@weiliang0121/capix-protocol';
+import type { InvocationOrigin } from '@weiliang0121/capix-contracts';
+import type { Message } from './types.js';
+
+/** A fixed domain change; publication does not grant replay or recovery authority. */
+export type TranscriptEvent = Readonly<{ type: 'transcript'; transcriptId: string; revision: number; occurredAt: string; origin?: InvocationOrigin; change: Readonly<{ kind: 'messages-appended'; start: number; messages: readonly Readonly<Message>[] }> | Readonly<{ kind: 'segment-started'; previousStart: number; start: number; end: number }> }>;
 
 /** One producer-owned type identity; its name is descriptive, not a routing key. */
 export const TranscriptFacts = new FactType<TranscriptEvent>('transcript');

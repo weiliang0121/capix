@@ -1,5 +1,10 @@
 // Compile with TypeScript in strict NodeNext mode against the installed tarballs.
-import { stableValue, type Stable, type CallableInput, type CallableOutput, type CheckpointCodec } from '@weiliang0121/capix-contracts';
+import { stableValue, type Stable, type CallableInput, type CallableOutput, type CheckpointCodec, type InvocationRelationIdentity as ContractRelationIdentity } from '@weiliang0121/capix-contracts';
+import { invocationProcessStages as rootProcessStages, type InvocationRelationIdentity } from '@weiliang0121/capix-invocation';
+import { invocationProcessStages, type InvocationEvent, type InvocationProcessStage } from '@weiliang0121/capix-invocation/events';
+import { Transcript, type Message, type TranscriptSnapshot } from '@weiliang0121/capix-transcript';
+import { readOutput, validateExecutionRecordSnapshot, type CallableRecord, type ExecutionRecordSnapshot, type RelationChangeRecord } from '@weiliang0121/capix-records/data';
+import * as protocol from '@weiliang0121/capix-protocol';
 import { Resource, ResourceOffer, type ResourceOperation } from '@weiliang0121/capix-resources';
 import { receiveOperation, type OperationOptions } from '@weiliang0121/capix-resources/operation';
 import { Scene, Group, defineNode, checkpointPoint } from '@weiliang0121/capix-structure';
@@ -183,3 +188,37 @@ const exactMemoryRequest: memory.MemoryFixedApply<MemoryMetadata> = {
   command: { position: 'typed', changes: [] },
 };
 if (false) memoryCollection.confirmFixed(exactMemoryRequest);
+
+// Entity declarations, record data, live events, and wire frames retain their separate owners.
+const domainMessage: Message = { role: 'assistant', content: 'typed transcript' };
+const wireMessage: protocol.TranscriptWireMessage = domainMessage;
+const transcript = new Transcript([domainMessage]);
+const domainSnapshot: TranscriptSnapshot = { id: transcript.id, revision: transcript.revision, start: 0, end: transcript.length, starts: transcript.segments().map((range) => range.start), messages: transcript.snapshot() };
+const wireFrame: protocol.TranscriptFrame = { type: 'baseline', snapshot: domainSnapshot };
+const wireUpdate: Stable<protocol.TranscriptUpdate> = protocol.acceptTranscriptUpdate(JSON.parse(JSON.stringify(wireFrame)));
+const stage: InvocationProcessStage = invocationProcessStages[0];
+const rootStages: typeof invocationProcessStages = rootProcessStages;
+const sharedIdentity: ContractRelationIdentity = { parentContextId: 'parent', childContextId: 'child', parentRound: 1, key: 'member' };
+const liveIdentity: InvocationRelationIdentity = sharedIdentity;
+const relation: RelationChangeRecord = { identity: liveIdentity, eventSequence: 1, occurredAt: '2026-11-11T00:00:00.000Z', offsetMs: 0, change: { kind: 'attached' } };
+const event: InvocationEvent = { type: 'invocation', contextId: sharedIdentity.parentContextId, kind: 'scene', sequence: 1, occurredAt: relation.occurredAt, change: { kind: 'relation', identity: relation.identity, phase: 'attached' } };
+type RelationEvent = Extract<InvocationEvent['change'], { kind: 'relation' }>;
+type Equal<Left, Right> = (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2 ? true : false;
+const sharedRelationIdentity: Equal<ContractRelationIdentity, InvocationRelationIdentity> = true;
+const recordedRelationIdentity: Equal<ContractRelationIdentity, RelationChangeRecord['identity']> = true;
+const eventRelationIdentity: Equal<ContractRelationIdentity, RelationEvent['identity']> = true;
+declare const recordedCall: CallableRecord<string, string>;
+declare const recordedSnapshot: ExecutionRecordSnapshot;
+const recordedOutput: string | undefined = readOutput(recordedCall.value);
+validateExecutionRecordSnapshot(recordedSnapshot);
+if (false) {
+  // @ts-expect-error entity Message is no longer a protocol-owned domain type
+  type ProtocolMessage = protocol.Message;
+  // @ts-expect-error record data is owned by records/data, not protocol
+  type ProtocolRecord = protocol.RecordEntry;
+  // @ts-expect-error service conversation DTOs are no longer framework wire exports
+  type ProtocolConversation = protocol.ConversationDescriptor;
+  // @ts-expect-error record output rules are provided by records/data
+  protocol.readOutput(recordedCall.value);
+}
+void [wireMessage, wireUpdate, stage, rootStages, event, sharedRelationIdentity, recordedRelationIdentity, eventRelationIdentity, recordedOutput];

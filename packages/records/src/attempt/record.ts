@@ -1,5 +1,5 @@
 import { pick } from 'es-toolkit/object';
-import type { AttemptRecord as AttemptData, AttemptValue } from '@weiliang0121/capix-protocol';
+import type { AttemptRecord as AttemptData, AttemptValue } from '../data/index.js';
 import { InvocationRecord } from '../invocation/record.js';
 import { snapshotValue } from '../value/snapshot.js';
 

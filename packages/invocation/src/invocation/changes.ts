@@ -1,4 +1,4 @@
-import type { InvocationEvent } from '@weiliang0121/capix-protocol';
+import type { InvocationEvent } from '../events.js';
 import type { ChangeCapture } from '@weiliang0121/capix-changes';
 import { captureChange } from '@weiliang0121/capix-changes';
 

@@ -1,4 +1,4 @@
-import type { RecordingRootRecord as RecordingRootData, RecordingRootValue } from '@weiliang0121/capix-protocol';
+import type { RecordingRootRecord as RecordingRootData, RecordingRootValue } from '../data/index.js';
 import { CompositeRecord } from '../composite.js';
 import { snapshotValue } from '../value/snapshot.js';
 

@@ -1,5 +1,5 @@
 import type { BaseRecord, ProcessRecord, RelationChangeRecord } from './types.js';
-import type { RuntimeErrorValue, InvocationFailureFact } from '../invocation/errors.js';
+import type { RuntimeErrorValue, InvocationFailureFact } from '@weiliang0121/capix-contracts';
 
 export type RecordKind = 'invocation' | 'runtime' | 'runtime-call' | 'execution' | 'operation' | 'attempt' | 'invocation-boundary' | 'transcript' | 'memory' | 'resource' | 'custom';
 export interface RecordEntry {

@@ -1,5 +1,5 @@
 import type { CheckpointInstallation, Clock } from '@weiliang0121/capix-invocation';
-import type { InvocationEvent } from '@weiliang0121/capix-protocol';
+import type { InvocationEvent } from '@weiliang0121/capix-invocation/events';
 import type { ChangeCapture } from '@weiliang0121/capix-changes';
 import type { ObservationInstallation } from '../binding/observation.js';
 

@@ -11,3 +11,11 @@ export interface InvocationIdentity {
 export interface InvocationOrigin {
   readonly contextId: string;
 }
+
+/** Parent-owned child relation identity, shared by running and recorded facts. */
+export interface InvocationRelationIdentity {
+  readonly parentContextId: string;
+  readonly childContextId: string;
+  readonly parentRound: number;
+  readonly key?: string;
+}

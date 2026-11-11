@@ -1,7 +1,7 @@
 import { CallableRecord } from '../callable/record.js';
-import type { CallableRecord as CallableData } from '@weiliang0121/capix-protocol';
+import type { CallableRecord as CallableData } from '../data/index.js';
 import { isEqual } from 'es-toolkit/predicate';
-import type { RecordEntry, RecordingRootRecord as RootData, RuntimeCallRecord as RuntimeData, ExecutionRecord as ExecutionData, OperationRecord as OperationData, AttemptRecord as AttemptData, InvocationBoundaryRecord as BoundaryData, TranscriptRecord as TranscriptData, MemoryRecord as MemoryData, ResourceRecord as ResourceData, CompositeRecord as CompositeData } from '@weiliang0121/capix-protocol';
+import type { RecordEntry, RecordingRootRecord as RootData, RuntimeCallRecord as RuntimeData, ExecutionRecord as ExecutionData, OperationRecord as OperationData, AttemptRecord as AttemptData, InvocationBoundaryRecord as BoundaryData, TranscriptRecord as TranscriptData, MemoryRecord as MemoryData, ResourceRecord as ResourceData, CompositeRecord as CompositeData } from '../data/index.js';
 import { BaseRecord } from '../record.js';
 import { CompositeRecord } from '../composite.js';
 import { InvocationRecord } from '../invocation/record.js';

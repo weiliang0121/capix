@@ -1,4 +1,4 @@
-import type { InvocationRelationIdentity } from '@weiliang0121/capix-protocol';
+import type { InvocationRelationIdentity } from '@weiliang0121/capix-contracts';
 import { defineObservation } from '../../definition/observation.js';
 import type { InvocationFact } from '@weiliang0121/capix-invocation';
 import { ResourceOffer } from '@weiliang0121/capix-resources';

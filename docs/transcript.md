@@ -18,6 +18,14 @@ Scene 正式追加输入 → 任务 Group 获得 message / messageIndex
 
 `ActiveView` 由 `ConversationContent` 持有，只管理已有消息索引和记忆 ID，不复制、删除或修改这些实体。显式维护策略可决定哪些内容退出活跃集合，不要求先生成替代记忆；保留来源索引也不表示运行时沿引用重新加载原文。模型材料、维护边界、持久索引和恢复限制见 [活跃材料与维护](active-content.md)。
 
+## 领域类型与 wire
+
+`@weiliang0121/capix-transcript` 根出口持有 Message、MessageLocator、TranscriptRangeLocator、TranscriptSnapshot 和 TranscriptEvent。定位只表达准确集合和位置／范围，不携带实体访问能力；快照和事件描述固定版本。Transcript 不依赖 protocol，MessageUsage 从 transcript 公开 Message 类型消费消息，按对象身份计数。
+
+protocol 根的 TranscriptWireMessage、TranscriptWireSnapshot、TranscriptWireEvent 是明确的跨端副本，TranscriptFrame/Update 组织单份基线、增量或错误。acceptTranscriptUpdate 固定并校验单份输入，不保存集合状态或核对连续 revision。连续性、替换归属、传输和有限重建由同步消费者负责；wire 不能作为实体恢复或固定追加的凭据。
+
+本文的默认服务、ActiveView 和客户端同步描述属于 Lab 参考装配；会话及 Observer 业务 DTO 归其私有 lab-protocol。Lab 的既有候选与行为不随本轮迁移自动升级，也不表示已经消费新版框架。
+
 ## 既有分段能力
 
 Transcript 仍保留 `activeStart`、`segments()` 和正式 `startSegment` 能力，历史分段继续恢复和观测。段之间共享同一份不可变消息，不复制正文、不删除旧段。默认服务不再自动调用 `startSegment`；分段是正式消息内容，活跃索引维护不靠改写段边界表达。
@@ -48,7 +56,7 @@ const grouping = new Node({
 
 Transcript 自身负责消息和段边界的接纳、落实，以及本地 revision。一次非空批量追加或有效切段推进一次 revision；消息 index 仍只定位正文。没有捕获器、没有 Recorder 时，revision 同样推进；它不是网络交付游标。
 
-`new Transcript(messages, { changes, observation: recording.transcript })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、Scene 与 Runner 和所需接线。runner.build 不创建内容实体。另有可选 persistence 端口，在内存变更和两个发布出口之前同步提交；restore 不执行该端口或重发事件。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeBuffer<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
+`new Transcript(messages, { changes, observation: recording.transcript })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、Scene 与 Runner 和所需接线。runner.build 不创建内容实体。另有可选 persistence 端口，在内存变更和两个发布出口之前同步提交；restore 不执行该端口或重发事件。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeBuffer<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。Lab 参考装配可将消息、记忆、调用及记录登记接入同一捕获器；新版领域出口的消费适配须由 Lab 自身验证。
 
 ```text
 整批接纳 → 固定事件正文 → 正式更新集合及 revision

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import { invocationProcessStages, invocationProcessActions, type InvocationEvent } from '@weiliang0121/capix-invocation/events';
 import { cloneCheckpointHead, MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import type { CheckpointCodec } from '@weiliang0121/capix-contracts';
 import { CallableContext, Invocation, attachInvocationResources, InvocationObservation, ObserverSession, prepareCheckpointRestoration, type InvocationWork, type InvocationObserver } from '@weiliang0121/capix-invocation';
+
+const progressEvent: InvocationEvent = { type: 'invocation', contextId: 'event', kind: 'node', sequence: 1, occurredAt: 'now', change: { kind: 'process', processSequence: 1, round: 1, stage: invocationProcessStages[0], action: invocationProcessActions[0] } };
+assert.equal(progressEvent.change.kind, 'process');
 
 // This is a module-boundary probe, not a replacement for Runner or author Work.
 // The host supplies already-fixed behavior; there is no structure, Binder or registry.

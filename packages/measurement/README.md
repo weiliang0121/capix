@@ -1,6 +1,8 @@
 # @weiliang0121/capix-measurement
 
-Message usage measurement and resource packages/contracts for CAPiX.
+Message usage measurement and resource contracts for CAPiX.
+
+`MessageUsage` consumes the public Transcript `Message` type. Counts use object identity: each selected message is counted once per `add` call, equal text in distinct objects counts separately, and each instance owns its independent counts. Measurement does not depend on transport DTOs.
 
 ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
 

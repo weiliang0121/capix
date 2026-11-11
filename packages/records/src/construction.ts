@@ -1,5 +1,5 @@
 import { ResourceOffer } from '@weiliang0121/capix-resources';
-import type { InvocationBoundaryValue, RecordMutation } from '@weiliang0121/capix-protocol';
+import type { InvocationBoundaryValue, RecordMutation } from './data/index.js';
 import type { BaseRecord } from './record.js';
 import type { Recorder } from './recorder.js';
 import { InvocationBoundaryRecordHelper } from './invocation/boundary/helper.js';

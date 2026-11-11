@@ -17,10 +17,10 @@ interface ResourceContextView<Input, Output, Resources extends object> extends I
   readonly resources: { readonly values: Readonly<Resources> };
 }
 export interface CallableContextView<Input = unknown, Output = unknown, Resources extends object = object> extends ResourceContextView<Input, Output, Resources> {
-  readonly kind: import('@weiliang0121/capix-protocol').CallableKind;
+  readonly kind: import('@weiliang0121/capix-contracts').CallableKind;
 }
 
-export type ContextViewOf<Context extends InvocationContext<any, any>> = Context extends InvocationContext<infer Input, infer Output> & { readonly resources: InvocationResources<infer Resources>; readonly signal: AbortSignal; readonly kind: import('@weiliang0121/capix-protocol').CallableKind } ? CallableContextView<Input, Output, Resources> : Context extends InvocationContext<infer Input, infer Output> ? InvocationContextView<Input, Output> : never;
+export type ContextViewOf<Context extends InvocationContext<any, any>> = Context extends InvocationContext<infer Input, infer Output> & { readonly resources: InvocationResources<infer Resources>; readonly signal: AbortSignal; readonly kind: import('@weiliang0121/capix-contracts').CallableKind } ? CallableContextView<Input, Output, Resources> : Context extends InvocationContext<infer Input, infer Output> ? InvocationContextView<Input, Output> : never;
 
 export type ContextViewResources<ContextView extends InvocationContextView<any, any>, Resources extends object> = Omit<ContextView, 'resources'> & { readonly resources: { readonly values: Readonly<Resources> } };
 

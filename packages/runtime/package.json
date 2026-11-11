@@ -23,7 +23,6 @@
     "test": "node ../../scripts/test/run.mjs --package ."
   },
   "dependencies": {
-    "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0",
     "@weiliang0121/capix-resources": "workspace:*",
     "@weiliang0121/capix-structure": "workspace:*",

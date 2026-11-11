@@ -7,3 +7,4 @@ export type { TranscriptAppendProgress } from './progress.js';
 export { TranscriptFacts, type TranscriptEvent } from './event.js';
 export { TranscriptResource, TranscriptRangeReader, type TranscriptAppendSource } from './resource.js';
 export { TranscriptViewSource, type TranscriptViewSummary } from './view.js';
+export type { Message, MessageLocator, TranscriptRangeLocator, TranscriptSnapshot } from './types.js';

@@ -134,9 +134,6 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -146,12 +143,12 @@ importers:
 
   packages/measurement:
     dependencies:
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
+      '@weiliang0121/capix-transcript':
+        specifier: workspace:*
+        version: link:../transcript
 
   packages/memory:
     dependencies:
@@ -199,6 +196,10 @@ importers:
       '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
+    devDependencies:
+      '@weiliang0121/capix-transcript':
+        specifier: workspace:*
+        version: link:../transcript
 
   packages/records:
     dependencies:
@@ -211,9 +212,6 @@ importers:
       '@weiliang0121/capix-memory':
         specifier: workspace:*
         version: link:../memory
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -253,9 +251,6 @@ importers:
       '@weiliang0121/capix-invocation':
         specifier: workspace:*
         version: link:../invocation
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@weiliang0121/capix-records':
         specifier: workspace:*
         version: link:../records
@@ -342,9 +337,6 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources

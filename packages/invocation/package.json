@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js"
     }
   },
   "scripts": {
@@ -16,7 +20,6 @@
   },
   "dependencies": {
     "@weiliang0121/capix-contracts": "workspace:*",
-    "@weiliang0121/capix-protocol": "workspace:*",
     "@weiliang0121/capix-resources": "workspace:*",
     "@weiliang0121/capix-changes": "workspace:*",
     "@weiliang0121/capix-checkpoint": "workspace:*",

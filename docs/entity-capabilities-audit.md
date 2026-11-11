@@ -106,7 +106,7 @@ type FixedMaterial<Basis, Value> = {
 
 来源与操作证据可以有价值，但它们属于这套记忆预设选择的规则。业务画像、推进状态或普通笔记不必为进入 View 满足这些规则。需要整理的是：哪些保留在记忆预设，哪些由业务策略／具体值 schema 实现；不能把必填字段改成 optional 就声称已经完成能力分解。
 
-证据：[Memory.prepare](../packages/memory/src/memory.ts)、[MemoryChange](../packages/memory/src/change.ts)、`packages/memory/src/source.ts`（P3 已删除）、[当前 MemoryContent](../packages/protocol/src/content/memory.ts)。
+证据：[Memory.prepare](../packages/memory/src/memory.ts)、[MemoryChange](../packages/memory/src/change.ts)、`packages/memory/src/source.ts`（P3 已删除）、`packages/protocol/src/content/memory.ts`（P4 已删除；当前领域类型归 memory，记录投影归 records/data）。
 
 Transcript 的 user/assistant、非空文本、分段与相邻配对同样是具体消息能力；ModelExchanges 的回复与反馈槽完整性是专用实体不变量。它们都可保留，但不进入通用内容约束。
 

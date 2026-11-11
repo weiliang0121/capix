@@ -12,7 +12,7 @@ import { Recorder, RecordBook, CallableRecordHelper, CallableRecord } from '@wei
 
 import { ChangeBuffer } from '@weiliang0121/capix-changes';
 
-import { readOutput, validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
+import { readOutput, validateExecutionRecordSnapshot } from '@weiliang0121/capix-records/data';
 
 function fixture(options) {
   const changes = new ChangeBuffer();

@@ -1,4 +1,4 @@
-import type { RecordedInvocationResult } from '@weiliang0121/capix-protocol';
+import type { RecordedInvocationResult } from '@weiliang0121/capix-records/data';
 import { RuntimeErrorHelper, failureFact, type InvocationResult } from '@weiliang0121/capix-invocation';
 import type { InvocationRecordDescription } from './declaration.js';
 

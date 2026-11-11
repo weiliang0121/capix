@@ -1,4 +1,4 @@
-import { hasOutput, validateInvocationRecordValue, validateMemoryRecordValue, type RecordEntry } from '@weiliang0121/capix-protocol';
+import { hasOutput, validateInvocationRecordValue, validateMemoryRecordValue, type RecordEntry } from '../data/index.js';
 import { isPlainObject } from 'es-toolkit/predicate';
 
 type Fields = Record<string, unknown>;

@@ -2,7 +2,7 @@ import type { InvocationFailureFact, RuntimeErrorValue } from '@weiliang0121/cap
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import type { Recorder } from '../recorder.js';
 import { InvocationBoundaryRecordHelper } from '../invocation/boundary/helper.js';
-import type { ExecutionValue, LegacyExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
+import type { ExecutionValue, LegacyExecutionRecordSnapshot } from '../data/index.js';
 
 import type { RecordBook } from '../book.js';
 import { OperationRecordHelper } from '../operation/helper.js';

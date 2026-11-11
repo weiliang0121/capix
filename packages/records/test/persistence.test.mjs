@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 import { RecordBook, Recorder, BaseRecord, CompositeRecord, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper } from '@weiliang0121/capix-records';
 
-import { readOutput, validateLegacyExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
+import { readOutput, validateLegacyExecutionRecordSnapshot } from '@weiliang0121/capix-records/data';
 
 const occurredAt = '2026-10-12T00:00:00.000Z';
 
@@ -188,4 +188,57 @@ test('restoring rejects a child work boundary after its owning execution has end
     entry.data.offsetMs = position;
   }
   assert.throws(() => RecordBook.restore(state), /outside its parent work/);
+});
+
+test('legacy subtree validation and restoration retain shared resource sequence gaps and reject conflicting resource facts', () => {
+  const fixture = recordedFixture();
+  const saved = structuredClone(fixture.book.exportState());
+  const resources = saved.entries.filter((entry) => entry.kind === 'resource');
+  resources.at(-1).data.sequence = 5;
+  const restored = RecordBook.restore(saved);
+  const recorder = new Recorder(restored);
+  const snapshot = ExecutionRecordHelper.snapshot(recorder, fixture.execution.id);
+  validateLegacyExecutionRecordSnapshot(snapshot);
+  for (const mutate of [
+    (records) => {
+      records[3].sequence = 3;
+    },
+    (records) => {
+      records[3].sequence = 2;
+    },
+    (records) => {
+      records[0].sequence = 0;
+    },
+    (records) => {
+      records[3].sequence = NaN;
+    },
+    (records) => {
+      records[3].sequence = Infinity;
+    },
+    (records) => {
+      records[3].sequence = 4.5;
+    },
+    (records) => {
+      records[3].id = records[2].id;
+    },
+    (records) => {
+      records[3].supplyId = 'other';
+    },
+    (records) => {
+      records[3].interactionId = 'other';
+    },
+    (records) => {
+      records[2].phase = 'returned';
+    },
+    (records) => {
+      records[1].phase = 'bound';
+    },
+  ]) {
+    const invalid = structuredClone(snapshot);
+    mutate(invalid.resources);
+    assert.throws(() => validateLegacyExecutionRecordSnapshot(invalid));
+    const invalidState = structuredClone(saved);
+    mutate(invalidState.entries.filter((entry) => entry.kind === 'resource').map((entry) => entry.data));
+    assert.throws(() => RecordBook.restore(invalidState));
+  }
 });

@@ -1,10 +1,23 @@
-import type { MemoryViewValue } from '../content/memory.js';
 import type { BaseRecord } from './types.js';
+
+/** Deliberately narrow recorded content; not the complete Memory value or recovery material. */
+export interface MemoryRecordContent {
+  readonly content: string;
+}
+
+/** Current projected content and available changes for one collection, without implied sources. */
+export interface MemoryRecordObservation {
+  readonly items: readonly {
+    readonly id: string;
+    readonly value: MemoryRecordContent;
+    readonly records: readonly MemoryRecord[];
+  }[];
+}
 
 export interface MemoryRecordValue {
   readonly action: 'create' | 'update';
   readonly reason?: string;
-  readonly result: MemoryViewValue;
+  readonly result: MemoryRecordContent;
 }
 
 export interface MemoryRecord extends BaseRecord<MemoryRecordValue> {

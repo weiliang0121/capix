@@ -10,7 +10,7 @@ import { CallableRecord, CallableRecordHelper, Recorder, RecordBook } from '@wei
 
 import { defineScene, defineGroup, defineNode } from '@weiliang0121/capix-runtime';
 
-import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-protocol';
+import { validateExecutionRecordSnapshot } from '@weiliang0121/capix-records/data';
 
 const startedAt = '2026-10-20T00:00:00.000Z';
 

@@ -1,5 +1,7 @@
-import type { Message } from './message.js';
-import type { TranscriptEvent } from './changes.js';
+export interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 /** Identity-only location. It never retains an entity or expands its content. */
 export interface MessageLocator {
@@ -23,6 +25,3 @@ export interface TranscriptSnapshot {
   readonly starts: readonly number[];
   readonly messages: readonly Readonly<Message>[];
 }
-
-export type TranscriptFrame = { readonly type: 'baseline'; readonly snapshot: TranscriptSnapshot } | { readonly type: 'delta'; readonly event: TranscriptEvent };
-export type TranscriptUpdate = TranscriptFrame | { readonly type: 'error'; readonly code: string; readonly error: string };

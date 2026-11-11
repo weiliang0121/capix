@@ -1,4 +1,4 @@
-import type { Message } from '@weiliang0121/capix-protocol';
+import type { Message } from './types.js';
 
 /** Absolute positions from a single transcript; gaps may be introduced by a view. */
 export interface IndexedMessage {

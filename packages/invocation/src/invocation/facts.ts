@@ -1,4 +1,4 @@
-import type { InvocationEvent } from '@weiliang0121/capix-protocol';
+import type { InvocationEvent } from '../events.js';
 import type { InvocationFact } from '../observation/facts.js';
 import { isInvocationCancelled } from './cancellation.js';
 import { failureFact } from './failure.js';

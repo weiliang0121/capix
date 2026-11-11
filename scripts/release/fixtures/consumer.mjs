@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import * as contracts from '@weiliang0121/capix-contracts';
 import * as diagnostics from '@weiliang0121/capix-diagnostics';
 import * as invocation from '@weiliang0121/capix-invocation';
+import * as invocationEvents from '@weiliang0121/capix-invocation/events';
+import * as protocol from '@weiliang0121/capix-protocol';
 import * as structure from '@weiliang0121/capix-structure';
 import * as structureConstruction from '@weiliang0121/capix-structure/construction';
 import * as runtime from '@weiliang0121/capix-runtime';
@@ -12,7 +14,8 @@ import { Resource, ResourceOffer, ResourceAccessClosed } from '@weiliang0121/cap
 import { receiveOperation } from '@weiliang0121/capix-resources/operation';
 import { FactType, publishFact } from '@weiliang0121/capix-changes';
 import { Transcript, TranscriptFacts, TranscriptResource } from '@weiliang0121/capix-transcript';
-import { RecordBook, Recorder } from '@weiliang0121/capix-records';
+import { CallableRecordHelper, RecordBook, Recorder } from '@weiliang0121/capix-records';
+import { readOutput, validateExecutionRecordSnapshot, validateInvocationRecordValue } from '@weiliang0121/capix-records/data';
 import { z } from 'zod';
 import { Tool, ToolModelResource } from '@weiliang0121/capix-tool';
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
@@ -33,6 +36,10 @@ for (const entry of [construction, recording]) {
   for (const [name, value] of Object.entries(entry)) assert.equal(runtime[name], value, `runtime/${name} identity`);
 }
 assert.equal(construction.Invocation, invocation.Invocation);
+assert.equal(invocation.invocationProcessStages, invocationEvents.invocationProcessStages);
+assert.equal(invocation.invocationProcessActions, invocationEvents.invocationProcessActions);
+assert.deepEqual(invocationEvents.invocationProcessStages, ['execute', 'receive', 'handling', 'control']);
+assert.deepEqual(Object.keys(protocol), ['acceptTranscriptUpdate']);
 assert.equal(typeof structureConstruction.assertStructureConfigurable, 'function');
 const configurable = new Scene({ run: () => null });
 structureConstruction.assertStructureConfigurable(configurable);
@@ -244,8 +251,22 @@ const transcript = new Transcript();
 const recorder = new Recorder(new RecordBook());
 const transcriptScene = new Scene({ deps: { messages: TranscriptResource.append.request() }, run: (work) => work.resources.messages.append([{ role: 'user', content: work.input }]) });
 const transcriptRunner = new Runner(transcriptScene, new Resources().register(new Resource(transcript), TranscriptResource.append), undefined, { observations: [runtime.bindRecording(recorder, { failure: 'propagate' })] }).build();
-await transcriptRunner.run('recorded');
+const transcriptResult = await transcriptRunner.run('recorded');
 assert.ok([...recorder.book.values()].some((record) => record.kind === 'transcript' && record.contextId));
+// Read and validate actual recorded output through the independent data entry.
+const transcriptCall = [...recorder.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
+assert.ok(transcriptCall);
+const recordedSnapshot = JSON.parse(JSON.stringify(CallableRecordHelper.snapshot(recorder, transcriptCall.id)));
+validateExecutionRecordSnapshot(recordedSnapshot);
+validateInvocationRecordValue(recordedSnapshot.execution.value, transcriptCall.contextId);
+assert.ok(Object.hasOwn(recordedSnapshot.execution.value, 'resultOf'));
+assert.deepEqual(readOutput(recordedSnapshot.execution.value), transcriptResult);
+// The transport admits explicit JSON frames projected from the actual entity.
+const transcriptBaseline = { type: 'baseline', snapshot: { id: transcript.id, revision: transcript.revision, start: 0, end: transcript.length, starts: transcript.segments().map((range) => range.start), messages: transcript.snapshot() } };
+const admittedTranscript = protocol.acceptTranscriptUpdate(JSON.parse(JSON.stringify(transcriptBaseline)));
+assert.deepEqual(admittedTranscript, transcriptBaseline);
+assert.ok(Object.isFrozen(admittedTranscript.snapshot.messages[0]));
+assert.throws(() => protocol.acceptTranscriptUpdate(recordedSnapshot), TypeError);
 assert.equal(
   TranscriptFacts.match(sampleFacts.create({ input: 'other' }), () => assert.fail('wrong producer')),
   false,
@@ -286,4 +307,4 @@ const memorySource = new MemoryViewSource(memories, [memoryItem.id]);
 const memoryDirectory = memorySource.index();
 assert.deepEqual(memoryDirectory.entries, [{ key: memoryItem.id, summary: undefined }]);
 assert.deepEqual(memorySource.read([memoryItem.id], memoryDirectory.stamp).entries, [{ key: memoryItem.id, value: memoryItem }]);
-console.log('CAPiX installed consumer smoke passed (identity, resources, typed facts, invocation, cold checkpoint restore, offline Tool, standalone Memory)');
+console.log('CAPiX installed consumer smoke passed (identity, resources, typed facts, invocation events, record data, transcript wire, cold checkpoint restore, offline Tool, standalone Memory)');

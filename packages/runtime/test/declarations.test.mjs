@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { ExceptionContract, Group, Node, bindCallSource, bindRecording, checkpointPoint } from '@weiliang0121/capix-runtime';
 import { Recorder, RecordBook, CallableRecordHelper } from '@weiliang0121/capix-records';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
-import { validateExecutionRecordSnapshot, readOutput } from '@weiliang0121/capix-protocol';
+import { validateExecutionRecordSnapshot, readOutput } from '@weiliang0121/capix-records/data';
 
 const rejected = new ExceptionContract('test.rejected');
 const codec = { encode: (value) => value, decode: (value) => value };

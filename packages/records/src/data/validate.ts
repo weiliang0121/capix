@@ -1,9 +1,9 @@
 import { validateMemoryRecordValue } from './memory.js';
-import { validateRecordingArchiveOrigin } from '../observer/archive.js';
+import { validateRecordingArchiveOrigin } from './archive.js';
 import { hasOutput, outputProcess, readOutput } from './invocation.js';
 import type { ExecutionRecordSnapshot, CallableRecord, LegacyExecutionRecordSnapshot, OperationRecord, InvocationValue, RelationChangeRecord, InvocationBoundaryRecord } from './types.js';
 
-/** Validate a task projection of real callable records, including normalized historical carriers. */
+/** Validate a selected subtree of real callable records, including archived carriers. */
 export function validateExecutionRecordSnapshot(value: unknown): asserts value is ExecutionRecordSnapshot {
   function fail(): never {
     throw new Error('调用记录格式无效或关联缺失。');
@@ -26,15 +26,15 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
     contexts.add(record.contextId);
   };
   for (const record of snapshot.calls) accept(record);
-  const task = records.get(snapshot.execution.id);
-  if (!task || JSON.stringify(task) !== JSON.stringify(snapshot.execution)) fail();
-  if (snapshot.rootCall && snapshot.rootCall.id !== task.id) accept(snapshot.rootCall);
-  else if (snapshot.rootCall && JSON.stringify(snapshot.rootCall) !== JSON.stringify(task)) fail();
+  const selected = records.get(snapshot.execution.id);
+  if (!selected || JSON.stringify(selected) !== JSON.stringify(snapshot.execution)) fail();
+  if (snapshot.rootCall && snapshot.rootCall.id !== selected.id) accept(snapshot.rootCall);
+  else if (snapshot.rootCall && JSON.stringify(snapshot.rootCall) !== JSON.stringify(selected)) fail();
   if (snapshot.ancestors !== undefined && !Array.isArray(snapshot.ancestors)) fail();
   const ancestors = snapshot.ancestors ?? [];
-  if (ancestors.length && (!snapshot.rootCall || snapshot.rootCall.id === task.id)) fail();
+  if (ancestors.length && (!snapshot.rootCall || snapshot.rootCall.id === selected.id)) fail();
   for (const ancestor of ancestors) accept(ancestor);
-  const path = snapshot.rootCall && snapshot.rootCall.id !== task.id ? [snapshot.rootCall, ...ancestors, task] : [task];
+  const path = snapshot.rootCall && snapshot.rootCall.id !== selected.id ? [snapshot.rootCall, ...ancestors, selected] : [selected];
   for (let index = 1; index < path.length; index++) {
     const parent = path[index - 1]!;
     const child = path[index]!;
@@ -44,10 +44,10 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
   if (root.parentId && records.has(root.parentId)) fail();
   for (const record of snapshot.calls) {
     if (contexts.has(record.id)) fail();
-    if (record.id === task.id) continue;
+    if (record.id === selected.id) continue;
     const visited = new Set<string>([record.id]);
     let current: CallableRecord = record;
-    while (current.id !== task.id) {
+    while (current.id !== selected.id) {
       const parent: CallableRecord | undefined = current.parentId ? records.get(current.parentId) : undefined;
       if (!parent || visited.has(parent.id) || parent.structureKind === 'node' || !parent.childIds.includes(current.id)) fail();
       visited.add(parent.id);
@@ -68,7 +68,7 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
     const call = records.get(boundary?.callId);
     const prior = scopes.get(boundary?.scopeId);
     if (!boundary || typeof boundary.id !== 'string' || !boundary.id || seen.has(boundary.id) || !call || boundary.parentId !== call.id || typeof boundary.scopeId !== 'string' || !boundary.scopeId || !Number.isSafeInteger(boundary.sequence) || boundary.sequence < 1 || (prior && boundary.sequence <= prior.sequence) || !Number.isFinite(boundary.offsetMs) || boundary.offsetMs < (prior?.offsetMs ?? 0) || typeof boundary.occurredAt !== 'string' || !Number.isFinite(Date.parse(boundary.occurredAt)) || boundary.value?.scope !== 'work') fail();
-    if (!snapshot.archive && (boundary.scopeId !== (snapshot.rootCall ?? task).id || boundary.executionId !== undefined)) fail();
+    if (!snapshot.archive && (boundary.scopeId !== (snapshot.rootCall ?? selected).id || boundary.executionId !== undefined)) fail();
     seen.add(boundary.id);
     scopes.set(boundary.scopeId, { sequence: boundary.sequence, offsetMs: boundary.offsetMs });
     const state: { scopeId: string; started?: number; ended?: number } = timing.get(call.id) ?? { scopeId: boundary.scopeId };
@@ -97,7 +97,7 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
   const accesses = new Map<string, string>();
   const interactions = new Map<string, string>();
   for (const resource of snapshot.resources) {
-    if (!resource || typeof resource.id !== 'string' || !resource.id || seen.has(resource.id) || !records.has(resource.parentId) || typeof resource.access !== 'string' || !resource.access || typeof resource.supplyId !== 'string' || !resource.supplyId || typeof resource.occurredAt !== 'string' || !Number.isFinite(Date.parse(resource.occurredAt)) || !Object.hasOwn(resource, 'value') || resource.sequence !== (resourceSequences.get(resource.parentId) ?? 0) + 1) fail();
+    if (!resource || typeof resource.id !== 'string' || !resource.id || seen.has(resource.id) || !records.has(resource.parentId) || typeof resource.access !== 'string' || !resource.access || typeof resource.supplyId !== 'string' || !resource.supplyId || typeof resource.occurredAt !== 'string' || !Number.isFinite(Date.parse(resource.occurredAt)) || !Object.hasOwn(resource, 'value') || !Number.isSafeInteger(resource.sequence) || resource.sequence <= (resourceSequences.get(resource.parentId) ?? 0)) fail();
     resourceSequences.set(resource.parentId, resource.sequence);
     seen.add(resource.id);
     const key = JSON.stringify([resource.parentId, resource.supplyId, resource.access]);
@@ -226,7 +226,7 @@ export function validateLegacyExecutionRecordSnapshot(value: unknown): asserts v
   const interactions = new Map<string, string>();
   for (const resourceRecord of snapshot.resources) {
     if (!resourceRecord || typeof resourceRecord.id !== 'string' || !resourceRecord.id || bodies.has(resourceRecord.id) || contextIds.has(resourceRecord.id) || boundaryIds.has(resourceRecord.id) || resourceIds.has(resourceRecord.id) || typeof resourceRecord.parentId !== 'string' || !observedBodies.has(resourceRecord.parentId) || typeof resourceRecord.access !== 'string' || !resourceRecord.access || typeof resourceRecord.supplyId !== 'string' || !resourceRecord.supplyId || typeof resourceRecord.occurredAt !== 'string' || !Number.isFinite(Date.parse(resourceRecord.occurredAt)) || !Object.hasOwn(resourceRecord, 'value')) return fail();
-    if (resourceRecord.sequence !== (resourceSequences.get(resourceRecord.parentId) ?? 0) + 1) return fail();
+    if (!Number.isSafeInteger(resourceRecord.sequence) || resourceRecord.sequence <= (resourceSequences.get(resourceRecord.parentId) ?? 0)) return fail();
     resourceSequences.set(resourceRecord.parentId, resourceRecord.sequence);
     resourceIds.add(resourceRecord.id);
     const accessKey = JSON.stringify([resourceRecord.parentId, resourceRecord.supplyId, resourceRecord.access]);

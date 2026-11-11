@@ -1,11 +1,10 @@
-import type { RecordingArchiveOrigin } from '../observer/archive.js';
-import type { InvocationFailureFact, RuntimeErrorValue } from '../invocation/errors.js';
-import type { CallableKind } from '../invocation/types.js';
+import type { RecordingArchiveOrigin } from './archive.js';
+import type { InvocationFailureFact, RuntimeErrorValue } from '@weiliang0121/capix-contracts';
+import type { CallableKind } from '@weiliang0121/capix-contracts';
 import type { TranscriptRecord } from './transcript.js';
 import type { MemoryRecord } from './memory.js';
 import type { ResourceRecord } from './resource.js';
-import type { InvocationRelationIdentity } from '../invocation/types.js';
-export { invocationProcessStages, invocationProcessActions } from '../invocation/types.js';
+import type { InvocationRelationIdentity } from '@weiliang0121/capix-contracts';
 
 /** Common record shape; concrete records define their own relations and body. */
 export interface BaseRecord<Value = unknown> {
@@ -120,14 +119,14 @@ export interface LegacyExecutionRecordSnapshot {
   execution: ExecutionRecord;
   operations: OperationRecord[];
   attempts: AttemptRecord[];
-  /** Existing wire field; these are invocation boundary records, not system change events. */
+  /** Existing serialized field; these are invocation boundary records, not system change events. */
   events: InvocationBoundaryRecord[];
   resources: ResourceRecord[];
 }
 
 /** One actual Callable invocation; structure and business roles do not determine its parent. */
 export interface CallableValue<Input = unknown, Output = unknown> extends InvocationValue<Input, Output> {
-  /** New calls always supply this; an interrupted legacy carrier may have no observed start. */
+  /** New calls always supply this; an interrupted archived carrier may have no observed start. */
   readonly startedAt?: string;
 }
 export interface CallableRecord<Input = unknown, Output = unknown> extends CompositeRecord<CallableValue<Input, Output>> {
@@ -142,7 +141,7 @@ export interface CallableRecord<Input = unknown, Output = unknown> extends Compo
   readonly role?: string;
   readonly status: 'running' | 'succeeded' | 'failed';
 }
-/** A service-selected task subtree. The task role is independent of structural kind. */
+/** A caller-selected subtree of actual invocations; selection does not assign a business role. */
 export interface ExecutionRecordSnapshot {
   readonly archive?: RecordingArchiveOrigin;
   readonly execution: CallableRecord;

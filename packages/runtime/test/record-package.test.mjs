@@ -14,7 +14,7 @@ import { Runner, Resources } from '@weiliang0121/capix-runtime';
 
 import { bindRecording } from '@weiliang0121/capix-runtime/recording';
 
-import { readOutput } from '@weiliang0121/capix-protocol';
+import { readOutput } from '@weiliang0121/capix-records/data';
 
 test('automatic recording uses independent writer windows without changing results or recording itself', async () => {
   const recorder = new Recorder(new RecordBook());

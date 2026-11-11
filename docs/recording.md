@@ -1,6 +1,6 @@
 # 记录机制与特化处理
 
-记录实体由 `@weiliang0121/capix-records`（`packages/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@weiliang0121/capix-records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`packages/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。
+记录实体由 `@weiliang0121/capix-records`（`packages/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@weiliang0121/capix-records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`packages/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。`@weiliang0121/capix-records/data` 自持纯记录 DTO、归档形状及校验、输出解析与通用查询契约；它不加载 Recorder、Node API 或业务协议。
 
 Runtime 的 `@weiliang0121/capix-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `packages/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 仅处理调用结果映射。records 的 content 适配持有消息／记忆映射，并显式依赖两个内容包的事实类型身份；记录实体本体不依赖 Runtime 或结构。
 
@@ -83,7 +83,7 @@ TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UI
 
 `observeMemory` 从 `@weiliang0121/capix-records` 导入，只要求集合提供自身 `id` 和返回固定 `{id,value}` 项的 `values()`，按准确 memoriesId 过滤已有 MemoryRecord，再组合当前项。它不读取 Transcript 或推导消息来源，不持有或恢复 Memories。
 
-MemoryEvent 与 MemoryFacts 归 memory，事件 change 为 `{action,memoryId,value,reason?}`。默认 `memoryRecord` 将完整领域值显式投影为 `MemoryRecordValue = {action,reason?,result:{content}}`；`observeMemory.items` 为 `{id,value:{content},records}`，baseline 与增量使用相同的 content 投影。更新替换当前 value，不合并保留旧字段。未知 metadata 不复制到记录或 wire：Stable 支持的值比 Records/JSON 更宽，默认展示不能冒充完整实体快照或恢复依据。需要其他字段时由业务提供自己的显式投影。旧 topic/sourceIndexes/sourceResults 正文形状在记录构造、恢复和协议接纳时拒绝。
+MemoryEvent 与 MemoryFacts 归 memory，事件 change 为 `{action,memoryId,value,reason?}`。默认 `memoryRecord` 将完整领域值显式投影为 `MemoryRecordValue = {action,reason?,result:{content}}`；`observeMemory.items` 为 `{id,value:{content},records}`，baseline 与增量使用相同的 content 投影。更新替换当前 value，不合并保留旧字段。未知 metadata 不复制到记录或 wire：Stable 支持的值比 Records/JSON 更宽，默认展示不能冒充完整实体快照或恢复依据。需要其他字段时由业务提供自己的显式投影。旧 topic/sourceIndexes/sourceResults 正文形状在记录构造、恢复和 records/data 校验时拒绝。
 
 默认 `recordContentFact` 只匹配公开 FactType 的准确身份，并核对转交 contextId 与事件 origin.contextId 后才登记有调用来源的记录；未知类型忽略。独立更新没有来源就保持未知，不从当前调用或时间邻近补线。Lab 的业务记录和客户端接纳另行迁移，P3 不表示该装配已经适配。
 
@@ -99,9 +99,17 @@ ResourceRecord 使用同一 BaseRecord、Recorder 与记录树。公共字段为
 
 CallableContext 不拥有 settings/transcriptRange 业务字段。配置资源记录固定参数，原文资源记录 transcriptId/start/end/revision；原文可见范围不表示实际模型上下文，选择结果及模型实际请求分别查看 Group/Node 的已有 IO。记忆写入的访问事实可按本调用与实体变化序号关联 MemoryRecord，不再另存第二份记忆变化正文。
 
-资源记录遵循安装策略，服务可显式采用 propagate：开始登记失败不调用实体；操作成功后的返回登记失败只报记录异常，不误记为操作失败或重做操作；操作与失败登记同时失败保留 AggregateError。记录关闭时不生成描述正文，不影响正常业务或运行来源。资源事实自身的 sequence 属于本调用资源会话，不替代 Invocation 内部过程序号或传输游标。
+资源记录遵循安装策略，服务可显式采用 propagate：开始登记失败不调用实体；操作成功后的返回登记失败只报记录异常，不误记为操作失败或重做操作；操作与失败登记同时失败保留 AggregateError。记录关闭时不生成描述正文，不影响正常业务或运行来源。资源事实自身的 sequence 属于本调用资源会话，由 ResourceObservation 与 ResourceFact 共同编号。领域事实可被另行投影或不解释，所以资源记录允许序号空洞；核验仍要求按所属调用正安全整数严格递增、准确身份及操作配对，不从空洞推断丢失效果或授权重放。它不替代 Invocation 内部过程序号或传输游标。
 
 服务输入通过 Scene 的正式 append 资源写入；成员尚未建立时不伪造成员记录。工作资源在调用开始后按当前阶段可用，阶段切换后旧阶段端点不可使用，调用结束后全部失效。资源捕获、暴露和生命周期检查属于绑定／结构边界，即使抛出 DeclaredException 也按错误处理；正式资源方法体的业务失败可在该次操作的 result.failed 中处理，技术故障不能由此清除。
+
+## 纯数据与业务协议边界
+
+记录 DTO、归档身份与校验、readOutput 和 validateExecutionRecordSnapshot 等通用能力从 `@weiliang0121/capix-records/data` 获取；它们不再由 protocol 重导。Runtime 的记录预设消费该出口，内容观察类型从 transcriptRecord／memoryRecord 的公开参数契约推导，不新增直接实体依赖。
+
+调用进度 InvocationEvent 和阶段／动作／关系 phase 归 `@weiliang0121/capix-invocation/events`，准确关系身份来自 contracts。记录消费真实调用事实并保留其归属，不因数据出口迁移而改变顺序、固定效果或 CP 资格。
+
+会话提交、Observer 聚合、内容展示与业务流由 Lab 私有 lab-protocol 持有。下文的服务、HTTP 和客户端说明属于参考装配，Lab 的旧候选及行为不自动升级；这里没有声称它已导入并验证新版框架。框架 protocol 仅保留 Transcript wire 及单份接纳，不拥有记录规则或业务聚合。
 
 ## 变化捕获与观察发布
 
@@ -111,9 +119,9 @@ Recorder 正式登记或更新之后，固定 RecordChangeEvent 并交给可选�
 
 Service ChangeConsumer 独占共享 ChangeBuffer 的 take；RecordSource 与 feed 订阅它，发送一致基线及后续增量；消息实体正文由独立消息订阅出口交付。旧 subscribeExecutions 保留为本地诊断与测试工具，基于同步登记通知组织执行快照；HTTP 观测不再使用它。
 
-ExecutionRecordSnapshot 保留 Observer 的业务查询名称，内容为所选 execution、其通用 calls 子树、可选 rootCall、中间 ancestors、boundaries、resources、transcripts 和 memories。它不是整棵记录树，不包含根调用的其他任务子树。旧载体由服务只读规范化为这个形状，原载体身份不变；历史中断记录没有起始时间时保留未知。parentId/childIds 可以引用未装载的历史正文。对话由 Runner.run 独立交付，不从记录生成回答。消息正文通过集合 UID 独立加载和持续同步，客户端 binding 将资源定位与消息副本组合；原文未加载不等于空正文。
+ExecutionRecordSnapshot 作为通用调用子树快照由 records/data 持有；它保留既有查询名称，内容为所选 execution、其通用 calls 子树、可选 rootCall、中间 ancestors、boundaries、resources、transcripts 和 memories。它不是整棵记录树，不包含根调用的其他任务子树。已有历史载体的只读解释保留，原载体身份不变；历史中断记录没有起始时间时保留未知。parentId/childIds 可以引用未装载的历史正文。对话由 Runner.run 独立交付，不从记录生成回答。消息正文通过集合 UID 独立加载和持续同步，客户端 binding 将资源定位与消息副本组合；原文未加载不等于空正文。
 
-没有新增 Recorder 子类、插件注册、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。RecordBook.exportState / restore 提供历史载入，具体结构检查位于 `packages/records/src/restoration/`；恢复的具体记录类型和 ID 保留，historical 记录不可修改，也不能附加新的子记录。该入口不重放登记、通知或调用。实体拆包保留既有类名、wire kind 和历史格式，不用重命名载体来表达新的包边界。
+没有新增 Recorder 子类、插件注册、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。RecordBook.exportState / restore 提供历史载入，具体结构检查位于 `packages/records/src/restoration/`；恢复的具体记录类型和 ID 保留，historical 记录不可修改，也不能附加新的子记录。该入口不重放登记、通知或调用。归位保留现有记录类名、kind 和历史解释，不新增旧数据升级、自动转换或执行恢复路径。
 
 ## 局部顺序与索引迁移进度
 

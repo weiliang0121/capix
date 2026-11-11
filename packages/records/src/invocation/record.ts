@@ -3,7 +3,7 @@ import type { RuntimeCallRecord } from '../runtime/record.js';
 import type { ExecutionRecord } from '../execution/record.js';
 import type { OperationRecord } from '../operation/record.js';
 import type { AttemptRecord } from '../attempt/record.js';
-import { type InvocationValue, type ProcessRecord, type RelationChangeRecord, outputProcess, finalOutputProcess } from '@weiliang0121/capix-protocol';
+import { type InvocationValue, type ProcessRecord, type RelationChangeRecord, outputProcess, finalOutputProcess } from '../data/index.js';
 import type { RuntimeErrorValue, InvocationFailureFact } from '@weiliang0121/capix-contracts';
 
 import { CompositeRecord } from '../composite.js';

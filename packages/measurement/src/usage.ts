@@ -1,4 +1,4 @@
-import type { Message } from '@weiliang0121/capix-protocol';
+import type { Message } from '@weiliang0121/capix-transcript';
 
 /** Material-use counts keyed by immutable message identity, scoped to this instance and independent of records. */
 export class MessageUsage {

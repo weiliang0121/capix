@@ -2,7 +2,7 @@
 export { callableKinds } from './callable/kind.js';
 export type { CallableKind } from './callable/kind.js';
 export type * from './callable/signature.js';
-export type { InvocationIdentity, InvocationOrigin } from './invocation.js';
+export type { InvocationIdentity, InvocationOrigin, InvocationRelationIdentity } from './invocation.js';
 export { stableValue, stableValueLimits, StableValueError } from './value.js';
 export type { Stable, StableArray, StableValueErrorCode } from './value.js';
 

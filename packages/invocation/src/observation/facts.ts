@@ -1,4 +1,4 @@
-import type { InvocationRelationIdentity } from '@weiliang0121/capix-protocol';
+import type { InvocationRelationIdentity } from '@weiliang0121/capix-contracts';
 import type { BusinessEvent } from '@weiliang0121/capix-contracts';
 import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 import type { ContextState } from '../context/context.js';
@@ -6,7 +6,7 @@ import type { InvocationProcess } from '../invocation/work.js';
 import type { InvocationResult } from '../invocation/result.js';
 import type { InvocationFailure } from '../invocation/failure.js';
 
-export type { InvocationRelationIdentity } from '@weiliang0121/capix-protocol';
+export type { InvocationRelationIdentity } from '@weiliang0121/capix-contracts';
 export type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 
 export interface InvocationDescription {

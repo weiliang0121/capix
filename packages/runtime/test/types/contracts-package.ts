@@ -1,8 +1,8 @@
 import type { AuthorCheckpointWriter, CallableContract, CallableInput, CallableOutput, CheckpointCodec, CheckpointPointOwner, ChildCalls, ChildFacts, ChildReference, ChildReferenceSlot, OperationResult, ReceptionDefinition, Work } from '@weiliang0121/capix-contracts';
 import type { CallableContract as StructureContract, ChildReference as StructureReference, CheckpointCodec as StructureCodec } from '@weiliang0121/capix-structure';
 import type { OperationResult as ResourceOperationResult } from '@weiliang0121/capix-resources/operation';
-import type { InvocationFailureFact as WireFailure } from '@weiliang0121/capix-protocol';
 import type { InvocationFailureFact } from '@weiliang0121/capix-contracts';
+import type { InvocationEvent } from '@weiliang0121/capix-invocation/events';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<Value extends true> = Value;
@@ -10,7 +10,7 @@ type StructureIdentity = Assert<Equal<CallableContract<'node', string, number>, 
 type ReferenceIdentity = Assert<Equal<ChildReference<CallableContract<'node', string, number>>, StructureReference<CallableContract<'node', string, number>>>>;
 type CodecIdentity = Assert<Equal<CheckpointCodec<string>, StructureCodec<string>>>;
 type ReceptionIdentity = Assert<Equal<OperationResult<string, { result: { failed: () => number } }>, ResourceOperationResult<string, { result: { failed: () => number } }>>>;
-type WireIdentity = Assert<Equal<WireFailure, InvocationFailureFact>>;
+type EventFailureIdentity = Assert<Equal<NonNullable<Extract<InvocationEvent['change'], { kind: 'relation' }>['failure']>, InvocationFailureFact>>;
 type OptionalFailure = Assert<Equal<OperationResult<string, { result: { failed: () => number } }>, string | number>>;
 type ReplacedSuccess = Assert<Equal<OperationResult<string, { result: { succeeded: () => Promise<number> } }>, number>>;
 type OptionalReception = Assert<Equal<OperationResult<string, { result?: { succeeded: () => number } }>, string | number>>;

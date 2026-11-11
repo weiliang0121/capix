@@ -1,7 +1,7 @@
 import { isSafeInteger } from 'es-toolkit/compat';
 import { isString, isUndefined } from 'es-toolkit/predicate';
 import { pick, omitBy } from 'es-toolkit/object';
-import { validateMemoryRecordValue, type MemoryRecord as MemoryRecordData, type MemoryRecordValue } from '@weiliang0121/capix-protocol';
+import { validateMemoryRecordValue, type MemoryRecord as MemoryRecordData, type MemoryRecordValue } from '../data/index.js';
 import type { RecordChangeSource } from '../source.js';
 import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';

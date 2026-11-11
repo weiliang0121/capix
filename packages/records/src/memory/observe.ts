@@ -1,11 +1,11 @@
-import type { MemoryViewValue, MemoryObservation } from '@weiliang0121/capix-protocol';
+import type { MemoryRecordContent, MemoryRecordObservation } from '../data/index.js';
 import type { RecordBook } from '../book.js';
 import { MemoryRecord } from './record.js';
 
 /** Project current display content together with this collection's available change records.
  * Unknown metadata is intentionally omitted, consistently with memoryRecord's incremental projection.
  */
-export function observeMemory(collection: { readonly id: string; values(): readonly { readonly id: string; readonly value: MemoryViewValue }[] }, book: RecordBook): MemoryObservation {
+export function observeMemory(collection: { readonly id: string; values(): readonly { readonly id: string; readonly value: MemoryRecordContent }[] }, book: RecordBook): MemoryRecordObservation {
   const records = new Map<string, MemoryRecord[]>();
   for (const record of book.values()) {
     if (!(record instanceof MemoryRecord) || record.memoriesId !== collection.id) continue;

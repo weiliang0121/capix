@@ -18,12 +18,12 @@ const root = fileURLToPath(new URL('../../../', import.meta.url));
 
 const invocationDirectory = resolve(root, 'packages/invocation');
 
-const dependencies = ['@weiliang0121/capix-diagnostics', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-changes', '@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', 'es-toolkit'];
+const dependencies = ['@weiliang0121/capix-diagnostics', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-changes', '@weiliang0121/capix-contracts', '@weiliang0121/capix-resources', 'es-toolkit'];
 
 test('invocation package exposes its call mechanism with only lower dependencies', async () => {
   const manifest = JSON.parse(await readFile(resolve(invocationDirectory, 'package.json'), 'utf8'));
   assert.equal(manifest.name, '@weiliang0121/capix-invocation');
-  assert.deepEqual(Object.keys(manifest.exports), ['.']);
+  assert.deepEqual(Object.keys(manifest.exports), ['.', './events']);
   assert.deepEqual(Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).sort(), [...dependencies].sort());
   async function inspect(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {

@@ -11,6 +11,10 @@
     "./construction": {
       "types": "./dist/construction.d.ts",
       "import": "./dist/construction.js"
+    },
+    "./data": {
+      "types": "./dist/data/index.d.ts",
+      "import": "./dist/data/index.js"
     }
   },
   "scripts": {
@@ -23,7 +27,6 @@
     "@weiliang0121/capix-changes": "workspace:*",
     "@weiliang0121/capix-transcript": "workspace:*",
     "@weiliang0121/capix-memory": "workspace:*",
-    "@weiliang0121/capix-protocol": "workspace:*",
     "es-toolkit": "1.52.0",
     "@weiliang0121/capix-resources": "workspace:*"
   },

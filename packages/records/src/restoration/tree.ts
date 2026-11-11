@@ -60,7 +60,7 @@ export function checkRestoredTree(book: RecordBook): void {
     }
     if (record instanceof ResourceRecord) {
       const scope = resources.get(record.parentId) ?? { sequence: 0, accesses: new Map(), interactions: new Map() };
-      if (record.sequence !== scope.sequence + 1) throw new Error('Stored resource sequence does not advance');
+      if (!Number.isSafeInteger(record.sequence) || record.sequence <= scope.sequence) throw new Error('Stored resource sequence does not advance');
       const key = JSON.stringify([record.supplyId, record.access]);
       if (record.phase === 'bound') {
         if (scope.accesses.has(key)) throw new Error('Stored resource access is already bound');

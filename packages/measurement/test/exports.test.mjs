@@ -15,7 +15,7 @@ test('content packages load through public roots without importing callable stru
       if (entry.isDirectory()) await inspect(path);
       else if (entry.name.endsWith('.ts')) {
         const source = await readFile(path, 'utf8');
-        assert.doesNotMatch(source, /@weiliang0121\/capix-(?:structure|runtime)|@capix\/observer-service|(?:\.\.\/)+(?:structure|runtime)\//, fileURLToPath(path));
+        assert.doesNotMatch(source, /@weiliang0121\/capix-(?:structure|runtime|protocol)|@capix\/observer-service|(?:\.\.\/)+(?:structure|runtime|protocol)\//, fileURLToPath(path));
       }
     }
   }
@@ -23,7 +23,7 @@ test('content packages load through public roots without importing callable stru
     const directory = new URL('../', import.meta.url);
     const manifest = JSON.parse(await readFile(new URL('package.json', directory), 'utf8'));
     assert.equal(manifest.name, pkg.name);
-    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@weiliang0121/capix-structure', '@weiliang0121/capix-runtime', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
+    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@weiliang0121/capix-structure', '@weiliang0121/capix-runtime', '@weiliang0121/capix-protocol', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
     await inspect(new URL('src/', directory));
     await inspect(new URL('dist/', directory));
     const exported = await import(pkg.name);

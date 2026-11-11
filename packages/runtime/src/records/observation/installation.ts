@@ -1,4 +1,3 @@
-import type { TranscriptEvent } from '@weiliang0121/capix-protocol';
 import type { InvocationObservationSetup, ObservationInstallation } from '../../binding/observation.js';
 import type { ObservationDeclarationScope } from '../../definition/observation.js';
 import { ObservationError, type InvocationObserver } from '@weiliang0121/capix-invocation';
@@ -26,7 +25,7 @@ export class RecordingInstallation implements ObservationInstallation {
   /** Fixed entity supply; each observed fact opens its own synchronous window. */
   readonly records: ResourceBinding<{ record: RecordWriter }>;
   readonly provides = Object.freeze({ record: InvocationRecordAccess.request() });
-  readonly transcript: EventConsumer<TranscriptEvent> = this.consumer((event, writer) => writer.add(transcriptRecord(event)));
+  readonly transcript: EventConsumer<Parameters<typeof transcriptRecord>[0]> = this.consumer((event, writer) => writer.add(transcriptRecord(event)));
   readonly memory: EventConsumer<Parameters<typeof memoryRecord>[0]> = this.consumer((event, writer) => writer.add(memoryRecord(event)));
   readonly failure: 'isolate' | 'propagate';
   constructor(

@@ -46,3 +46,6 @@ export { RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 export { isNonEmptyArray, hasUniqueItems } from './value/array.js';
 export { isObjectLike, isObject } from './value/object.js';
 export { nonBlankStringPattern, isNonBlankString } from './value/string.js';
+
+// Pure immutable progress vocabulary, also available without live implementation imports.
+export { invocationProcessStages, invocationProcessActions, type InvocationEvent, type InvocationProcessStage, type InvocationProcessAction, type InvocationRelationPhase } from './events.js';

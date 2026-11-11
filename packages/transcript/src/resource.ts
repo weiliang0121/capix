@@ -1,6 +1,6 @@
 import { TranscriptFacts } from './event.js';
 import { Transcript } from './transcript.js';
-import type { Message, TranscriptRangeLocator } from '@weiliang0121/capix-protocol';
+import type { Message, TranscriptRangeLocator } from './types.js';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
 import type { ResourceEndpointActivity, ResourceOperation } from '@weiliang0121/capix-resources';
 import { TranscriptRangeRef } from './ref.js';

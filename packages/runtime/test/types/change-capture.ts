@@ -1,11 +1,11 @@
-import type { ObserverChange } from '@weiliang0121/capix-protocol';
+import type { InvocationEvent } from '@weiliang0121/capix-invocation/events';
 import { ChangeBuffer, type ChangeCapture } from '@weiliang0121/capix-changes';
 import { Transcript, type TranscriptEvent } from '@weiliang0121/capix-transcript';
 import { Driver, defineScene } from '@weiliang0121/capix-runtime';
 
 // A second local source demonstrates union reuse without inventing a production MemoryEvent.
 type OtherEvent = Readonly<{ kind: 'other-changed'; value: number }>;
-const observer = new ChangeBuffer<ObserverChange | OtherEvent>();
+const observer = new ChangeBuffer<TranscriptEvent | InvocationEvent | OtherEvent>();
 const transcriptCapture: ChangeCapture<TranscriptEvent> = observer;
 const otherCapture: ChangeCapture<OtherEvent> = observer;
 
