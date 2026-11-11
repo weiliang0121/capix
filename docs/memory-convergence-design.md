@@ -232,8 +232,8 @@ Memory 自己定义变化事实，例如集合、sequence、项 ID、create/upda
 
 - [Memory 状态与提交](../packages/memory/src/persistence.ts)、[资源端点](../packages/memory/src/resource.ts)、[集合写入与恢复](../packages/memory/src/memories.ts)。
 - [observeMemory](../packages/records/src/memory/observe.ts) 当前直接访问 `collection.transcript`，并从 sourceIndexes 生成消息定位。应由明确投影替代这个领域假设。
-- [ObservationReplica](../packages/client-runtime/src/observation/replica.ts) 当前从领域事件推导相同展示；baseline 与增量必须一起调整。
-- [HTTP 观测校验](../packages/client-http/src/responses.ts)、[会话校验](../packages/client-http/src/session-responses.ts) 都消费旧形状，不是改完服务端类型就自动兼容。
+- [ObservationReplica](../../capix-lab/packages/client-runtime/src/observation/replica.ts) 当前从领域事件推导相同展示；baseline 与增量必须一起调整。
+- [HTTP 观测校验](../../capix-lab/packages/client-http/src/responses.ts)、[会话校验](../../capix-lab/packages/client-http/src/session-responses.ts) 都消费旧形状，不是改完服务端类型就自动兼容。
 - Invocation 的恢复观测分支也转交 memory 事实；这是观测适配面，不是 Frame 中增加实体数据。
 
 ### Lab 的独立迁移交接

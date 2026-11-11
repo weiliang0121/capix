@@ -34,9 +34,9 @@ CAPiX 的框架范围包括 C/S 两端。Observer 和 Conversation 已交接到�
 
 ## 包与目录
 
-源码统一在 `packages/`，目录变更不改 npm 身份或运行平台。下表同时列出实验仓库中的三个参考 workspace，便于对照，它们不属于本仓构建。
+源码统一在 `packages/`，目录变更不改 npm 身份或运行平台。下表同时列出实验仓库中的参考 workspace，便于对照，它们不属于本仓构建。
 
-仓库只有一个根 pnpm workspace 与锁文件，二十个实际包（17 个公开、3 个私有）。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
+仓库只有一个根 pnpm workspace 与锁文件，18 个公开框架包，根包私有；当前参考客户端和内容装配均由 Lab 的私有 workspace 维护。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
 
 | 包                                    | 位置                                  | 负责什么                                                           |
 | ------------------------------------- | ------------------------------------- | ------------------------------------------------------------------ |
@@ -61,8 +61,8 @@ CAPiX 的框架范围包括 C/S 两端。Observer 和 Conversation 已交接到�
 | Lab 的 `@capix/observer-content`      | `capix-lab/services/observer-content` | Observer 内容持有、ActiveView 策略、观察安装、原文同步与关闭       |
 | `@capix/conversation-service`         | `capix-lab/services/conversation`     | 并排对话装配、内容持久化、记录、CLI 与独立单会话 Web 宿主          |
 | `@capix/observer-service`             | `capix-lab/services/observer`         | 对话业务、模型适配、SQLite、运行环境、观测与 HTTP                  |
-| `@capix/client-runtime`               | `packages/client-runtime`             | 客户端提交、反馈、原文同步及观测接纳                               |
-| `@capix/client-http`                  | `packages/client-http`                | HTTP 收发和协议接纳                                                |
+| `@capix/client-runtime`               | `capix-lab/packages/client-runtime`   | 客户端提交、反馈、原文同步及观测接纳                               |
+| `@capix/client-http`                  | `capix-lab/packages/client-http`      | HTTP 收发和协议接纳                                                |
 | `@capix/observer-app`                 | `capix-lab/apps/observer`             | 浏览器界面与读模型投影                                             |
 
 结构、资源、调用、记录、checkpoint 和内容实体包均不反向依赖 Runtime；调用包也不依赖结构包。Observer 服务组合实体与运行；Lab 的 `@capix/observer-content` 是参考装配，源码和测试均由 Lab 维护，不属于 CAPiX 的包或分发清单；不依赖 Observer 服务或 Runtime。内容协作图、目录和迁移入口见 [内容实体与独立包](content-entities-packages.md)。共同契约、跨端协议和具体机制的区别见 [契约与协议](contracts-protocol.md)。
@@ -145,7 +145,7 @@ Observer 的 ConversationScene 接纳输入并调用 ConversationGroup；后者�
 
 并排的 [`@capix/conversation-service`](../../capix-lab/services/conversation/README.md) 以正式消息、View 材料、记忆策略、模型资源和原生 Runner 验证作者路径。普通模型 Node 与独立交互 Group 都使用完整 ModelProvider 契约，两者共用 Scene 的消息接纳；后者组合发送、过程反馈跟随和最终读取。`assembly` 组合这些公开能力，`persistence` 保存消息／记忆／View 成员，`recording` 安装现有记录预设及服务摘要，`cli` 承担连续输入、反馈展示、可选记录导出和宿主关闭。`web` 建立独立浏览器宿主，`http` 交付消息同步、提交跟随和按需调用详情；客户端复用已有接纳机制，应用保留独立入口。重启后建立新 Runner 继续对话；不恢复旧调用或重发模型请求，不替换 Observer 的 HTTP/客户端。见 [宿主与持久化](../../capix-lab/docs/conversation-host.md) 和 [浏览器交付](../../capix-lab/docs/conversation-web.md)。
 
-ClientRuntime 保持无 UI，协调提交、同步和可选观测；packages/client-http 只收发与接纳协议。应用 binding 负责读模型、调用图、几何布局与帧合并，React 消费 props/Store。当前客户端实际依赖对话与 Observer 契约，不宣称已是任意业务的通用客户端。
+ClientRuntime 保持无 UI，协调提交、同步和可选观测；Lab 的 packages/client-http 只收发与接纳协议。应用 binding 负责读模型、调用图、几何布局与帧合并，React 消费 props/Store。当前客户端实际依赖对话与 Observer 契约，不宣称已是任意业务的通用客户端。
 
 | 目的                                  | 公开入口                                                                                          |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------- |

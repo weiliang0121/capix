@@ -93,30 +93,6 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
 
-  packages/client-http:
-    dependencies:
-      '@capix/client-runtime':
-        specifier: workspace:*
-        version: link:../client-runtime
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      es-toolkit:
-        specifier: 1.52.0
-        version: 1.52.0
-      zod:
-        specifier: 4.6.5
-        version: 4.6.5
-
-  packages/client-runtime:
-    dependencies:
-      '@weiliang0121/capix-protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      es-toolkit:
-        specifier: 1.52.0
-        version: 1.52.0
-
   packages/contracts: {}
 
   packages/diagnostics:

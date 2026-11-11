@@ -4,7 +4,7 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；新增 `capix-tool` 已纳入该清单但尚未发布；此前目录迁移未改已有包名、版本或公开出口。`packages/client-runtime`、`client-http` 与根包仍为私有，不能因同在 packages 下而自动发布。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
+公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；新增 `capix-tool` 已纳入该清单但尚未发布；此前目录迁移未改已有包名、版本或公开出口。根包仍为私有。当前两个私有客户端已迁至 Lab，不属于框架 workspace 或任何框架分发批次。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
 
 公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。完整职责见根 [README](../README.md#包与公开入口)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
@@ -64,10 +64,10 @@ pnpm release:publish
 
 ## 实验仓库的候选分发
 
-`pnpm integration:pack` 干净构建现有 20 包（18 个公开包、2 个私有客户端包），只生成本地 `.capix/integration` tarball 批次，不发布。manifest 记录基线提交、dirty 标记、实际源文件摘要和每个产物的 SHA256。两个私有客户端包仍带 private 身份，文件白名单只含编译产物、声明、README 和可用许可文件。
+`pnpm integration:pack` 干净构建现有 18 个公开框架包，只生成本地 `.capix/integration` tarball 批次，不发布。manifest 记录基线提交、dirty 标记、实际源文件摘要和每个产物的 SHA256。候选不包含 Lab 的客户端或装配；文件白名单只含编译产物、声明、README 和可用许可文件。
 
-在 capix-lab 中显式运行 `pnpm candidate:import --directory /absolute/path/to/capix/.capix/integration`，校验完整批次并复制到本仓本地 vendor，根 overrides 固定全部传递依赖到同批产物；执行 install 更新并审查独立锁文件，再 frozen install 与 check。没有相邻源码软链。该路径是本地验证分发，不代表两个私有客户端包已经公开，也不自动修改 npm 发布清单。
+在 capix-lab 中显式运行 `pnpm candidate:import --directory /absolute/path/to/capix/.capix/integration`，校验完整批次并复制到本仓本地 vendor，根 overrides 固定全部传递依赖到同批产物；执行 install 更新并审查独立锁文件，再 frozen install 与 check。没有相邻源码软链。该路径是本地验证分发，不自动修改 npm 发布清单；Lab 客户端使用自身 workspace，不再安装客户端 tarball。
 
-Observer 内容参考装配及其测试已移至 `capix-lab/services/observer-content`，不再进入 CAPiX 候选 tarball 批次，也未转为公开预设。17 个已发布包、18 个当前公开包和 20 个当前候选包是不同范围；旧 21 包 manifest 不代表当前完整批次。
+Observer 内容参考装配及其测试已移至 `capix-lab/services/observer-content`，不再进入 CAPiX 候选 tarball 批次，也未转为公开预设。17 个已发布包与 18 个当前公开／候选包是不同范围；旧 20／21 包 manifest 不代表当前完整批次。
 
 候选消费者需自行适配新增包及契约变化。本次 ModelExchanges v2 与 Tool 的框架验证不代表 capix-lab 原参考服务已完成迁移；Lab 的候选清单、资源登记与持久适配仍需在其任务中单独处理。

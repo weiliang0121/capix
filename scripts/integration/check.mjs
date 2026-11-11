@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { command, json, registry, root } from '../release/packages.mjs';
 import { pack } from './pack.mjs';
 
-/** Verify the unminified 20-package candidate independently of public release artifacts. */
+/** Verify the unminified 18-package candidate independently of public release artifacts. */
 export async function check() {
   let temporary;
   let candidateLock;
@@ -20,8 +20,11 @@ export async function check() {
     candidateLock = lock;
     const manifest = await json(join(output, 'manifest.json'));
     assert.deepEqual(manifest.packages, archives, 'Integration manifest does not match the packed batch');
-    assert.equal(archives.length, 20);
-    assert.equal(archives.filter((entry) => entry.private).length, 2);
+    assert.equal(archives.length, 18);
+    assert.ok(
+      archives.every((entry) => entry.private === false),
+      'Integration candidates must be public framework packages',
+    );
     stage = 'preparing an external consumer';
     temporary = await mkdtemp(join(tmpdir(), 'capix-integration-'));
     const location = relative(root, temporary);
@@ -40,7 +43,7 @@ export async function check() {
     const workspace = await json(join(root, 'package.json'));
     const dependencies = Object.fromEntries(archives.map((entry) => [entry.name, `file:${join(artifacts, entry.file)}`]));
     await writeFile(join(consumer, 'package.json'), JSON.stringify({ name: 'capix-integration-consumer', private: true, type: 'module', dependencies, devDependencies: { zod: workspace.devDependencies.zod, typescript: workspace.devDependencies.typescript, '@types/node': workspace.devDependencies['@types/node'] } }, null, 2) + '\n');
-    stage = 'installing all 20 candidate tarballs';
+    stage = 'installing all 18 candidate tarballs';
     command('npm', ['install', '--ignore-scripts', '--package-lock=false', '--no-audit', '--no-fund', '--prefer-online', `--registry=${registry}`, '--fetch-timeout=20000', '--fetch-retries=1'], { cwd: consumer });
     command('npm', ['ls', '--all'], { cwd: consumer, stdio: 'pipe' });
     stage = 'checking installed exports';
@@ -61,19 +64,17 @@ for (const name of ${JSON.stringify(imports)}) {
   assert.ok(fileURLToPath(import.meta.resolve(name)).startsWith(installedRoot), name + ': export escaped the isolated installation');
   await import(name);
 }
-console.log('Loaded ${imports.length} exports from 20 installed candidate tarballs');
+console.log('Loaded ${imports.length} exports from 18 installed candidate tarballs');
 `,
     );
     command(process.execPath, ['exports.mjs'], { cwd: consumer });
     for (const fixture of ['consumer.mjs', 'consumer.ts']) {
       await cp(join(root, 'scripts/release/fixtures', fixture), join(consumer, fixture));
-      await cp(join(root, 'scripts/integration/fixtures', fixture), join(consumer, `private-${fixture}`));
     }
-    stage = 'running public and private API consumers';
+    stage = 'running the public API consumer';
     command(process.execPath, ['consumer.mjs'], { cwd: consumer });
-    command(process.execPath, ['private-consumer.mjs'], { cwd: consumer });
-    stage = 'compiling public and private declaration consumers';
-    command(process.execPath, ['node_modules/typescript/bin/tsc', '--ignoreConfig', '--noEmit', '--strict', '--target', 'ES2023', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--lib', 'ES2023,DOM,DOM.Iterable', '--skipLibCheck', 'false', 'consumer.ts', 'private-consumer.ts'], { cwd: consumer });
+    stage = 'compiling the public declaration consumer';
+    command(process.execPath, ['node_modules/typescript/bin/tsc', '--ignoreConfig', '--noEmit', '--strict', '--target', 'ES2023', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--lib', 'ES2023,DOM,DOM.Iterable', '--skipLibCheck', 'false', 'consumer.ts'], { cwd: consumer });
     // Record only the candidate batch tested above, never the compressed release batch.
     await writeFile(join(output, 'verified.json'), JSON.stringify({ schemaVersion: 1, baselineHead: manifest.baselineHead, dirty: manifest.dirty, sourceSha256: manifest.source.sha256, packages: archives }, null, 2) + '\n');
     console.log(`Verified ${archives.length} integration tarballs in an external consumer: ${relative(root, output)}`);

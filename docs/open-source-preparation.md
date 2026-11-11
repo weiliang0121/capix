@@ -1,6 +1,6 @@
 # 包命名与开源准备
 
-后续归属说明：本文保留当轮盘点、包数和验证事实。Observer 内容组合（ActiveView、ConversationContent、同步及测试）现已整体迁至 `capix-lab/services/observer-content`，不再是 CAPiX 包；尚未成为通用公开预设。当前 CAPiX 为 18 个公开包加 2 个私有客户端包，候选分发共 20 包，见 [当前包边界](organization.md) 与 [分发规则](npm-publishing.md)。
+后续归属说明：本文保留当轮盘点、包数和验证事实。Observer 内容组合（ActiveView、ConversationContent、同步及测试）现已整体迁至 `capix-lab/services/observer-content`，不再是 CAPiX 包；尚未成为通用公开预设。两个私有客户端及其测试也已交接至 `capix-lab/packages`；当前 CAPiX 为 18 个公开框架包，候选分发共 18 包，见 [当前包边界](organization.md) 与 [分发规则](npm-publishing.md)。
 
 状态：第一版已实施；本文保留目标设计及原盘点，实际完成范围、过渡项和验证见 [拆库实施记录](repository-split-implementation.md)。未创建远端、发布新包或改变可见性。
 
@@ -67,7 +67,7 @@
 
 新增公开名称沿用 [发布命名规则](npm-publishing.md)：必要限定词在主体之前，例如 `sqlite-checkpoint`、`react-observer`。`client-runtime` 是客户端的运行与消费生命周期，`client-http` 是其 HTTP 适配；不为追求词序对称再改既有 `model-provider` 等清晰的职责名。候选名称不代表已经创建、批准发布或加入 17 包 fixed 组。
 
-现阶段不将客户端直接缩成 `capix-client`：其 [公开传输契约](../packages/client-runtime/src/transport.ts) 包含具体 Conversation 与 Observer 类型，不是任意 Agent 服务的统一客户端。也不急着拆成 `conversation-client`：现有 ObservationReplica 等能力需要先明确归属。目录可以先收敛，抽象范围仍按实际实现说明。
+现阶段不将客户端直接缩成 `capix-client`：其 [公开传输契约](../../capix-lab/packages/client-runtime/src/transport.ts) 包含具体 Conversation 与 Observer 类型，不是任意 Agent 服务的统一客户端。也不急着拆成 `conversation-client`：现有 ObservationReplica 等能力需要先明确归属。目录可以先收敛，抽象范围仍按实际实现说明。
 
 参考宿主迁出后，实验仓库继续使用 `services/conversation`、`apps/observer` 等名称没有矛盾：那里确实存在服务进程和应用入口。这些名称不进入框架包名，也不需要伪装成可发布产品。
 

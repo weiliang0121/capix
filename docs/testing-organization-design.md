@@ -149,15 +149,15 @@ capix/
 
 以下命令已实现。保留 pnpm Workspace、现有锁文件与 node:test，不新增测试服务。
 
-| 入口                                                                  | 工作                                                        |
-| --------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `pnpm --filter @weiliang0121/capix-resources --fail-if-no-match test` | 构建该包及所需依赖，再执行这个包的运行、类型及必要进程回归  |
-| `pnpm test:packages`                                                  | 已完成构建后，发现并执行全部包测试，不重复构建各包          |
-| `pnpm test:repository`                                                | 已完成构建后，执行 workspace、依赖边界与仓库脚本检查        |
-| `pnpm test`                                                           | 构建一次，再执行 packages 与 repository 两部分              |
-| `pnpm check`                                                          | 构建一次，完成源码类型、两类正式测试和格式检查              |
-| `pnpm integration:check`                                              | 验证全部 20 个候选 tarball 的隔离安装、出口及运行／类型消费 |
-| `pnpm release:check`                                                  | 维持最终发布 tarball 的独立消费者验收                       |
+| 入口                                                                  | 工作                                                                |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `pnpm --filter @weiliang0121/capix-resources --fail-if-no-match test` | 构建该包及所需依赖，再执行这个包的运行、类型及必要进程回归          |
+| `pnpm test:packages`                                                  | 已完成构建后，发现并执行全部包测试，不重复构建各包                  |
+| `pnpm test:repository`                                                | 已完成构建后，执行 workspace、依赖边界与仓库脚本检查                |
+| `pnpm test`                                                           | 构建一次，再执行 packages 与 repository 两部分                      |
+| `pnpm check`                                                          | 构建一次，完成源码类型、两类正式测试和格式检查                      |
+| `pnpm integration:check`                                              | 验证全部 18 个公开框架候选 tarball 的隔离安装、出口及运行／类型消费 |
+| `pnpm release:check`                                                  | 维持最终发布 tarball 的独立消费者验收                               |
 
 一个小的 `scripts/test` 执行器负责发现与构建协调，不承载测试语义。单包模式构建选中包及明确依赖；全仓模式先按依赖顺序构建一次，然后汇总准确测试文件交给 node:test。不要通过递归执行每个包的自带构建入口，造成一次全仓验证重复构建多个依赖闭包。
 
@@ -173,7 +173,7 @@ CAPiX CI 只检出本仓即可执行上述正式检查；不得读取 Lab 路径
 
 ### 7.1 分发验证也在本仓闭合
 
-当前新增 Tool 后，release:check 验证 18 个经过发布处理的公开包；integration:pack 构建的 20 包候选没有相同的压缩处理，不能把两种产物当成同一份证据。`integration:check` 已在 CAPiX 内为 20 包候选补独立临时消费者的安装与关键出口 smoke，覆盖两个私有客户端包的分发；无需启动 Lab。
+当前新增 Tool 后，release:check 验证 18 个经过发布处理的公开包；integration:pack 构建的 18 包候选没有相同的压缩处理，不能把两种产物当成同一份证据。`integration:check` 已在 CAPiX 内为 18 包候选补独立临时消费者的安装与关键出口 smoke；当前客户端源码和测试由 Lab 维护；无需启动 Lab。
 
 打包检查除了文件白名单，还应拒绝 `dist/test`、fixture 等误编译产物。build、release:check、integration:pack 都可能重建同一批 dist，需顺序执行，不能和正在读取产物的测试并发。测试版本、源码来源与实际 tarball 摘要分别记录；候选源码摘要不自动代表已包含所有测试工具和验收依据。
 
@@ -211,7 +211,7 @@ CP Store 端口的 revision、owner/input/contract 固定、关系和选择认�
 ### 第四步：独立验收并删除旧入口
 
 - 仅 CAPiX 检出即可 frozen install、干净构建、全部测试、类型和分发验收；没有相邻 Lab 也成立。
-- 20 个包都有明确测试责任与可用入口；根部只剩公共工具与有限仓库检查。
+- 18 个框架包都有明确测试责任与可用入口；两个客户端包的测试责任随包迁入 Lab；根部只剩公共工具与有限仓库检查。
 - 包测试不导入其他包测试、不借全局 fixture 反向依赖上层、不访问 Lab 或私有配置。
 - 类型负例、子进程、故障反例及复杂度断言均有去向；不以减少测试数或增加 skip 换取通过。
 - 全仓发现与各包入口范围一致，不漏文件、不重复执行；测试顺序不提供隐式共享状态。

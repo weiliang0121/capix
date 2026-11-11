@@ -24,8 +24,6 @@ const packages = [
   { path: 'packages/checkpoint', allowed: ['@weiliang0121/capix-contracts'] },
   { path: 'packages/invocation', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-changes', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-diagnostics'] },
   { path: 'packages/runtime', allowed: ['@weiliang0121/capix-contracts', '@weiliang0121/capix-protocol', '@weiliang0121/capix-resources', '@weiliang0121/capix-structure', '@weiliang0121/capix-changes', '@weiliang0121/capix-records', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-invocation', '@weiliang0121/capix-interaction', '@weiliang0121/capix-diagnostics'] },
-  { path: 'packages/client-runtime', allowed: ['@weiliang0121/capix-protocol'] },
-  { path: 'packages/client-http', allowed: ['@weiliang0121/capix-protocol', '@capix/client-runtime'] },
 ];
 
 test('the boundary inventory covers every workspace package', async () => {
@@ -36,13 +34,8 @@ test('the boundary inventory covers every workspace package', async () => {
       const path = `${directory}/${entry.name}`;
       try {
         const manifest = JSON.parse(await readFile(resolve(root, path, 'package.json'), 'utf8'));
-        if (directory === 'packages' && !['client-http', 'client-runtime'].includes(entry.name)) {
-          assert.equal(manifest.name, `@weiliang0121/capix-${entry.name}`);
-          assert.equal(manifest.private, false);
-        } else {
-          assert.equal(manifest.private, true, `${path} is outside the release scope`);
-          assert.ok(manifest.name.startsWith('@capix/'), `${path} must have an explicit private package boundary`);
-        }
+        assert.equal(manifest.name, `@weiliang0121/capix-${entry.name}`);
+        assert.equal(manifest.private, false);
         discovered.push(path);
       } catch (error) {
         if (error.code !== 'ENOENT') throw error;
@@ -90,7 +83,7 @@ test('workspace production imports follow one-way public package boundaries', as
           assert.ok(manifests.get(packageName)?.exports?.[entry], `${relative(root, file)} must use a public package export: ${specifier}`);
         }
         if (specifier.startsWith('.')) assert.ok(!relative(dir, resolve(dirname(file), specifier)).startsWith('..'), `${relative(root, file)} crosses a package boundary: ${specifier}`);
-        if (pkg.path === 'packages/contracts' || pkg.path === 'packages/protocol' || pkg.path.startsWith('packages/client-')) assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `${pkg.path} cannot depend on ${specifier}`);
+        if (pkg.path === 'packages/contracts' || pkg.path === 'packages/protocol') assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `${pkg.path} cannot depend on ${specifier}`);
       }
     }
   }
