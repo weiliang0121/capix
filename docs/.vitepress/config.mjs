@@ -15,6 +15,7 @@ export default defineConfig({
   outDir: resolve(docs, '.vitepress/dist'),
   themeConfig: {
     nav: [
+      { text: 'Why CAPiX', link: '/why' },
       { text: '开始', link: '/guide/getting-started' },
       { text: '示例', link: '/examples/' },
       { text: '契约', link: '/README' },
@@ -23,11 +24,13 @@ export default defineConfig({
       {
         text: '使用框架',
         items: [
+          { text: 'Why CAPiX', link: '/why' },
           { text: '快速开始', link: '/guide/getting-started' },
           { text: '运行示例', link: '/examples/' },
           { text: '结构与资源', link: '/examples/structure' },
           { text: '实体与视图', link: '/examples/content' },
           { text: '工具、输出与记录', link: '/examples/runtime' },
+          { text: '文档站部署', link: '/site-publishing' },
         ],
       },
       {
@@ -47,9 +50,16 @@ export default defineConfig({
     ],
     socialLinks: [{ icon: 'github', link: repository }],
     search: { provider: 'local' },
-    outline: [2, 3],
+    outline: { level: [2, 3], label: '本页目录' },
+    docFooter: { prev: '上一篇', next: '下一篇' },
+    sidebarMenuLabel: '目录',
+    returnToTopLabel: '返回顶部',
+    darkModeSwitchLabel: '切换主题',
+    lightModeSwitchTitle: '切换浅色',
+    darkModeSwitchTitle: '切换深色',
   },
   markdown: {
+    codeCopyButtonTitle: '复制代码',
     config(md) {
       const fence = md.renderer.rules.fence;
       md.renderer.rules.fence = (tokens, index, options, env, self) => {

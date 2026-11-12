@@ -4,9 +4,10 @@ CAPiX 用结构组织处理，通过资源访问能力，由 Runner 建立调用
 
 ## 开始使用
 
-- [快速开始](../README.md#快速开始)：离线字典与 Runner。
+- [快速开始：便签助手](guide/getting-started.md)：提供工具、接模型、运行，默认离线验证完整链路。
+- [为什么用 CAPiX](why.md)：组合如何展开，边界如何维持可靠性。
 - [架构与包](organization.md)：对象职责、包依赖与运行环境。
-- [可运行示例](../examples/README.md)：资源、组合、Tool、输出、记录和自定义实体。
+- [可运行示例](examples/index.md)：便签助手、资源、组合、Tool、输出、记录和自定义实体。
 
 ## 作者指南与契约
 
@@ -23,5 +24,6 @@ CAPiX 用结构组织处理，通过资源访问能力，由 Runner 建立调用
 
 - [贡献](../CONTRIBUTING.md)、[协作约定](../AGENTS.md)、[安全报告](../SECURITY.md)。
 - [测试归属与命令](testing-organization-design.md)、[包分发与发布](npm-publishing.md)。
+- [文档站构建与发布](site-publishing.md)：本地预览与 GitHub Pages。
 
 框架契约、示例与正式测试均可仅凭本仓运行。文档站构建不读取外部仓库或个人开发资料；示例执行在 Node.js 中，网站展示不代表浏览器执行内核。

@@ -4,7 +4,21 @@ CAPiX 是可组合、可观测的 Agent 框架：用 Scene / Group / Node 组织
 
 当前公开包为 **0.x**，采用 [MIT](LICENSE) 许可。执行内核在 Node.js 上验证；目录统一为 `packages/` 不代表已支持浏览器或 Edge 执行。
 
-## 快速开始
+## 第一个 Agent：整理便签
+
+给助手两张便签，让它读取会议记录和项目计划，整理三项待办，再写成一张新便签。模型选择工具，普通节点处理操作，工具反馈进入下一次模型请求，直到给出最终回答。
+
+从本仓库运行：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+node examples/notes-assistant.mjs
+```
+
+默认使用明确标识的离线决策脚本，工具执行和便签读写真实发生，不访问模型服务。便签保存在内存，程序结束后不落盘。接入真实模型的配置、完整源码和结果解读见[创建便签助手](docs/guide/getting-started.md)；框架为何划分这些职责，见 [Why CAPiX](docs/why.md)。Tool 尚未发布，当前示例以本仓源码为准。
+
+## 更小的结构与资源例子
 
 需要 Node.js **22.23.2** 或更新版本。在空目录中安装三个公开包：
 
@@ -85,7 +99,7 @@ pnpm docs:dev
 
 `pnpm examples:check` 实际运行并验证示例；`pnpm docs:build` 校验文档链接与代码引用后构建静态网站，`pnpm docs:preview` 预览产物。文档站未自动部署。示例在 Node.js 执行，网站显示源码和运行说明，不表示执行内核可直接运行于浏览器。
 
-学习路径见[文档导航](docs/README.md)、[最小示例](examples/README.md)与[架构](docs/organization.md)。自定义业务实体可以通过资源和 View 接入，不需要继承统一基类或把业务内容伪装成记忆；详见[自定义实体](docs/custom-entities.md)。
+学习路径见 [Why CAPiX](docs/why.md)、[创建便签助手](docs/guide/getting-started.md)、[示例](examples/README.md)与[架构](docs/organization.md)。自定义业务实体可以通过资源和 View 接入，不需要继承统一基类或把业务内容伪装成记忆；详见[自定义实体](docs/custom-entities.md)。
 
 ## 本地开发与贡献
 
@@ -100,4 +114,4 @@ pnpm check
 
 普通检查不调用真实模型；首次安装依赖可能联网。发布产物另用 `pnpm release:check` 验证，它可能访问 registry，但不会发布 npm。GitHub 执行 CI 和版本 PR，npm 发布由维护者在本地明确执行。
 
-贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，漏洞报告边界见 [SECURITY.md](SECURITY.md)。[文档导航](docs/README.md) 区分当前契约与历史研究；[项目组织](docs/organization.md) 说明包边界与对象职责。
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，漏洞报告边界见 [SECURITY.md](SECURITY.md)。[文档导航](docs/README.md) 组织学习路径与当前契约；[项目组织](docs/organization.md) 说明包边界与对象职责。

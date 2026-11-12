@@ -50,7 +50,7 @@ export async function checkDocs() {
     if (/(?:\.\.\/)+(?:capix-lab|capix-notes|capix-explorations)(?:\/|[\s`'"])/.test(source)) failures.push(`${relative(root, file)}: contains a private sibling repository path`);
     const prose = source.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
     for (const match of prose.matchAll(/\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)) check(file, match[1]);
-    for (const match of prose.matchAll(/^<<<\s+([^\s#{]+)(?:#[^\s{]+)?(?:\{[^}]*\})?\s*$/gm)) {
+    for (const match of prose.matchAll(/^<<<\s+([^\s#{]+)(?:#[^\s{]+)?(?:\{[^}]*\})?(?:[ \t]*\[[^\]\n]+\])?\s*$/gm)) {
       check(file, match[1], { snippet: true });
       snippets.add(resolve(dirname(file), match[1]));
     }
