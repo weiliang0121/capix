@@ -2,7 +2,7 @@
 
 `Tool` 是组织原生模型工具调用的普通 Group 预设，与 Sequence、Dynamic 使用同一结构和调用机制。模型选择已登记的 Node / Group，成员使用自己的资源，结果回填同一个交换起点后继续请求模型。
 
-ESM、TypeScript；Node.js ≥ 22.23.2。该包已纳入分发配置，尚未随此前的 17 包首发发布。
+ESM、TypeScript；Node.js ≥ 22.23.2。通过 `npm install @weiliang0121/capix-tool` 安装。
 
 ## 定义处理结构
 
