@@ -119,6 +119,7 @@ export default defineConfig({
             { text: '契约与协议', link: '/contracts-protocol' },
             { text: 'Transcript wire', link: '/protocol' },
             { text: '测试', link: '/testing-organization-design' },
+            { text: 'GitHub 维护', link: '/github-maintenance' },
             { text: '发布', link: '/npm-publishing' },
             { text: '文档站部署', link: '/site-publishing' },
           ],

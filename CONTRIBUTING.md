@@ -1,6 +1,6 @@
 # 贡献 CAPiX
 
-欢迎提交最小复现、契约修正和实现改进。如果你想先使用 CAPiX，请从[文档站的入门教程](https://weiliang0121.github.io/capix/guide/getting-started.html)开始；本文说明如何在仓库中开发、验证和提交改动。
+欢迎提交最小复现、契约修正和实现改进。如果你想先使用 CAPiX，请从[仓库中的入门教程](https://github.com/weiliang0121/capix/blob/main/docs/guide/getting-started.md)开始；本文说明如何在仓库中开发、验证和提交改动。
 
 修改前查阅相关[公开契约](docs/README.md)与 [AGENTS.md](AGENTS.md) 中的协作约定。安全问题请遵循 [SECURITY.md](SECURITY.md)，不要公开披露漏洞细节。
 
@@ -69,8 +69,18 @@ pnpm docs:build
 
 当前契约与必要设计理由必须可以仅凭公开仓库理解。开发流水、私人讨论与具体业务装配不进入框架导航，也不成为修改代码的隐含前置条件。
 
+## Issue 与 PR 流程
+
+缺陷请提供准确包／版本或提交、环境、可独立执行的最小复现、预期及实际结果；能力建议请说明场景、当前边界、替代方案和验证标准。搜索已有 issue 后使用对应模板，也可提交有明确目的的空白 issue。安全问题不公开披露细节，先阅读 [SECURITY.md](SECURITY.md)。
+
+从最新 main 建立工作分支，外部贡献者可从 fork 提交 PR。PR 说明问题、行为变化、契约影响、实际执行的验证与限制，以及 changeset 判断。CI 对 PR 执行全仓和分发验证；普通回归离线，不调用真实模型。fork 运行不提供写权限或仓库 secrets，不使用 `pull_request_target` 执行贡献代码。
+
+维护者人工审阅后，确认分支跟上 main、最新提交的 GitHub Actions `check` 通过且所有讨论解决，再以 squash 合并。单维护者流程要求 PR，但不要求他人的批准票数，避免作者无法批准自己导致阻塞；人工审阅仍然必需。main 禁止强推和删除，默认不使用机器人自动合并。具体规则、权限和版本 PR 处理见 [GitHub 维护](docs/github-maintenance.md)；远端保护须单独配置和核验。
+
 ## Changesets 与发布
 
 修改需要发布的行为、公开契约或分发物时运行 `pnpm changeset`，选择实际修改的公开包和 bump 类型，说明用户可观察到的变化。18 个公开包属于同一个 fixed 组，版本协调由 Changesets 完成；文档站、示例和外部装配不自动加入该组。仅贡献说明、历史材料或不影响发布产物的仓库整理通常无需 changeset，PR 中说明判断即可。
 
 GitHub 只执行 CI 与版本 PR。版本 PR 更新版本、CHANGELOG 与锁文件，不自动发布 npm。贡献任务不包含推送、部署或发布；维护者在审阅和产物验收后明确执行本地发布。详见 [npm 发布](docs/npm-publishing.md)。
+
+版本 PR 由内置 `GITHUB_TOKEN` 创建或更新时，其 CI 可能需要维护者在 GitHub 使用 **Approve workflows to run** 批准。核对准确分支与最新提交，检查通过后再合并。版本 PR 只更新版本、CHANGELOG 与锁文件；npm 发布需要独立明确授权，Pages 也仅手动部署。
