@@ -12,6 +12,7 @@ export async function main(args = process.argv.slice(2)) {
     console.log('用法：node examples/notes-assistant.mjs [--help | --live]\n默认：离线固定决策脚本（不是智能模型），只使用内存便签。\n--live：真实模型调用；必须提供 MODEL_ENDPOINT、MODEL_NAME、MODEL_API_KEY。\n不读取 .env；不保存到磁盘，不设置 checkpoint。');
     return;
   }
+  // #region provider
   const live = args[0] === '--live';
   let provider;
   if (live) {
@@ -26,6 +27,8 @@ export async function main(args = process.argv.slice(2)) {
       throw new ConfigurationError('真实模型配置无效，请检查 MODEL_ENDPOINT、MODEL_NAME、MODEL_API_KEY。');
     }
   } else provider = new OfflineNotesProvider();
+
+  // #endregion provider
 
   const materials = createMaterials();
   console.log(live ? '真实模型模式；便签仅在内存中。' : '离线模式：固定决策脚本，不是智能模型；便签仅在内存中。');

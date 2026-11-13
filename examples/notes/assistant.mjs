@@ -31,6 +31,7 @@ export function createNotesAssistant(provider, notes, { onRead = () => {}, onWri
   // #endregion resources
 
   // #region tools
+  // #region nodes
   const readNote = new Node({
     deps: { notes: reading.request() },
     run: (work) => work.resources.notes.read(work.input.id),
@@ -39,6 +40,8 @@ export function createNotesAssistant(provider, notes, { onRead = () => {}, onWri
     deps: { notes: writing.request() },
     run: (work) => work.resources.notes.append(work.input),
   });
+  // #endregion nodes
+  // #region tool-registration
   const result = { succeeded: (note) => ({ status: 'ok', content: [{ kind: 'text', text: JSON.stringify(note) }] }) };
   const assistant = new Tool({
     policyVersion: 'notes-assistant.v1',
@@ -48,12 +51,14 @@ export function createNotesAssistant(provider, notes, { onRead = () => {}, onWri
       writeNote: { node: writeNote, description: 'Append a new note without changing existing notes.', input: z.strictObject({ title: z.string().min(1), text: z.string().min(1) }), result },
     },
   });
+  // #endregion tool-registration
   // #endregion tools
 
   // #region model
   const contract = { key: 'example.notes.model.v1', request: requireModelRequest, reply: requireModelReply };
   const interactions = new Interactions().register(contract, { send: (request) => provider.complete(request) });
   const exchanges = new ModelExchanges();
+  // #region assembly
   const resources = new Resources()
     .register(new Resource(notes), reading)
     .register(new Resource(notes), writing)
@@ -61,5 +66,6 @@ export function createNotesAssistant(provider, notes, { onRead = () => {}, onWri
     .register(new Resource({ exchanges, channel: interactions.bind(contract), ...(provider.inspectRequest ? { inspection: provider } : {}) }), ToolModelResource);
   const runner = new Runner(new Scene(assistant), resources, interactions).build();
   return { runner, interactions };
+  // #endregion assembly
   // #endregion model
 }

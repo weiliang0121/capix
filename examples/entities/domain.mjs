@@ -25,6 +25,7 @@ export class Plan {
 }
 
 // 普通追加材料不需要消息 role、记忆 topic 或来源列表。
+// #region notes
 export class Notes {
   id = randomUUID();
   #revision = 0;
@@ -51,3 +52,4 @@ export class Notes {
     return item;
   }
 }
+// #endregion notes

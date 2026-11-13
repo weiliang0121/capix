@@ -1,6 +1,8 @@
 # 贡献 CAPiX
 
-欢迎提交最小复现、契约修正和实现改进。开始前阅读 [README](README.md)、[文档导航](docs/README.md) 和 [AGENTS.md](AGENTS.md)。AGENTS.md 维护代码协作约定，本文提供人的贡献入口。安全问题请遵循 [SECURITY.md](SECURITY.md)，不要公开披露漏洞细节。
+欢迎提交最小复现、契约修正和实现改进。如果你想先使用 CAPiX，请从[文档站的入门教程](https://weiliang0121.github.io/capix/guide/getting-started.html)开始；本文说明如何在仓库中开发、验证和提交改动。
+
+修改前查阅相关[公开契约](docs/README.md)与 [AGENTS.md](AGENTS.md) 中的协作约定。安全问题请遵循 [SECURITY.md](SECURITY.md)，不要公开披露漏洞细节。
 
 ## 准备与检查
 

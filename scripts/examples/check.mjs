@@ -9,7 +9,7 @@ const files = (await readdir(new URL('../../examples/', import.meta.url))).filte
 assert.deepEqual(files, entries.map((name) => `${name}.mjs`).sort(), 'Every public example entry must have a real execution check');
 for (const entry of entries) {
   const args = ['dictionary', 'presets'].includes(entry) ? ['scripts/examples/factories.mjs', entry] : [`examples/${entry}.mjs`];
-  const commands = entry === 'notes-assistant' ? [args, ['examples/notes/verify.mjs']] : [args];
+  const commands = entry === 'notes-assistant' ? [args, ['examples/notes/verify.mjs'], ['examples/notes/search.mjs']] : [args];
   for (const command of commands) {
     const child = spawnSync(process.execPath, command, { cwd: root, encoding: 'utf8', timeout: 30000, env: { ...process.env, NODE_OPTIONS: '' } });
     if (child.error || child.status !== 0) {

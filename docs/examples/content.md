@@ -4,7 +4,9 @@
 
 先执行 `pnpm build`，再执行下列命令。所有示例均在本机 Node.js 中运行。
 
-## entities
+## 让不同业务实体共享材料读取方式
+
+观察 Plan、Notes 和 Memory 如何通过各自来源适配进入同一个 View，同时保留独立的更新规则。运行后核对旧快照不变、旧读取依据被拒绝，以及显式纳入新便签后成员数增加。
 
 ```sh
 node examples/entities.mjs
@@ -12,7 +14,9 @@ node examples/entities.mjs
 
 <<< ../../examples/entities.mjs{js}
 
-## view
+## 准备材料后调整下一次读取范围
+
+将消息、总结和静态指令组织成材料，再用独立管理操作让旧助手消息退出 View。运行后两次捕获的成员数为 4 和 3，原始两条消息仍存在，第一份快照仍有 4 项。
 
 ```sh
 node examples/view.mjs
@@ -20,7 +24,9 @@ node examples/view.mjs
 
 <<< ../../examples/view.mjs{js}
 
-## view-membership
+## 按已知引用维护成员
+
+用刚追加的消息索引纳入新成员，并让指定旧成员退出，无需先读取全部正文。运行后核对重复执行同一维护决定不增加 View 修订，来源消息和此前快照都保持完整。
 
 ```sh
 node examples/view-membership.mjs
@@ -28,10 +34,14 @@ node examples/view-membership.mjs
 
 <<< ../../examples/view-membership.mjs{js}
 
-## 示例业务对象
+## 为业务内容定义自己的更新规则
+
+对照 Plan 的预期版本核验与 Notes 的只追加规则，理解内容格式、身份和版本如何由业务对象维护。这是上方实体示例使用的定义文件；固定旧材料并不代表保存了可查询历史或持久数据。
 
 <<< ../../examples/entities/domain.mjs{js}
 
-## 静态 Skill 来源
+## 把静态指令接入材料视图
+
+查看如何用来源适配提供指令的摘要和正文，再回到上方 View 示例核对它进入材料快照。这份示例内容构造后不变，因此版本固定；它不提供框架级 Skill 注册或执行能力。
 
 <<< ../../examples/view/skills.mjs{js}

@@ -3,22 +3,50 @@ layout: home
 markdownStyles: false
 hero:
   name: CAPiX
-  text: 把 Agent 的每一步，<br>组织清楚。
-  tagline: 可组合、可观测的 Agent 框架。从一个便签助手开始，用结构组织工作，用资源开放能力，逐层建立可靠边界。
+  text: 组合已有能力，<br>构筑自己的智能体。
+  tagline: 可组合、可观测、可恢复的 Agent 框架。通过资源接入能力，通过实体承载内容，让程序与模型共同推进工作。
   actions:
     - theme: brand
-      text: 从便签助手开始 →
+      text: 构建第一个智能体 →
       link: /guide/getting-started
     - theme: alt
       text: 为什么用 CAPiX
       link: /why
 ---
 
+<script setup>
+import CompositionVisual from './.vitepress/theme/CompositionVisual.vue';
+</script>
+
+<div class="home-composition">
+  <CompositionVisual />
+</div>
+
 <div class="home-content">
+  <nav class="home-learning" aria-label="文档学习路径">
+    <a href="./guide/getting-started">
+      <span class="principle-index">01 / 教程</span>
+      <h2>先运行，再动手</h2>
+      <p>构建便签助手，走通一次工具循环。</p>
+      <span class="home-learning-link">构建第一个智能体 →</span>
+    </a>
+    <a href="./concepts/">
+      <span class="principle-index">02 / 概念</span>
+      <h2>理解各层的职责</h2>
+      <p>沿着结构、资源与调用，认识组合方式。</p>
+      <span class="home-learning-link">阅读核心概念 →</span>
+    </a>
+    <a href="./README">
+      <span class="principle-index">03 / 参考</span>
+      <h2>按需查阅契约</h2>
+      <p>遇到具体问题，查清行为、依据与边界。</p>
+      <span class="home-learning-link">打开契约索引 →</span>
+    </a>
+  </nav>
   <div class="home-intro">
-    <p class="home-eyebrow">STRUCTURE → CAPABILITY → FACTS</p>
-    <h2>让程序和模型，各尽其责。</h2>
-    <p>程序表达固定步骤与业务规则，模型在登记工具中提出选择。CAPiX 将它们组织进同一棵结构，让能力的开放、内容的变化和调用的结果都有明确归属。</p>
+    <p class="home-eyebrow">BUILT THROUGH COMPOSITION</p>
+    <h2>复杂从组合中展开，可靠由每一层的边界维持。</h2>
+    <p>从已有的系统、接口、文件与代码开始，让模型参与理解、判断和生成。一个节点完成一部分工作，一个组合也能成为下一层的能力；每一层都说清可用的操作与结果的交接。</p>
   </div>
   <div class="home-principles">
     <section>
@@ -43,10 +71,18 @@ hero:
 
   <div class="home-next">
     <div>
-      <p class="home-eyebrow">LEARN BY BUILDING</p>
-      <h2>从可运行的代码，理解协作。</h2>
-      <p>快速开始提供完整源码与调用时序。从离线运行看清工具循环，再按需接入真实模型。</p>
+      <p class="home-eyebrow">WHY CAPiX</p>
+      <h2>这些边界，从具体的问题中来。</h2>
+      <p>了解这套分解方式的选择、适用场景与使用代价。</p>
     </div>
-    <a class="home-next-link" href="./guide/getting-started">打开快速开始 <span aria-hidden="true">→</span></a>
+    <a class="home-next-link" href="./why">为什么用 CAPiX <span aria-hidden="true">→</span></a>
   </div>
+
+  <section class="home-credits" aria-labelledby="creation-and-thanks">
+    <p class="home-eyebrow">ACKNOWLEDGEMENTS</p>
+    <h2 id="creation-and-thanks">创作与致谢</h2>
+    <p>CAPiX 由 <a href="https://github.com/weiliang0121">wei.liang</a> 与 Codex 共同设计和实现。</p>
+    <p>从最初的想法到架构、代码与验证，项目在持续的讨论与协作中逐步成形。</p>
+    <p>也感谢 GPT-6 Astra 及其他 Agent 在讨论、分析和交叉审查中提供的意见。</p>
+  </section>
 </div>

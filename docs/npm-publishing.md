@@ -6,7 +6,7 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；新增 `capix-tool` 已纳入该清单但尚未发布；此前目录迁移未改已有包名、版本或公开出口。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
 
-公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。完整职责见根 [README](../README.md#包与公开入口)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
+公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。包边界与职责见[架构与包](organization.md#包的所有者)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
 后续包名仍按可复用职责确定，必要限定词放在主体之前；不把 `server`、`services`、`apps` 等源码目录自动映射成发布名称。预设、集成与 UI 只有在职责和公开边界确定后才单独命名，参考装配不直接变成产品包。
 

@@ -1,10 +1,13 @@
 import { Notes } from '../entities/domain.mjs';
 
+// #region initial-values
 export const initialValues = [
   { title: '会议记录', text: '整理用户反馈；发送演示链接' },
   { title: '项目计划', text: '检查安装步骤' },
 ];
+// #endregion initial-values
 
+// #region materials
 export function createMaterials(values = initialValues) {
   const notes = new Notes(); // 仅内存，不落盘，不设置 checkpoint。
   const originals = values.map((value) => notes.append(value));
@@ -16,3 +19,4 @@ export function createMaterials(values = initialValues) {
   };
   return { notes, originals, request };
 }
+// #endregion materials

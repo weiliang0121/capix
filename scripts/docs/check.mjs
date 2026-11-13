@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, extname, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,6 +20,37 @@ async function markdownFiles(directory) {
   return groups.flat();
 }
 
+// Match VitePress's JavaScript region markers after trimming each line. Nested
+// marker lines are omitted from rendered snippets, so they do not count as content.
+const regionMarker = /^\/\/ ?#?((?:end)?region) ([\w*-]+)$/;
+
+function checkSnippet(source, region, label) {
+  if (!region) return assert.ok(source.trim(), `${label}: empty snippet`);
+  const lines = source.split('\n');
+  const starts = [];
+  for (const [index, line] of lines.entries()) {
+    const marker = regionMarker.exec(line.trim());
+    if (marker?.[1] === 'region' && marker[2] === region) starts.push(index);
+  }
+  assert.equal(starts.length, 1, `${label}: region ${region} must exist exactly once (found ${starts.length})`);
+  const stack = [region];
+  const content = [];
+  for (let index = starts[0] + 1; index < lines.length; index++) {
+    const marker = regionMarker.exec(lines[index].trim());
+    if (!marker) content.push(lines[index]);
+    else if (marker[1] === 'region') stack.push(marker[2]);
+    else {
+      assert.equal(marker[2], stack.at(-1), `${label}: region ${region} has mismatched closing marker ${marker[2]}`);
+      stack.pop();
+      if (!stack.length) {
+        assert.ok(content.join('\n').trim(), `${label}: empty region ${region}`);
+        return;
+      }
+    }
+  }
+  assert.fail(`${label}: unclosed region ${region}`);
+}
+
 export function checkReference(file, href, { snippet = false, repositoryRoot = root, docsRoot = docs } = {}) {
   if (!href || /^(?:[a-z][a-z\d+.-]*:|#|\/\/)/i.test(href)) return;
   const target = decodeURIComponent(href.split(/[?#]/)[0]);
@@ -31,7 +62,10 @@ export function checkReference(file, href, { snippet = false, repositoryRoot = r
     candidates.some((candidate) => existsSync(candidate)),
     `${relative(repositoryRoot, file)}: missing ${snippet ? 'snippet' : 'link'} ${href}`,
   );
-  if (snippet) assert.ok(relative(resolve(repositoryRoot, 'examples'), path).split('/')[0] !== '..', `${file}: snippet must come from public examples`);
+  if (snippet) {
+    assert.ok(relative(resolve(repositoryRoot, 'examples'), path).split('/')[0] !== '..', `${file}: snippet must come from public examples`);
+    checkSnippet(readFileSync(path, 'utf8'), href.split('#')[1], `${relative(repositoryRoot, file)}: snippet ${href}`);
+  }
 }
 
 export async function checkDocs() {
@@ -50,8 +84,8 @@ export async function checkDocs() {
     if (/(?:\.\.\/)+(?:capix-lab|capix-notes|capix-explorations)(?:\/|[\s`'"])/.test(source)) failures.push(`${relative(root, file)}: contains a private sibling repository path`);
     const prose = source.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
     for (const match of prose.matchAll(/\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)) check(file, match[1]);
-    for (const match of prose.matchAll(/^<<<\s+([^\s#{]+)(?:#[^\s{]+)?(?:\{[^}]*\})?(?:[ \t]*\[[^\]\n]+\])?\s*$/gm)) {
-      check(file, match[1], { snippet: true });
+    for (const match of prose.matchAll(/^<<<\s+([^\s#{]+)(#[^\s{]+)?(?:\{[^}]*\})?(?:[ \t]*\[[^\]\n]+\])?\s*$/gm)) {
+      check(file, `${match[1]}${match[2] ?? ''}`, { snippet: true });
       snippets.add(resolve(dirname(file), match[1]));
     }
   }
