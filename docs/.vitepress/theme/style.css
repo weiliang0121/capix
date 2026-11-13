@@ -1,60 +1,110 @@
+/* Shared neutral roles keep the site and embedded diagrams in the same palette. */
 :root {
-  --vp-c-brand-1: #16786e;
-  --vp-c-brand-2: #11685f;
-  --vp-c-brand-3: #16786e;
-  --vp-c-brand-soft: rgba(22, 120, 110, 0.09);
-  --vp-c-bg: #fcfcfa;
-  --vp-c-bg-alt: #f4f5f1;
-  --vp-c-bg-soft: #f1f3ef;
-  --vp-c-text-1: #202e2d;
-  --vp-c-text-2: #52615f;
-  --vp-c-text-3: #657572;
-  --vp-c-divider: #dce2dc;
+  color-scheme: light;
+  --capix-background: #fff;
+  --capix-foreground: #0a0a0a;
+  --capix-card: #fff;
+  --capix-secondary: #f5f5f5;
+  --capix-muted-foreground: #737373;
+  --capix-primary: #171717;
+  --capix-primary-foreground: #fafafa;
+  --capix-primary-hover: #404040;
+  --capix-border: #e5e5e5;
+  --capix-input: #e5e5e5;
+  --capix-ring: #a1a1a1;
+  --capix-soft: rgb(0 0 0 / 5%);
+  --capix-chart-1: #737373;
+  --capix-chart-2: #a1a1a1;
+  --capix-chart-3: #525252;
+  --capix-chart-4: #404040;
+  --capix-chart-5: #262626;
+  --capix-paper: var(--capix-card);
+  --capix-paper-back: var(--capix-secondary);
+  --capix-grid: var(--capix-border);
+  --capix-line: var(--capix-muted-foreground);
+  --capix-note: var(--capix-secondary);
   --vp-font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --vp-font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  --vp-home-hero-name-color: var(--vp-c-brand-1);
+  --vp-font-family-mono: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --vp-c-brand-1: var(--capix-primary);
+  --vp-c-brand-2: var(--capix-primary-hover);
+  --vp-c-brand-3: var(--capix-primary);
+  --vp-c-brand-soft: var(--capix-soft);
+  --vp-c-bg: var(--capix-background);
+  --vp-c-bg-alt: var(--capix-background);
+  --vp-c-bg-elv: var(--capix-card);
+  --vp-c-bg-soft: var(--capix-secondary);
+  --vp-c-text-1: var(--capix-foreground);
+  --vp-c-text-2: var(--capix-muted-foreground);
+  --vp-c-text-3: var(--capix-muted-foreground);
+  --vp-c-divider: var(--capix-border);
+  --vp-c-border: var(--capix-input);
+  --vp-c-gutter: var(--capix-border);
+  --vp-c-gray-1: #d4d4d4;
+  --vp-c-gray-2: #e5e5e5;
+  --vp-c-gray-3: #f5f5f5;
+  --vp-c-gray-soft: var(--capix-soft);
+  --vp-c-success-1: var(--capix-primary);
+  --vp-c-success-soft: var(--capix-soft);
+  --vp-c-important-1: var(--capix-primary);
+  --vp-c-important-soft: var(--capix-soft);
+  --vp-c-warning-1: var(--capix-primary);
+  --vp-c-warning-soft: var(--capix-soft);
+  --vp-c-danger-1: var(--capix-primary);
+  --vp-c-danger-soft: var(--capix-soft);
+  --vp-c-caution-1: var(--capix-primary);
+  --vp-c-caution-soft: var(--capix-soft);
+  --vp-home-hero-name-color: var(--capix-foreground);
   --vp-home-hero-image-background-image: none;
-  --vp-code-block-bg: #f0f3ef;
-  --vp-code-tab-bg: #e8ede7;
-  --vp-button-brand-bg: #16786e;
-  --vp-button-brand-hover-bg: #11685f;
-  --vp-button-brand-active-bg: #0e5a52;
-  --vp-button-brand-text: #fff;
-  --vp-button-brand-hover-text: #fff;
-  --vp-button-alt-bg: transparent;
-  --vp-button-alt-hover-bg: var(--vp-c-bg-soft);
-  --vp-button-alt-border: var(--vp-c-divider);
-  --capix-paper: #fff;
-  --capix-paper-back: #e2eae3;
-  --capix-grid: #d7e0d9;
-  --capix-line: #7a9990;
-  --capix-note: #f4f7ed;
+  --vp-code-color: var(--capix-foreground);
+  --vp-code-bg: var(--capix-secondary);
+  --vp-code-block-bg: var(--capix-card);
+  --vp-code-block-color: var(--capix-foreground);
+  --vp-code-tab-bg: var(--capix-secondary);
+  --vp-code-line-highlight-color: var(--capix-soft);
+  --vp-input-bg-color: var(--capix-card);
+  --vp-input-border-color: var(--capix-input);
+  --vp-button-brand-bg: var(--capix-primary);
+  --vp-button-brand-border: var(--capix-primary);
+  --vp-button-brand-hover-bg: var(--capix-primary-hover);
+  --vp-button-brand-hover-border: var(--capix-primary-hover);
+  --vp-button-brand-active-bg: var(--capix-primary-hover);
+  --vp-button-brand-text: var(--capix-primary-foreground);
+  --vp-button-brand-hover-text: var(--capix-primary-foreground);
+  --vp-button-brand-active-text: var(--capix-primary-foreground);
+  --vp-button-alt-bg: var(--capix-card);
+  --vp-button-alt-hover-bg: var(--capix-secondary);
+  --vp-button-alt-border: var(--capix-input);
+  --vp-button-alt-hover-border: var(--capix-input);
+  --vp-button-alt-active-bg: var(--capix-secondary);
+  --vp-button-alt-active-border: var(--capix-input);
+  --vp-local-search-highlight-bg: var(--capix-primary);
+  --vp-local-search-highlight-text: var(--capix-primary-foreground);
+  --vp-local-search-result-selected-bg: var(--capix-secondary);
+  --vp-backdrop-bg-color: rgb(0 0 0 / 60%);
 }
 
 .dark {
-  --vp-c-brand-1: #7bd4be;
-  --vp-c-brand-2: #a2e5d5;
-  --vp-c-brand-3: #2f9984;
-  --vp-c-brand-soft: rgba(123, 212, 190, 0.1);
-  --vp-c-bg: #161e1f;
-  --vp-c-bg-alt: #11191a;
-  --vp-c-bg-soft: #1d2829;
-  --vp-c-text-1: #e4ede8;
-  --vp-c-text-2: #b0c2bc;
-  --vp-c-text-3: #91a6a0;
-  --vp-c-divider: #32433f;
-  --vp-code-block-bg: #11191a;
-  --vp-code-tab-bg: #1e2b2b;
-  --vp-button-brand-bg: #7bd4be;
-  --vp-button-brand-hover-bg: #a2e5d5;
-  --vp-button-brand-active-bg: #b6ecde;
-  --vp-button-brand-text: #102c26;
-  --vp-button-brand-hover-text: #102c26;
-  --capix-paper: #1e2b2b;
-  --capix-paper-back: #32443c;
-  --capix-grid: #32453f;
-  --capix-line: #709a8e;
-  --capix-note: #25342c;
+  color-scheme: dark;
+  --capix-background: #0a0a0a;
+  --capix-foreground: #fafafa;
+  --capix-card: #171717;
+  --capix-secondary: #262626;
+  --capix-muted-foreground: #a1a1a1;
+  --capix-primary: #e5e5e5;
+  --capix-primary-foreground: #171717;
+  --capix-primary-hover: #d4d4d4;
+  --capix-border: rgb(255 255 255 / 10%);
+  --capix-input: rgb(255 255 255 / 15%);
+  --capix-ring: #737373;
+  --capix-soft: rgb(255 255 255 / 6%);
+  --capix-chart-1: #d4d4d4;
+  --capix-chart-2: #737373;
+  --capix-chart-3: #525252;
+  --capix-chart-4: #404040;
+  --capix-chart-5: #262626;
+  --vp-c-gray-1: #404040;
+  --vp-c-gray-2: #303030;
+  --vp-c-gray-3: #262626;
 }
 
 ::selection {
@@ -64,7 +114,7 @@ a:focus-visible,
 button:focus-visible,
 summary:focus-visible,
 [tabindex]:focus-visible {
-  outline: 3px solid var(--vp-c-brand-1);
+  outline: 2px solid var(--capix-ring);
   outline-offset: 4px;
 }
 .VPNavBarTitle .title {
@@ -73,7 +123,7 @@ summary:focus-visible,
   font-weight: 750;
 }
 .VPButton {
-  border-radius: 6px !important;
+  border-radius: 8px !important;
 }
 .VPHome {
   margin-bottom: 0 !important;
@@ -139,8 +189,8 @@ summary:focus-visible,
   overflow: hidden;
   border: 1px solid var(--vp-c-divider);
   border-radius: 8px;
-  background: var(--vp-c-bg);
-  box-shadow: 0 16px 44px -24px rgba(25, 56, 43, 0.28);
+  background: var(--capix-card);
+  box-shadow: 0 16px 44px -24px rgb(0 0 0 / 24%);
   text-align: left;
 }
 .home-visual-heading {
@@ -308,8 +358,9 @@ summary:focus-visible,
   gap: 40px;
   justify-content: space-between;
   padding: 36px;
-  border-block: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg-alt);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--capix-card);
 }
 .home-next .home-eyebrow {
   margin-bottom: 12px;
@@ -362,7 +413,7 @@ summary:focus-visible,
 .vp-doc div[class*='language-'],
 .vp-code-group {
   border: 1px solid var(--vp-c-divider);
-  border-radius: 6px;
+  border-radius: 8px;
 }
 .vp-doc div[class*='language-'] {
   margin-top: 24px;
@@ -407,7 +458,7 @@ summary:focus-visible,
   border-radius: 0;
 }
 .vp-code-group .tabs input:focus-visible + label {
-  outline: 2px solid var(--vp-c-brand-1);
+  outline: 2px solid var(--capix-ring);
   outline-offset: -4px;
 }
 .vp-doc table {
@@ -420,16 +471,57 @@ summary:focus-visible,
   background: var(--vp-c-bg-soft);
 }
 .vp-doc .custom-block {
-  border-radius: 4px;
-  border-left: 3px solid var(--vp-c-brand-1);
+  border: 1px solid var(--capix-border);
+  border-left: 3px solid var(--capix-ring);
+  border-radius: 8px;
   padding: 18px 22px;
+  background: var(--capix-card);
 }
 .VPSidebarItem.level-0 > .item > .text {
   font-size: 12px;
   letter-spacing: 0.03em;
 }
 .VPDocFooter .pager-link {
+  border-radius: 8px;
+}
+
+.VPNavBar .content-body,
+.VPNavBar .curtain::before {
+  background: var(--capix-background) !important;
+}
+.VPSidebar {
+  border-right: 1px solid var(--capix-border);
+}
+.VPSidebarItem.is-active > .item > .link > .text {
+  font-weight: 600;
+}
+.VPSidebarItem.level-1 > .item {
   border-radius: 6px;
+  padding-inline: 8px;
+  margin-inline: -8px;
+}
+.VPSidebarItem.level-1.is-active > .item,
+.VPSidebarItem.level-1 > .item:hover {
+  background: var(--capix-soft);
+}
+.VPNavBarSearch .DocSearch-Button {
+  border: 1px solid var(--capix-input);
+  border-radius: 8px;
+  background: var(--capix-card);
+}
+.VPSwitch {
+  border-color: var(--capix-input);
+  background: var(--capix-secondary);
+}
+.VPSwitch .check {
+  background: var(--capix-card);
+}
+.VPDocFooter .pager-link {
+  background: var(--capix-card);
+}
+.VPDocFooter .pager-link:hover {
+  border-color: var(--capix-ring);
+  background: var(--capix-secondary);
 }
 
 @media (min-width: 960px) {

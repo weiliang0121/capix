@@ -72,25 +72,32 @@ async function render() {
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       themeVariables: {
         darkMode: dark,
-        background: dark ? '#151e22' : '#ffffff',
-        primaryColor: dark ? '#193c38' : '#e9f5f0',
-        primaryTextColor: dark ? '#e4eee8' : '#20362e',
-        primaryBorderColor: dark ? '#578a79' : '#76a28e',
-        secondaryColor: dark ? '#26333a' : '#edf2f5',
-        tertiaryColor: dark ? '#352f24' : '#faf2df',
-        lineColor: dark ? '#a9bcb2' : '#597267',
-        textColor: dark ? '#e4eee8' : '#20362e',
-        clusterBkg: dark ? '#1c282c' : '#f5f8f6',
-        clusterBorder: dark ? '#40554a' : '#d1ddd5',
-        actorBkg: dark ? '#193c38' : '#e9f5f0',
-        actorBorder: dark ? '#578a79' : '#76a28e',
-        actorTextColor: dark ? '#e4eee8' : '#20362e',
-        actorLineColor: dark ? '#688075' : '#b3c6bb',
-        signalColor: dark ? '#c1d3c9' : '#425c50',
-        signalTextColor: dark ? '#e4eee8' : '#20362e',
-        noteBkgColor: dark ? '#352f24' : '#faf2df',
-        noteBorderColor: dark ? '#8e794c' : '#d7c38c',
-        noteTextColor: dark ? '#eee4cc' : '#564629',
+        background: dark ? '#171717' : '#ffffff',
+        primaryColor: dark ? '#171717' : '#ffffff',
+        primaryTextColor: dark ? '#fafafa' : '#0a0a0a',
+        primaryBorderColor: dark ? '#737373' : '#a1a1a1',
+        secondaryColor: dark ? '#262626' : '#f5f5f5',
+        tertiaryColor: dark ? '#262626' : '#f5f5f5',
+        lineColor: '#737373',
+        textColor: dark ? '#fafafa' : '#0a0a0a',
+        clusterBkg: dark ? '#262626' : '#f5f5f5',
+        clusterBorder: dark ? '#404040' : '#d4d4d4',
+        edgeLabelBackground: dark ? '#171717' : '#ffffff',
+        actorBkg: dark ? '#171717' : '#ffffff',
+        actorBorder: dark ? '#737373' : '#a1a1a1',
+        actorTextColor: dark ? '#fafafa' : '#0a0a0a',
+        actorLineColor: dark ? '#525252' : '#a1a1a1',
+        signalColor: dark ? '#d4d4d4' : '#525252',
+        signalTextColor: dark ? '#fafafa' : '#0a0a0a',
+        labelBoxBkgColor: dark ? '#262626' : '#f5f5f5',
+        labelBoxBorderColor: dark ? '#525252' : '#d4d4d4',
+        labelTextColor: dark ? '#fafafa' : '#0a0a0a',
+        loopTextColor: dark ? '#fafafa' : '#0a0a0a',
+        activationBkgColor: dark ? '#404040' : '#e5e5e5',
+        activationBorderColor: '#737373',
+        noteBkgColor: dark ? '#262626' : '#f5f5f5',
+        noteBorderColor: dark ? '#525252' : '#a1a1a1',
+        noteTextColor: dark ? '#fafafa' : '#0a0a0a',
         fontSize: '14px',
       },
       flowchart: { ...theme, useMaxWidth: false, curve: 'basis', nodeSpacing: 36, rankSpacing: 44, padding: 18 },
@@ -182,7 +189,7 @@ watch([() => props.source, isDark], render);
   margin: 28px 0;
   border: 1px solid var(--vp-c-divider);
   border-radius: 10px;
-  background: var(--vp-c-bg);
+  background: var(--capix-card);
   overflow: hidden;
 }
 .capix-diagram-toolbar {
@@ -216,13 +223,15 @@ watch([() => props.source, isDark], render);
 }
 .capix-diagram-controls button {
   padding: 3px 7px;
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   font-size: 12px;
   line-height: 24px;
   color: var(--vp-c-text-2);
 }
-.capix-diagram-controls button:hover {
-  background: var(--vp-c-default-soft);
+.capix-diagram-controls button:hover:not(:disabled) {
+  border-color: var(--capix-input);
+  background: var(--capix-soft);
   color: var(--vp-c-brand-1);
 }
 .capix-diagram-controls button:disabled {
@@ -232,7 +241,7 @@ watch([() => props.source, isDark], render);
 .capix-diagram-controls button:focus-visible,
 .capix-diagram-viewport:focus-visible,
 .capix-diagram-source summary:focus-visible {
-  outline: 2px solid var(--vp-c-brand-1);
+  outline: 2px solid var(--capix-ring);
   outline-offset: -2px;
 }
 .capix-diagram-scale {
@@ -284,11 +293,11 @@ watch([() => props.source, isDark], render);
   padding: 0;
   border: 1px solid var(--vp-c-divider);
   border-radius: 10px;
-  background: var(--vp-c-bg);
+  background: var(--capix-card);
   color: var(--vp-c-text-1);
 }
 .capix-diagram-dialog::backdrop {
-  background: rgb(8 20 16 / 65%);
+  background: rgb(0 0 0 / 70%);
   backdrop-filter: blur(3px);
 }
 .capix-diagram-expanded {

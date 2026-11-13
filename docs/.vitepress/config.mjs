@@ -9,6 +9,7 @@ export default defineConfig({
   title: 'CAPiX',
   description: '独立的 C/S 可观测 Agent 框架',
   lang: 'zh-CN',
+  appearance: 'dark',
   // Support preview under a subpath without fixing a hosting destination.
   base,
   head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }]],
@@ -59,6 +60,7 @@ export default defineConfig({
     darkModeSwitchTitle: '切换深色',
   },
   markdown: {
+    theme: { light: 'github-light', dark: 'github-dark-default' },
     codeCopyButtonTitle: '复制代码',
     config(md) {
       const fence = md.renderer.rules.fence;
