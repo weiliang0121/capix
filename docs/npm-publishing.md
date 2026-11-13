@@ -48,6 +48,7 @@ pnpm release:check
 - 修改需要发布的行为或公开契约后，作者运行 `pnpm changeset`，选择实际修改的包和 bump 类型，说明用户可观察到的变化。Changeset 随代码合并到 main 后，`Version packages` 自动创建或更新版本 PR，执行 `pnpm release:version`，更新版本、CHANGELOG 与锁文件。当前使用 `changesets/action/version` v2.1.2 配合 CLI v3.0.3。
 - 内置 `GITHUB_TOKEN` 创建或更新版本 PR 时，`opened`、`synchronize`、`reopened` 对应的 PR CI 运行需要批准。维护者可使用 **Approve workflows to run** 批准，或在 Actions 手动运行 `CI` 并选择版本 PR 分支，核对该分支当前提交的结果。参见 [GitHub 工作流触发规则](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)。
 - 人工审阅并合并版本 PR 后，在本地拉取 main 的已审阅提交并发布。合并本身不会发布 npm。
+- 工作流会将 Changesets 默认 PR 文案中的“自动发布 npm”改为本仓的手动发布说明，保留生成的版本说明；这一步不执行发布。
 
 ```sh
 git switch main

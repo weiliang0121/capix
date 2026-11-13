@@ -37,9 +37,32 @@ jobs:
           appendFileSync(process.env.GITHUB_OUTPUT, `has_releases=${plan.releases.length > 0}\n`);
           JS
       - name: Create version pull request
+        id: version
         if: steps.plan.outputs.has_releases == 'true'
         uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2, Changesets v3
         with:
           script: pnpm release:version
           commit-message: 'chore: version packages'
           pr-title: 'chore: version packages'
+      - name: Describe manual npm publishing
+        if: steps.version.outputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.version.outputs.pr-number }}
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          import { writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const args = [process.env.PR_NUMBER, '--repo', process.env.GITHUB_REPOSITORY];
+          const body = execFileSync('gh', ['pr', 'view', ...args, '--json', 'body', '--jq', '.body'], { encoding: 'utf8' });
+          const original = "When you're ready to do a release, you can merge this and the packages will be published to npm automatically.";
+          const replacement = 'Merging this PR updates package versions and changelogs only. npm publishing is performed explicitly by a maintainer from a validated local checkout.';
+          if (body.includes(original)) {
+            const path = join(process.env.RUNNER_TEMP, 'capix-version-pr-body.md');
+            writeFileSync(path, body.replace(original, replacement));
+            execFileSync('gh', ['pr', 'edit', ...args, '--body-file', path], { stdio: 'inherit' });
+          } else if (!body.includes(replacement)) {
+            throw new Error('Unexpected Changesets PR description; review the publishing instructions.');
+          }
+          JS
