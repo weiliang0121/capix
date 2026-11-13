@@ -4,7 +4,7 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，由 `scripts/release/packages.mjs` 显式列举；新增 `capix-tool` 已纳入该清单但尚未发布；此前目录迁移未改已有包名、版本或公开出口。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
+公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，包含 `capix-tool`，由 `scripts/release/packages.mjs` 显式列举。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
 
 公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。包边界与职责见[架构与包](organization.md#包的所有者)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
@@ -32,7 +32,9 @@ pnpm release:check
 
 发布由维护者在本地终端完成。GitHub 只保留 CI 与自动版本 PR，不需要配置 npm GitHub token、trusted publisher 或发布 Environment。
 
-原 17 包的 `0.1.0` 已发布。[版本 PR #1](https://github.com/weiliang0121/capix/pull/1) 已合并，源码中的 18 包已准备为 `0.2.0`，尚未发布 npm。本次包含 ModelExchanges 固定起点、新 Tool、类型化领域事实、独立 Memory、领域／协议出口归位及 View 来源适配；其中有破坏性公开契约修订，消费方应阅读各包 CHANGELOG，不能只替换版本号。
+原 17 包从 `0.1.0` 开始发布；[版本 PR #1](https://github.com/weiliang0121/capix/pull/1) 将包含 Tool 的 18 包版本统一为 `0.2.0`。该版本包含 ModelExchanges 固定起点、新 Tool、类型化领域事实、独立 Memory、领域／协议出口归位及 View 来源适配；其中有破坏性公开契约修订，消费方应阅读各包 CHANGELOG，不能只替换版本号。
+
+版本 PR 与 npm registry 是两份不同的状态。确认包已发布时，查询 registry 中的准确版本，例如 `npm view @weiliang0121/capix-tool@0.2.0 version --registry=https://registry.npmjs.org`，不以 Git 中的版本号作为上传成功的依据。
 
 1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次 18 个准确包名及其发布权限。本地验证不能证明远端名称占用或发布权限。
 2. 确认待发布版本 PR 已按下节流程审阅并合并；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。已经合并的版本不重复升号。在干净的已审阅提交上核对 18 包 fixed 组并完成上述验证。不要重发 registry 中已有的准确版本；`release:publish` 会拒绝尚未处理的 changesets。
