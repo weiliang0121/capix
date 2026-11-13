@@ -1,0 +1,35 @@
+name: 能力建议
+description: 提出具体使用场景、契约改进或新能力。
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先查阅[公开契约](https://github.com/weiliang0121/capix/blob/main/docs/README.md)和已有 issue。
+        建议被记录不代表已纳入 API 或发布计划；安全问题遵循[安全报告](https://github.com/weiliang0121/capix/blob/main/SECURITY.md)，不要公开漏洞细节。
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 具体场景与问题
+      description: 谁在什么情况下受阻？当前能力为何不足？请使用可公开、可独立理解的例子。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的行为
+      description: 说明预期输入、输出和可观察结果；涉及契约、包职责或生命周期时说明变化与应保留的不变量。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 现有办法与替代方案
+      description: 当前如何处理？为什么现有组合或外部适配不足？
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: 验证方式与影响
+      description: 可补充成功标准、离线验证办法、相关公开契约以及预期的兼容性或恢复影响。

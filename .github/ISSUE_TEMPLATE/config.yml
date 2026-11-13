@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 阅读公开契约
+    url: https://github.com/weiliang0121/capix/blob/main/docs/README.md
+    about: 使用方式和当前能力以仓库文档、实现与回归为准。
+  - name: 阅读贡献说明
+    url: https://github.com/weiliang0121/capix/blob/main/CONTRIBUTING.md
+    about: 查看本地验证、PR 和 Changesets 要求。
+  - name: 安全问题报告说明
+    url: https://github.com/weiliang0121/capix/blob/main/SECURITY.md
+    about: 请勿在公开 issue 或 PR 披露漏洞细节；先确认私下报告渠道可用。

@@ -24,6 +24,7 @@
 
 - [贡献](../CONTRIBUTING.md)、[协作约定](../AGENTS.md)、[安全报告](../SECURITY.md)。
 - [测试归属与命令](testing-organization-design.md)、[包分发与发布](npm-publishing.md)。
+- [GitHub 维护流程](github-maintenance.md)：issue、PR、分支保护与版本维护。
 - [文档站构建与发布](site-publishing.md)：本地预览与 GitHub Pages。
 
 框架契约、示例与正式测试均可仅凭本仓运行。文档站构建不读取外部仓库或个人开发资料；示例执行在 Node.js 中，网站展示不代表浏览器执行内核。

@@ -32,8 +32,10 @@ pnpm release:check
 
 发布由维护者在本地终端完成。GitHub 只保留 CI 与自动版本 PR，不需要配置 npm GitHub token、trusted publisher 或发布 Environment。
 
+原 17 包的 `0.1.0` 已发布。[版本 PR #1](https://github.com/weiliang0121/capix/pull/1) 已合并，源码中的 18 包已准备为 `0.2.0`，尚未发布 npm。本次包含 ModelExchanges 固定起点、新 Tool、类型化领域事实、独立 Memory、领域／协议出口归位及 View 来源适配；其中有破坏性公开契约修订，消费方应阅读各包 CHANGELOG，不能只替换版本号。
+
 1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次 18 个准确包名及其发布权限。本地验证不能证明远端名称占用或发布权限。
-2. 原 17 包的 `0.1.0` 首发已完成。当前待发布 changesets 包含 ModelExchanges 固定起点、新 Tool、类型化领域事实、独立 Memory、领域／协议出口归位及 View 来源适配。它们包含破坏性公开契约修订，消费方不能只替换版本号。先按下节流程审阅并合并版本 PR；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。核对 18 包 fixed 组的版本计划后，在干净的已审阅提交上完成上述验证。不要直接重发已有 `0.1.0`；`release:publish` 会拒绝尚未处理的 changesets。
+2. 确认待发布版本 PR 已按下节流程审阅并合并；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。已经合并的版本不重复升号。在干净的已审阅提交上核对 18 包 fixed 组并完成上述验证。不要重发 registry 中已有的准确版本；`release:publish` 会拒绝尚未处理的 changesets。
 3. 在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天；发布时按终端提示完成认证。
 4. 执行 `pnpm release:publish`，上传当前尚未存在的版本。此命令会写入 npm，只有决定正式发布时才执行。
 

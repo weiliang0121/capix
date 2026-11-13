@@ -1,0 +1,50 @@
+name: 缺陷报告
+description: 报告可复现的行为、契约或文档问题。
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先阅读[贡献说明](https://github.com/weiliang0121/capix/blob/main/CONTRIBUTING.md)，并搜索已有 issue。
+        不要公开漏洞细节、凭证或真实用户数据；安全问题遵循[安全报告](https://github.com/weiliang0121/capix/blob/main/SECURITY.md)。
+  - type: input
+    id: version
+    attributes:
+      label: 包与版本或提交
+      description: 写出受影响的准确包名、版本；使用源码时提供提交 SHA。
+      placeholder: '@weiliang0121/capix-runtime@版本，或提交 SHA'
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: Node、包管理器、操作系统，以及与复现有关的配置。请移除密钥和私有路径。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现
+      description: 提供能在本仓或独立消费者中执行的步骤、命令和最小代码，使用合成数据与离线模型返回。文档问题请给出页面和具体段落。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果及依据
+      description: 描述预期行为，尽可能链接公开契约。
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 给出观察到的行为、错误和必要日志；发送前移除凭证、真实对话和敏感信息。
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影响与已有排查
+      description: 可补充影响范围、已尝试的办法及关联 issue。
