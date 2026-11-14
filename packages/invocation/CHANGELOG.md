@@ -1,5 +1,15 @@
 # @weiliang0121/capix-invocation
 
+## 0.3.0
+
+### Patch Changes
+
+- @weiliang0121/capix-changes@0.3.0
+  - @weiliang0121/capix-checkpoint@0.3.0
+  - @weiliang0121/capix-contracts@0.3.0
+  - @weiliang0121/capix-diagnostics@0.3.0
+  - @weiliang0121/capix-resources@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

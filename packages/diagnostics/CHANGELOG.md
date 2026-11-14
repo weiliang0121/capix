@@ -1,5 +1,11 @@
 # @weiliang0121/capix-diagnostics
 
+## 0.3.0
+
+### Patch Changes
+
+- @weiliang0121/capix-contracts@0.3.0
+
 ## 0.2.0
 
 ### Patch Changes
