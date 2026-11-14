@@ -32,6 +32,12 @@ const scene = new Scene(answer);
 
 参数 Schema 只校验，不做默认填充、转换或移除字段。非法 JSON、未知工具和 Schema 不匹配形成明确错误反馈，不创建工具子调用。Schema 自身故障及改变参数的解析结果会终止推进。工具的普通业务失败只有提供 `result.failed` 才转成反馈；取消、CP、资源持久化等受保护故障不进入业务失败映射。映射必须纯、无副作用；允许异步，但恢复可能重新执行尚未保存接纳的映射。
 
+预检错误反馈是 `status: 'error'` 的 JSON 文本，保留 `code`、通用 `message`，并标记 `stage: 'preflight'`、`executed: false`。Schema 不匹配还包含 `issues` 和 `truncated`：每项给出 `path`、静态 `reason`，类型不匹配时可给出白名单内的 `expected` 类型。不会回传参数值、原始参数、Zod 自定义消息、候选枚举值或未登记键。
+
+`path` 只沿构造时固定的公开 JSON Schema 的直接 `properties` / 数组 `items` 读取，数组下标表示为 `'*'`；动态 record 键、组合分支、引用或不能安全定位的路径停在已确认前缀，`pathTruncated: true` 表示省略后续部分。最多 6 项、每条路径最多 4 段、字段名最多 64 个 UTF-16 单元；`{ issues, truncated }` 的 JSON UTF-8 编码不超过 2048 字节，超限从尾部移除。`truncated` 表示未包含全部问题。作者配置的更小反馈预算仍可拒绝这些反馈，不会扩大预算或自动执行、修正、重试工具。
+
+预检反馈在恢复时按相同规则重新核对。此次规则以目录内 `precheckVersion: 2` 固定，因此此前目录的 CP 明确拒绝恢复；不升级或改写旧材料。
+
 构造时固定登记和配置，一棵结构内每个成员实例唯一。`policyVersion` 由作者维护，覆盖 JSON Schema 无法表示的细化判断和映射行为。目录摘要还包含 Schema、成员顺序/种类/CP 契约及预算。Zod 升级可能改变摘要并拒绝原 CP 恢复。
 
 ## 普通资源登记

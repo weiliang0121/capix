@@ -77,6 +77,11 @@ test('unknown, malformed JSON and schema mismatches close feedback without execu
   );
   assert.match(feedback[0].content[0].text, /UNKNOWN_TOOL/);
   assert.match(feedback[1].content[0].text, /INVALID_ARGUMENTS/);
+  for (const item of feedback) {
+    const payload = JSON.parse(item.content[0].text);
+    assert.equal(payload.stage, 'preflight');
+    assert.equal(payload.executed, false);
+  }
   await model.interactions.settled();
   model.interactions.close();
 });
@@ -367,3 +372,114 @@ for (const inspection of [undefined, { inspectRequest: () => ({ requestBytes: 1,
     await model.interactions.settled();
     model.interactions.close();
   });
+
+for (const checkpoint of [false, true])
+  test(`preflight diagnostics identify declared fields without values or custom messages (checkpoint=${checkpoint})`, async () => {
+    const { z } = await import('zod');
+    const lookup = member('lookup', () => assert.fail('invalid arguments executed'), checkpoint);
+    lookup.input = z.strictObject({ command: z.string(), timeout: z.number(), nested: z.strictObject({ enabled: z.boolean() }), items: z.array(z.strictObject({ name: z.string() })), entries: z.record(z.string(), z.number()), custom: z.string().refine(() => false, 'SECRET_CUSTOM_MESSAGE') });
+    const model = host((request) => (request.exchanges.length ? final : reply('invalid', [call('a', 'lookup', { command: 42, timeout: 'SECRET_VALUE', nested: { enabled: 'SECRET_VALUE' }, items: [{ name: false }], entries: { SECRET_RECORD_KEY: 'SECRET_VALUE' }, custom: 'SECRET_VALUE', SECRET_UNKNOWN_KEY: 'SECRET_VALUE' })])));
+    const fixture = assembly({ policyVersion: 'diagnostics.v1', checkpoint, tools: { lookup } }, model, { store: journal().store });
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      const text = model.sent[1].exchanges[0].feedback[0].content[0].text;
+      const feedback = JSON.parse(text);
+      assert.equal(feedback.stage, 'preflight');
+      assert.equal(feedback.executed, false);
+      assert.equal(feedback.code, 'INVALID_ARGUMENTS');
+      assert.deepEqual(feedback.issues, [
+        { path: ['command'], reason: 'invalid_type', expected: 'string' },
+        { path: ['timeout'], reason: 'invalid_type', expected: 'number' },
+        { path: ['nested', 'enabled'], reason: 'invalid_type', expected: 'boolean' },
+        { path: ['items', '*', 'name'], reason: 'invalid_type', expected: 'string' },
+        { path: ['entries'], pathTruncated: true, reason: 'invalid_type', expected: 'number' },
+        { path: ['custom'], reason: 'custom' },
+      ]);
+      assert.equal(feedback.truncated, true);
+      assert.doesNotMatch(text, /SECRET|42/);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+
+test('preflight diagnostics bound issue count, schema paths and encoded bytes', async () => {
+  const { z } = await import('zod');
+  const field = '\u0001'.repeat(64);
+  const deep = z.strictObject({ [field]: z.strictObject({ [field]: z.strictObject({ [field]: z.strictObject({ [field]: z.array(z.string()) }) }) }) });
+  const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+  lookup.input = z.strictObject({ deep, many: z.array(z.string()), union: z.union([z.string(), z.number()]) });
+  const model = host((request) => (request.exchanges.length ? final : reply('bounds', [call('a', 'lookup', { deep: { [field]: { [field]: { [field]: { [field]: [false] } } } }, many: Array(30).fill(false), union: {} })])));
+  const fixture = assembly({ policyVersion: 'bounds.v1', tools: { lookup } }, model);
+  try {
+    assert.equal(await fixture.runner.run(input), 'finished');
+    const text = model.sent[1].exchanges[0].feedback[0].content[0].text;
+    const feedback = JSON.parse(text);
+    assert.equal(feedback.truncated, true);
+    assert.ok(feedback.issues.length > 0 && feedback.issues.length <= 6);
+    assert.ok(feedback.issues.every((issue) => issue.path.length <= 4));
+    assert.equal(feedback.issues[0].pathTruncated, true);
+    assert.ok(Buffer.byteLength(JSON.stringify({ issues: feedback.issues, truncated: true })) <= 2048);
+    assert.ok(Buffer.byteLength(text) < 2300);
+  } finally {
+    await model.interactions.settled();
+    model.interactions.close();
+  }
+});
+
+test('diagnostics preserve rejection of coercion, defaults, stripping and schema faults', async () => {
+  const { z } = await import('zod');
+  for (const [schema, args, failure] of [
+    [z.strictObject({ key: z.coerce.string() }), { key: 9 }, /must preserve/],
+    [z.strictObject({ key: z.string().default('default') }), {}, /must preserve/],
+    [z.object({ key: z.string() }), { key: 'fixed', extra: true }, /must preserve/],
+    [
+      z.strictObject({
+        key: z.string().refine(() => {
+          throw new Error('schema fault');
+        }),
+      }),
+      { key: 'fixed' },
+      /schema fault/,
+    ],
+  ]) {
+    const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+    lookup.input = schema;
+    const model = host(() => reply('strict', [call('a', 'lookup', args)]));
+    const fixture = assembly({ policyVersion: 'strict.v1', tools: { lookup } }, model);
+    try {
+      await assert.rejects(fixture.runner.run(input), failure);
+      assert.equal(model.sent.length, 1);
+      assert.deepEqual(fixture.entity.snapshot().entries[0].feedback, []);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  }
+});
+
+test('missing fields, enum and union failures expose only static reasons and safe prefixes', async () => {
+  const { z } = await import('zod');
+  const longField = 'x'.repeat(65);
+  const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+  lookup.input = z.strictObject({ required: z.string(), choice: z.enum(['SECRET_ENUM']), variant: z.union([z.string(), z.number()]), [longField]: z.string() });
+  const model = host((request) => (request.exchanges.length ? final : reply('vocabulary', [call('a', 'lookup', { choice: 'SECRET_INPUT', variant: {}, [longField]: false })])));
+  const fixture = assembly({ policyVersion: 'vocabulary.v1', tools: { lookup } }, model);
+  try {
+    assert.equal(await fixture.runner.run(input), 'finished');
+    const text = model.sent[1].exchanges[0].feedback[0].content[0].text;
+    const feedback = JSON.parse(text);
+    assert.deepEqual(feedback.issues, [
+      { path: ['required'], reason: 'invalid_type', expected: 'string' },
+      { path: ['choice'], reason: 'invalid_value' },
+      { path: ['variant'], reason: 'invalid_union' },
+      { path: [], pathTruncated: true, reason: 'invalid_type', expected: 'string' },
+    ]);
+    assert.equal(feedback.truncated, false);
+    assert.doesNotMatch(text, /SECRET/);
+    assert.ok(!text.includes(longField));
+  } finally {
+    await model.interactions.settled();
+    model.interactions.close();
+  }
+});

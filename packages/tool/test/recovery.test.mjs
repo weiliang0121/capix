@@ -240,3 +240,39 @@ test('cold restore retains spent model calls and rejects a changed call limit wi
     }
   }
 });
+
+test('cold recovery preserves bounded preflight feedback and rejects changed diagnostic policy without sending', async () => {
+  const { z } = await import('zod');
+  const makeConfig = (changed = false) => {
+    const configuration = config(() => assert.fail('rejected preflight executed a member'));
+    configuration.tools.lookup.input = z.strictObject({ key: z.string() }).refine(() => false, { path: changed ? [] : ['key'], message: 'not disclosed' });
+    return configuration;
+  };
+  const send = (request) => (request.exchanges.length ? final : reply('invalid', [call('a', 'lookup', { key: 'fixed' })]));
+  const firstHost = host(send);
+  const saves = journal();
+  const original = assembly(makeConfig(), firstHost, { store: saves.store });
+  try {
+    assert.equal(await original.runner.run(input), 'finished');
+  } finally {
+    await firstHost.interactions.settled();
+    firstHost.interactions.close();
+  }
+  const snapshot = structuredClone(original.entity.snapshot());
+  const feedback = snapshot.entries[0].feedback[0];
+  assert.deepEqual(JSON.parse(feedback.content[0].text).issues, [{ path: ['key'], reason: 'custom' }]);
+  for (const changed of [false, true]) {
+    const nextHost = host(send, new Map(structuredClone([...firstHost.states])));
+    const next = assembly(makeConfig(changed), nextHost, { entity: ModelExchanges.restore(snapshot), store: saves.replay() });
+    assert.equal(next.tool.catalog.digest, original.tool.catalog.digest, 'refinement policy must be versioned by its author');
+    try {
+      if (changed) await assert.rejects(next.runner.resume(saves.contextId));
+      else assert.equal(await next.runner.resume(saves.contextId), 'finished');
+      assert.deepEqual(nextHost.sent, []);
+      assert.deepEqual(next.entity.snapshot(), snapshot);
+    } finally {
+      await nextHost.interactions.settled();
+      nextHost.interactions.close();
+    }
+  }
+});

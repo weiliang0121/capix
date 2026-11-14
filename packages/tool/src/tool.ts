@@ -107,9 +107,9 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
     const entries = toolEntries(options.tools, this.recoverable);
     this.tools = Object.freeze(Object.fromEntries(entries.map((entry) => [entry.name, entry.registration]))) as ToolMembers<Definitions>;
     Object.defineProperty(this, 'tools', { value: this.tools, enumerable: true, writable: false, configurable: false });
-    this.checkToolCall = (call) => selectTool(entries, call);
-    Object.defineProperty(this, 'checkToolCall', { value: this.checkToolCall, enumerable: false, writable: false, configurable: false });
     const catalog = (this.catalog = createToolCatalog(entries, options.policyVersion, { maxModelCalls: this.maxModelCalls, waitMs: this.waitMs, budgets: this.budgets }));
+    this.checkToolCall = (call) => selectTool(entries, catalog, call);
+    Object.defineProperty(this, 'checkToolCall', { value: this.checkToolCall, enumerable: false, writable: false, configurable: false });
     const inputCodec = inputCodecFor(catalog);
     for (const name of ['catalog', 'maxModelCalls', 'waitMs', 'recoverable', 'budgets'] as const) Object.defineProperty(this, name, { value: this[name], enumerable: true, writable: false, configurable: false });
     const budgets = this.budgets;
@@ -195,7 +195,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       if (state.cursor > calls.length) throw new Error('Tool cursor exceeds model requests');
       for (let index = 0; index < state.cursor; index++) {
         const call = calls[index]!;
-        const selected = selectTool(entries, call);
+        const selected = selectTool(entries, catalog, call);
         if (selected.kind === 'rejected') continue;
         const found = facts.references[selected.entry.name]?.find((fact) => fact.order > child.order && fact.key === call.id && equal(fact.input, selected.input));
         if (!found) throw new Error('Processed tool has no exact child');
@@ -205,7 +205,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       if (state.active) {
         const call = calls[state.cursor];
         const relation = facts.references[state.active.name]?.[state.active.index];
-        const selected = call && selectTool(entries, call);
+        const selected = call && selectTool(entries, catalog, call);
         if (!call || selected?.kind !== 'accepted' || selected.entry.name !== state.active.name || call.id !== state.active.callId || !relation || relation.order <= child.order || relation.key !== call.id || !equal(relation.input, selected.input)) throw new Error('Active tool differs from fixed model request');
       }
     }
@@ -292,7 +292,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
           assertToolFeedbackBytes(feedback.toolCallId, { status: feedback.status, content: feedback.content }, budgets);
           const call = entry.reply.output.find((item) => item.kind === 'tool-call' && item.id === feedback.toolCallId);
           if (!call || call.kind !== 'tool-call') throw new Error('Feedback has no original model call');
-          const selected = selectTool(entries, call);
+          const selected = selectTool(entries, catalog, call);
           if (selected.kind === 'rejected') {
             if (!equal(feedback, { toolCallId: call.id, ...selected.result }) || entry.receptions.some((receipt) => receipt.callId === call.id)) throw new Error('Precheck feedback differs from fixed policy');
             continue;
@@ -344,7 +344,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       await work.resources.model.preflight({ origin: state.origin, exchanges: state.exchanges, current: state.current, budgets });
       while (state.cursor < calls.length) {
         const call = calls[state.cursor]!;
-        const selected = selectTool(entries, call);
+        const selected = selectTool(entries, catalog, call);
         if (selected.kind === 'rejected') {
           const current = work.resources.exchanges.complete(state.origin, state.current!, call.id, assertToolFeedbackBytes(call.id, selected.result, budgets));
           state = { ...state, current, cursor: state.cursor + 1 };

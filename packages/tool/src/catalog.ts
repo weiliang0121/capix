@@ -80,11 +80,11 @@ export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: 
     return freeze({ name, description: registration.description, parameters: schema });
   });
   requireModelRequest({ messages: [{ role: 'user', content: '' }], tools });
-  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 1, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
+  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 2, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
   return Object.freeze({ policyVersion, tools: Object.freeze(tools), digest: createHash('sha256').update(canonical(basis)).digest('hex') });
 }
 export type ToolSelection = { readonly kind: 'accepted'; readonly entry: ToolEntry; readonly input: unknown } | { readonly kind: 'rejected'; readonly result: ToolResult };
-export function selectTool(entries: readonly ToolEntry[], call: { readonly name: string; readonly arguments: { readonly encoding: 'json-text'; readonly text: string } }): ToolSelection {
+export function selectTool(entries: readonly ToolEntry[], catalog: ToolCatalog, call: { readonly name: string; readonly arguments: { readonly encoding: 'json-text'; readonly text: string } }): ToolSelection {
   const entry = entries.find((item) => item.name === call.name);
   if (!entry) return reject('UNKNOWN_TOOL', 'Requested tool is not registered.');
   let input: unknown;
@@ -100,9 +100,34 @@ export function selectTool(entries: readonly ToolEntry[], call: { readonly name:
     return { kind: 'accepted', entry, input: parsed };
   } catch (error) {
     if (!(error instanceof z.ZodError)) throw error;
-    return reject('INVALID_ARGUMENTS', 'Tool arguments do not match the registered schema.');
+    return reject('INVALID_ARGUMENTS', 'Tool arguments do not match the registered schema.', schemaIssues(error, catalog.tools.find((tool) => tool.name === entry.name)!.parameters));
   }
 }
-function reject(code: string, message: string): ToolSelection {
-  return { kind: 'rejected', result: { status: 'error', content: [{ kind: 'text', text: JSON.stringify({ code, message }) }] } };
+// Only catalog-declared field names and static diagnostic vocabulary may reach the model.
+// Zod messages, values, union details and record/unrecognized keys are intentionally unused.
+function schemaIssues(error: z.ZodError, schema: JsonObject) {
+  const reasons = new Set(['invalid_type', 'too_big', 'too_small', 'invalid_format', 'not_multiple_of', 'unrecognized_keys', 'invalid_union', 'invalid_key', 'invalid_element', 'invalid_value', 'custom']);
+  const expectedTypes = new Set(['string', 'number', 'boolean', 'object', 'array', 'null', 'integer']);
+  const issues = error.issues.slice(0, 6).map((issue) => {
+    const path: string[] = [];
+    let current: unknown = schema;
+    for (const segment of issue.path.slice(0, 4)) {
+      if (!current || typeof current !== 'object' || Array.isArray(current)) break;
+      const node = current as Record<string, unknown>;
+      if (typeof segment === 'string' && segment.length <= 64 && node.properties && typeof node.properties === 'object' && Object.hasOwn(node.properties, segment)) {
+        path.push(segment);
+        current = (node.properties as Record<string, unknown>)[segment];
+      } else if (typeof segment === 'number' && Number.isSafeInteger(segment) && segment >= 0 && node.type === 'array' && node.items && !Array.isArray(node.items)) {
+        path.push('*');
+        current = node.items;
+      } else break;
+    }
+    const expected = issue.code === 'invalid_type' && expectedTypes.has(issue.expected) ? issue.expected : undefined;
+    return { path, ...(path.length < issue.path.length ? { pathTruncated: true } : {}), reason: reasons.has(issue.code) ? issue.code : 'invalid_value', ...(expected ? { expected } : {}) };
+  });
+  while (Buffer.byteLength(JSON.stringify({ issues, truncated: true }), 'utf8') > 2048) issues.pop();
+  return { issues, truncated: error.issues.length > issues.length };
+}
+function reject(code: string, message: string, details?: ReturnType<typeof schemaIssues>): ToolSelection {
+  return { kind: 'rejected', result: { status: 'error', content: [{ kind: 'text', text: JSON.stringify({ code, message, stage: 'preflight', executed: false, ...details }) }] } };
 }
