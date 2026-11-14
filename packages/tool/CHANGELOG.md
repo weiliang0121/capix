@@ -1,5 +1,22 @@
 # @weiliang0121/capix-tool
 
+## 0.4.0
+
+### Minor Changes
+
+- c97dc9d: Return bounded schema-safe field paths and static reason/type diagnostics for rejected tool arguments, with explicit preflight/nonexecution markers. Exclude argument values, arbitrary keys and custom validation messages; retain strict validation without coercion or retry. Advance the catalog precheck policy to version 2: prior Tool checkpoints are rejected without migration, while current feedback is verified on cold recovery.
+
+### Patch Changes
+
+- @weiliang0121/capix-checkpoint@0.4.0
+  - @weiliang0121/capix-contracts@0.4.0
+  - @weiliang0121/capix-diagnostics@0.4.0
+  - @weiliang0121/capix-interaction@0.4.0
+  - @weiliang0121/capix-model-exchanges@0.4.0
+  - @weiliang0121/capix-model-provider@0.4.0
+  - @weiliang0121/capix-resources@0.4.0
+  - @weiliang0121/capix-structure@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes
