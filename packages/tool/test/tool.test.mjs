@@ -427,6 +427,33 @@ test('preflight diagnostics bound issue count, schema paths and encoded bytes', 
   }
 });
 
+for (const [lastFieldLength, untrimmedBytes] of [
+  [59, 2048],
+  [60, 2049],
+])
+  test(`preflight diagnostics measure the actual truncation flag at ${untrimmedBytes} bytes`, async () => {
+    const { z } = await import('zod');
+    const names = ['A', 'B', 'C', 'D'].map((prefix) => prefix + '\u0001'.repeat(63));
+    names.push('E' + '\u0001'.repeat(6) + 'x'.repeat(57), 'F' + 'x'.repeat(lastFieldLength));
+    const issues = names.map((name) => ({ path: [name], reason: 'invalid_type', expected: 'string' }));
+    assert.equal(Buffer.byteLength(JSON.stringify({ issues, truncated: false })), untrimmedBytes);
+    const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+    lookup.input = z.strictObject(Object.fromEntries(names.map((name) => [name, z.string()])));
+    const args = Object.fromEntries(names.map((name) => [name, 42]));
+    const model = host((request) => (request.exchanges.length ? final : reply('exact-boundary', [call('a', 'lookup', args)])));
+    const fixture = assembly({ policyVersion: 'exact-boundary.v1', tools: { lookup } }, model);
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      const feedback = JSON.parse(model.sent[1].exchanges[0].feedback[0].content[0].text);
+      assert.deepEqual(feedback.issues, issues.slice(0, untrimmedBytes === 2048 ? 6 : 5));
+      assert.equal(feedback.truncated, untrimmedBytes > 2048);
+      assert.ok(Buffer.byteLength(JSON.stringify({ issues: feedback.issues, truncated: feedback.truncated })) <= 2048);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+
 test('diagnostics preserve rejection of coercion, defaults, stripping and schema faults', async () => {
   const { z } = await import('zod');
   for (const [schema, args, failure] of [

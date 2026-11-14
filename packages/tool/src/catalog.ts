@@ -125,7 +125,7 @@ function schemaIssues(error: z.ZodError, schema: JsonObject) {
     const expected = issue.code === 'invalid_type' && expectedTypes.has(issue.expected) ? issue.expected : undefined;
     return { path, ...(path.length < issue.path.length ? { pathTruncated: true } : {}), reason: reasons.has(issue.code) ? issue.code : 'invalid_value', ...(expected ? { expected } : {}) };
   });
-  while (Buffer.byteLength(JSON.stringify({ issues, truncated: true }), 'utf8') > 2048) issues.pop();
+  while (Buffer.byteLength(JSON.stringify({ issues, truncated: error.issues.length > issues.length }), 'utf8') > 2048) issues.pop();
   return { issues, truncated: error.issues.length > issues.length };
 }
 function reject(code: string, message: string, details?: ReturnType<typeof schemaIssues>): ToolSelection {
