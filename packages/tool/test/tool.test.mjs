@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
 import { Group } from '@weiliang0121/capix-runtime';
-import { Tool } from '@weiliang0121/capix-tool';
+import { Tool, ToolBudgetError, ToolModelCallLimitError } from '@weiliang0121/capix-tool';
 import { assembly, member, host, journal, input, reply, call, final, result } from './fixture.mjs';
 
 for (const checkpoint of [false, true])
@@ -146,8 +146,88 @@ test('fixed options and catalog resist later config mutation; invalid constructi
   model.interactions.close();
 });
 
+test('model call limit defaults to 1000 and accepts every positive safe integer', () => {
+  const create = (options = {}) => new Tool({ policyVersion: 'v1', tools: { lookup: member('lookup', () => ({ text: 'unused' })) }, ...options });
+  assert.equal(create().maxModelCalls, 1000);
+  for (const limit of [1, 32, 33, 1000, Number.MAX_SAFE_INTEGER]) assert.equal(create({ maxModelCalls: limit }).maxModelCalls, limit);
+  for (const limit of [0, -1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, null, '1000']) assert.throws(() => create({ maxModelCalls: limit }), RangeError);
+});
+
+test('default model call limit permits forty model calls across the former ceiling', async () => {
+  let executions = 0;
+  const model = host((request) => (request.exchanges.length === 39 ? final : reply(`step-${request.exchanges.length}`, [call(`call-${request.exchanges.length}`, 'lookup', { key: 'x' })])));
+  const fixture = assembly({ policyVersion: 'v1', tools: { lookup: member('lookup', () => ({ text: String(++executions) })) } }, model);
+  try {
+    assert.equal(await fixture.runner.run(input), 'finished');
+    assert.equal(model.sent.length, 40);
+    assert.equal(executions, 39);
+  } finally {
+    await model.interactions.settled();
+    model.interactions.close();
+  }
+});
+
+for (const checkpoint of [false, true]) {
+  test(`model call fuse stops at the exact limit and preserves completed effects (checkpoint=${checkpoint})`, async () => {
+    const effects = [];
+    const model = host((request) => reply(`step-${request.exchanges.length}`, [call(`call-${request.exchanges.length}`, 'lookup', { key: String(request.exchanges.length) })]));
+    const saves = journal();
+    const fixture = assembly(
+      {
+        policyVersion: 'v1',
+        checkpoint,
+        maxModelCalls: 2,
+        tools: {
+          lookup: member(
+            'lookup',
+            (value) => {
+              effects.push(value.key);
+              return { text: value.key };
+            },
+            checkpoint,
+          ),
+        },
+      },
+      model,
+      { store: saves.store },
+    );
+    try {
+      await assert.rejects(fixture.runner.run(input), (error) => {
+        assert.ok(error instanceof ToolModelCallLimitError);
+        assert.equal(error instanceof ToolBudgetError, false);
+        assert.equal(error.name, 'ToolModelCallLimitError');
+        assert.equal(error.code, 'TOOL_MODEL_CALL_LIMIT');
+        assert.equal(error.calls, 2);
+        assert.equal(error.limit, 2);
+        return true;
+      });
+      assert.equal(model.sent.length, 2);
+      assert.deepEqual(effects, ['0', '1']);
+      assert.deepEqual(
+        fixture.entity.snapshot().entries.map((entry) => entry.feedback[0].content[0].text),
+        ['0', '1'],
+      );
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+
+  test(`the last permitted model call can finish with text (checkpoint=${checkpoint})`, async () => {
+    const model = host((request) => (request.exchanges.length ? final : reply('first', [call('a', 'lookup', { key: 'x' })])));
+    const saves = journal();
+    const fixture = assembly({ policyVersion: 'v1', checkpoint, maxModelCalls: 2, tools: { lookup: member('lookup', () => ({ text: 'done' }), checkpoint) } }, model, { store: saves.store });
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      assert.equal(model.sent.length, 2);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+}
+
 for (const [name, configuration, mapping, expectedSends] of [
-  ['model calls', { maxModelCalls: 1 }, undefined, 1],
   ['reply', { budgets: { maxReplyBytes: 32 } }, undefined, 1],
   ['feedback', { budgets: { maxFeedbackBytes: 30 } }, undefined, 1],
   ['output', {}, { maxOutputBytes: 3 }, 1],
@@ -167,7 +247,7 @@ for (const [name, configuration, mapping, expectedSends] of [
 test('shared entity supports concurrent separate Runners and repeated runs with distinct origins', async () => {
   const entity = new ModelExchanges();
   const model = host(() => final);
-  const create = () => assembly({ policyVersion: 'v1', tools: { lookup: member('lookup', () => ({ text: 'unused' })) } }, model, { entity });
+  const create = () => assembly({ policyVersion: 'v1', maxModelCalls: 1, tools: { lookup: member('lookup', () => ({ text: 'unused' })) } }, model, { entity });
   const first = create();
   const second = create();
   assert.deepEqual(await Promise.all([first.runner.run(input), second.runner.run(input)]), ['finished', 'finished']);

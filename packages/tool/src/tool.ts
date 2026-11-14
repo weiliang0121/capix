@@ -61,6 +61,18 @@ function referenceAt(refs: Refs, name: string, index: number) {
   return value;
 }
 
+/** Stops a Tool invocation before dispatching a model call beyond its configured limit. */
+export class ToolModelCallLimitError extends Error {
+  readonly code = 'TOOL_MODEL_CALL_LIMIT';
+  constructor(
+    readonly calls: number,
+    readonly limit: number,
+  ) {
+    super(`TOOL_MODEL_CALL_LIMIT: ${calls} model calls reached limit ${limit}`);
+    this.name = 'ToolModelCallLimitError';
+  }
+}
+
 /** A normal Group preset. Only its optional checkpoint mode requires recoverable tools. */
 export class Tool<const Definitions extends Readonly<Record<string, ChildCallable>>> extends Group<ToolInput, string, ResourceValues> {
   declare readonly run: NonNullable<Group<ToolInput, string, ResourceValues>['run']>;
@@ -86,11 +98,11 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         },
       },
     });
-    this.maxModelCalls = options.maxModelCalls === undefined ? 8 : options.maxModelCalls;
+    this.maxModelCalls = options.maxModelCalls === undefined ? 1000 : options.maxModelCalls;
     this.waitMs = options.waitMs === undefined ? 30_000 : options.waitMs;
     this.recoverable = options.checkpoint === true;
     this.budgets = resolveToolBudgets(options.budgets);
-    if (!Number.isSafeInteger(this.maxModelCalls) || this.maxModelCalls < 1 || this.maxModelCalls > 32) throw new RangeError('Tool model budget must be within 1..32');
+    if (!Number.isSafeInteger(this.maxModelCalls) || this.maxModelCalls < 1) throw new RangeError('Tool model call limit must be a positive safe integer');
     if (!Number.isSafeInteger(this.waitMs) || this.waitMs < 0 || this.waitMs > 2147483647) throw new RangeError('Tool wait must be a nonnegative timer duration');
     const entries = toolEntries(options.tools, this.recoverable);
     this.tools = Object.freeze(Object.fromEntries(entries.map((entry) => [entry.name, entry.registration]))) as ToolMembers<Definitions>;
@@ -206,7 +218,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
     }
     function startModel(work: Work, state: State, refs: Refs): Promise<string> {
       const models = refsAt(refs, 'models');
-      if (models.length >= maxModelCalls) throw new Error('Tool model call budget exhausted');
+      if (models.length >= maxModelCalls) throw new ToolModelCallLimitError(models.length, maxModelCalls);
       verifyOrigin(work, state);
       const child = work.children.create(completion, { origin: state.origin, exchanges: state.exchanges }, { key: `model:${models.length}` });
       const nextRefs = append(refs, 'models', child.ref);

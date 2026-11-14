@@ -62,7 +62,9 @@ ModelExchanges 的起点保存初始消息、请求选项和模型可见目录�
 
 ## 有界推进与流式
 
-工具串行执行，登记 1–32 个成员；maxModelCalls 默认 8，允许 1–32；waitMs 默认 30000。Tool 默认单回复 64 KiB、包含 callId 的反馈 4 KiB、展开请求 2 MiB、集合 8 MiB；成员可另限输出。工具派发前保守预留反馈与下一请求，避免已经产生效果后才发现明显无法反馈。实际检查位置与配置见 [预算表](../packages/tool/README.md#预算与等待)。
+工具串行执行，登记 1–32 个成员；maxModelCalls 默认 1000，接受正安全整数，作为异常循环的兜底，也可由作者显式设置。它统计单次 Tool 调用中的模型请求，包含最终回答，显式恢复不重置；耗尽时抛出带 calls/limit 的 ToolModelCallLimitError，不再启动下一次模型调用，已有工具效果保留。次数属于固定目录配置，改变它会拒绝原 CP。waitMs 默认 30000。
+
+调用次数与 token、上下文及数据容量分别管理。Tool 默认单回复 64 KiB、包含 callId 的反馈 4 KiB、展开请求 2 MiB、集合 8 MiB；成员可另限输出。工具派发前保守预留反馈与下一请求，避免已经产生效果后才发现明显无法反馈。提高次数不会扩大这些容量，也不自动压缩历史；实际检查位置与配置见 [预算表](../packages/tool/README.md#预算与等待)。
 
 maxWireRequestBytes 显式设置时要求同步 inspection，可用 Provider.inspectRequest；预检不发请求、不返回正文或密钥、不预留额度。修改输入后发送仍重新核验。集合、预设和 Provider 各有独立上限；共享调用不形成跨实体预留事务。
 
