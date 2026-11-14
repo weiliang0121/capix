@@ -1,5 +1,27 @@
 # @weiliang0121/capix-model-exchanges
 
+## 0.4.0
+
+### Patch Changes
+
+- @weiliang0121/capix-changes@0.4.0
+  - @weiliang0121/capix-contracts@0.4.0
+  - @weiliang0121/capix-diagnostics@0.4.0
+  - @weiliang0121/capix-model-provider@0.4.0
+  - @weiliang0121/capix-resources@0.4.0
+  - @weiliang0121/capix-view@0.4.0
+
+## 0.3.0
+
+### Patch Changes
+
+- @weiliang0121/capix-changes@0.3.0
+  - @weiliang0121/capix-contracts@0.3.0
+  - @weiliang0121/capix-diagnostics@0.3.0
+  - @weiliang0121/capix-model-provider@0.3.0
+  - @weiliang0121/capix-resources@0.3.0
+  - @weiliang0121/capix-view@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
 import { Group } from '@weiliang0121/capix-runtime';
-import { Tool } from '@weiliang0121/capix-tool';
+import { Tool, ToolBudgetError, ToolModelCallLimitError } from '@weiliang0121/capix-tool';
 import { assembly, member, host, journal, input, reply, call, final, result } from './fixture.mjs';
 
 for (const checkpoint of [false, true])
@@ -77,6 +77,11 @@ test('unknown, malformed JSON and schema mismatches close feedback without execu
   );
   assert.match(feedback[0].content[0].text, /UNKNOWN_TOOL/);
   assert.match(feedback[1].content[0].text, /INVALID_ARGUMENTS/);
+  for (const item of feedback) {
+    const payload = JSON.parse(item.content[0].text);
+    assert.equal(payload.stage, 'preflight');
+    assert.equal(payload.executed, false);
+  }
   await model.interactions.settled();
   model.interactions.close();
 });
@@ -146,8 +151,88 @@ test('fixed options and catalog resist later config mutation; invalid constructi
   model.interactions.close();
 });
 
+test('model call limit defaults to 1000 and accepts every positive safe integer', () => {
+  const create = (options = {}) => new Tool({ policyVersion: 'v1', tools: { lookup: member('lookup', () => ({ text: 'unused' })) }, ...options });
+  assert.equal(create().maxModelCalls, 1000);
+  for (const limit of [1, 32, 33, 1000, Number.MAX_SAFE_INTEGER]) assert.equal(create({ maxModelCalls: limit }).maxModelCalls, limit);
+  for (const limit of [0, -1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, null, '1000']) assert.throws(() => create({ maxModelCalls: limit }), RangeError);
+});
+
+test('default model call limit permits forty model calls across the former ceiling', async () => {
+  let executions = 0;
+  const model = host((request) => (request.exchanges.length === 39 ? final : reply(`step-${request.exchanges.length}`, [call(`call-${request.exchanges.length}`, 'lookup', { key: 'x' })])));
+  const fixture = assembly({ policyVersion: 'v1', tools: { lookup: member('lookup', () => ({ text: String(++executions) })) } }, model);
+  try {
+    assert.equal(await fixture.runner.run(input), 'finished');
+    assert.equal(model.sent.length, 40);
+    assert.equal(executions, 39);
+  } finally {
+    await model.interactions.settled();
+    model.interactions.close();
+  }
+});
+
+for (const checkpoint of [false, true]) {
+  test(`model call fuse stops at the exact limit and preserves completed effects (checkpoint=${checkpoint})`, async () => {
+    const effects = [];
+    const model = host((request) => reply(`step-${request.exchanges.length}`, [call(`call-${request.exchanges.length}`, 'lookup', { key: String(request.exchanges.length) })]));
+    const saves = journal();
+    const fixture = assembly(
+      {
+        policyVersion: 'v1',
+        checkpoint,
+        maxModelCalls: 2,
+        tools: {
+          lookup: member(
+            'lookup',
+            (value) => {
+              effects.push(value.key);
+              return { text: value.key };
+            },
+            checkpoint,
+          ),
+        },
+      },
+      model,
+      { store: saves.store },
+    );
+    try {
+      await assert.rejects(fixture.runner.run(input), (error) => {
+        assert.ok(error instanceof ToolModelCallLimitError);
+        assert.equal(error instanceof ToolBudgetError, false);
+        assert.equal(error.name, 'ToolModelCallLimitError');
+        assert.equal(error.code, 'TOOL_MODEL_CALL_LIMIT');
+        assert.equal(error.calls, 2);
+        assert.equal(error.limit, 2);
+        return true;
+      });
+      assert.equal(model.sent.length, 2);
+      assert.deepEqual(effects, ['0', '1']);
+      assert.deepEqual(
+        fixture.entity.snapshot().entries.map((entry) => entry.feedback[0].content[0].text),
+        ['0', '1'],
+      );
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+
+  test(`the last permitted model call can finish with text (checkpoint=${checkpoint})`, async () => {
+    const model = host((request) => (request.exchanges.length ? final : reply('first', [call('a', 'lookup', { key: 'x' })])));
+    const saves = journal();
+    const fixture = assembly({ policyVersion: 'v1', checkpoint, maxModelCalls: 2, tools: { lookup: member('lookup', () => ({ text: 'done' }), checkpoint) } }, model, { store: saves.store });
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      assert.equal(model.sent.length, 2);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+}
+
 for (const [name, configuration, mapping, expectedSends] of [
-  ['model calls', { maxModelCalls: 1 }, undefined, 1],
   ['reply', { budgets: { maxReplyBytes: 32 } }, undefined, 1],
   ['feedback', { budgets: { maxFeedbackBytes: 30 } }, undefined, 1],
   ['output', {}, { maxOutputBytes: 3 }, 1],
@@ -167,7 +252,7 @@ for (const [name, configuration, mapping, expectedSends] of [
 test('shared entity supports concurrent separate Runners and repeated runs with distinct origins', async () => {
   const entity = new ModelExchanges();
   const model = host(() => final);
-  const create = () => assembly({ policyVersion: 'v1', tools: { lookup: member('lookup', () => ({ text: 'unused' })) } }, model, { entity });
+  const create = () => assembly({ policyVersion: 'v1', maxModelCalls: 1, tools: { lookup: member('lookup', () => ({ text: 'unused' })) } }, model, { entity });
   const first = create();
   const second = create();
   assert.deepEqual(await Promise.all([first.runner.run(input), second.runner.run(input)]), ['finished', 'finished']);
@@ -287,3 +372,141 @@ for (const inspection of [undefined, { inspectRequest: () => ({ requestBytes: 1,
     await model.interactions.settled();
     model.interactions.close();
   });
+
+for (const checkpoint of [false, true])
+  test(`preflight diagnostics identify declared fields without values or custom messages (checkpoint=${checkpoint})`, async () => {
+    const { z } = await import('zod');
+    const lookup = member('lookup', () => assert.fail('invalid arguments executed'), checkpoint);
+    lookup.input = z.strictObject({ command: z.string(), timeout: z.number(), nested: z.strictObject({ enabled: z.boolean() }), items: z.array(z.strictObject({ name: z.string() })), entries: z.record(z.string(), z.number()), custom: z.string().refine(() => false, 'SECRET_CUSTOM_MESSAGE') });
+    const model = host((request) => (request.exchanges.length ? final : reply('invalid', [call('a', 'lookup', { command: 42, timeout: 'SECRET_VALUE', nested: { enabled: 'SECRET_VALUE' }, items: [{ name: false }], entries: { SECRET_RECORD_KEY: 'SECRET_VALUE' }, custom: 'SECRET_VALUE', SECRET_UNKNOWN_KEY: 'SECRET_VALUE' })])));
+    const fixture = assembly({ policyVersion: 'diagnostics.v1', checkpoint, tools: { lookup } }, model, { store: journal().store });
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      const text = model.sent[1].exchanges[0].feedback[0].content[0].text;
+      const feedback = JSON.parse(text);
+      assert.equal(feedback.stage, 'preflight');
+      assert.equal(feedback.executed, false);
+      assert.equal(feedback.code, 'INVALID_ARGUMENTS');
+      assert.deepEqual(feedback.issues, [
+        { path: ['command'], reason: 'invalid_type', expected: 'string' },
+        { path: ['timeout'], reason: 'invalid_type', expected: 'number' },
+        { path: ['nested', 'enabled'], reason: 'invalid_type', expected: 'boolean' },
+        { path: ['items', '*', 'name'], reason: 'invalid_type', expected: 'string' },
+        { path: ['entries'], pathTruncated: true, reason: 'invalid_type', expected: 'number' },
+        { path: ['custom'], reason: 'custom' },
+      ]);
+      assert.equal(feedback.truncated, true);
+      assert.doesNotMatch(text, /SECRET|42/);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+
+test('preflight diagnostics bound issue count, schema paths and encoded bytes', async () => {
+  const { z } = await import('zod');
+  const field = '\u0001'.repeat(64);
+  const deep = z.strictObject({ [field]: z.strictObject({ [field]: z.strictObject({ [field]: z.strictObject({ [field]: z.array(z.string()) }) }) }) });
+  const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+  lookup.input = z.strictObject({ deep, many: z.array(z.string()), union: z.union([z.string(), z.number()]) });
+  const model = host((request) => (request.exchanges.length ? final : reply('bounds', [call('a', 'lookup', { deep: { [field]: { [field]: { [field]: { [field]: [false] } } } }, many: Array(30).fill(false), union: {} })])));
+  const fixture = assembly({ policyVersion: 'bounds.v1', tools: { lookup } }, model);
+  try {
+    assert.equal(await fixture.runner.run(input), 'finished');
+    const text = model.sent[1].exchanges[0].feedback[0].content[0].text;
+    const feedback = JSON.parse(text);
+    assert.equal(feedback.truncated, true);
+    assert.ok(feedback.issues.length > 0 && feedback.issues.length <= 6);
+    assert.ok(feedback.issues.every((issue) => issue.path.length <= 4));
+    assert.equal(feedback.issues[0].pathTruncated, true);
+    assert.ok(Buffer.byteLength(JSON.stringify({ issues: feedback.issues, truncated: true })) <= 2048);
+    assert.ok(Buffer.byteLength(text) < 2300);
+  } finally {
+    await model.interactions.settled();
+    model.interactions.close();
+  }
+});
+
+for (const [lastFieldLength, untrimmedBytes] of [
+  [59, 2048],
+  [60, 2049],
+])
+  test(`preflight diagnostics measure the actual truncation flag at ${untrimmedBytes} bytes`, async () => {
+    const { z } = await import('zod');
+    const names = ['A', 'B', 'C', 'D'].map((prefix) => prefix + '\u0001'.repeat(63));
+    names.push('E' + '\u0001'.repeat(6) + 'x'.repeat(57), 'F' + 'x'.repeat(lastFieldLength));
+    const issues = names.map((name) => ({ path: [name], reason: 'invalid_type', expected: 'string' }));
+    assert.equal(Buffer.byteLength(JSON.stringify({ issues, truncated: false })), untrimmedBytes);
+    const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+    lookup.input = z.strictObject(Object.fromEntries(names.map((name) => [name, z.string()])));
+    const args = Object.fromEntries(names.map((name) => [name, 42]));
+    const model = host((request) => (request.exchanges.length ? final : reply('exact-boundary', [call('a', 'lookup', args)])));
+    const fixture = assembly({ policyVersion: 'exact-boundary.v1', tools: { lookup } }, model);
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      const feedback = JSON.parse(model.sent[1].exchanges[0].feedback[0].content[0].text);
+      assert.deepEqual(feedback.issues, issues.slice(0, untrimmedBytes === 2048 ? 6 : 5));
+      assert.equal(feedback.truncated, untrimmedBytes > 2048);
+      assert.ok(Buffer.byteLength(JSON.stringify({ issues: feedback.issues, truncated: feedback.truncated })) <= 2048);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  });
+
+test('diagnostics preserve rejection of coercion, defaults, stripping and schema faults', async () => {
+  const { z } = await import('zod');
+  for (const [schema, args, failure] of [
+    [z.strictObject({ key: z.coerce.string() }), { key: 9 }, /must preserve/],
+    [z.strictObject({ key: z.string().default('default') }), {}, /must preserve/],
+    [z.object({ key: z.string() }), { key: 'fixed', extra: true }, /must preserve/],
+    [
+      z.strictObject({
+        key: z.string().refine(() => {
+          throw new Error('schema fault');
+        }),
+      }),
+      { key: 'fixed' },
+      /schema fault/,
+    ],
+  ]) {
+    const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+    lookup.input = schema;
+    const model = host(() => reply('strict', [call('a', 'lookup', args)]));
+    const fixture = assembly({ policyVersion: 'strict.v1', tools: { lookup } }, model);
+    try {
+      await assert.rejects(fixture.runner.run(input), failure);
+      assert.equal(model.sent.length, 1);
+      assert.deepEqual(fixture.entity.snapshot().entries[0].feedback, []);
+    } finally {
+      await model.interactions.settled();
+      model.interactions.close();
+    }
+  }
+});
+
+test('missing fields, enum and union failures expose only static reasons and safe prefixes', async () => {
+  const { z } = await import('zod');
+  const longField = 'x'.repeat(65);
+  const lookup = member('lookup', () => assert.fail('invalid arguments executed'));
+  lookup.input = z.strictObject({ required: z.string(), choice: z.enum(['SECRET_ENUM']), variant: z.union([z.string(), z.number()]), [longField]: z.string() });
+  const model = host((request) => (request.exchanges.length ? final : reply('vocabulary', [call('a', 'lookup', { choice: 'SECRET_INPUT', variant: {}, [longField]: false })])));
+  const fixture = assembly({ policyVersion: 'vocabulary.v1', tools: { lookup } }, model);
+  try {
+    assert.equal(await fixture.runner.run(input), 'finished');
+    const text = model.sent[1].exchanges[0].feedback[0].content[0].text;
+    const feedback = JSON.parse(text);
+    assert.deepEqual(feedback.issues, [
+      { path: ['required'], reason: 'invalid_type', expected: 'string' },
+      { path: ['choice'], reason: 'invalid_value' },
+      { path: ['variant'], reason: 'invalid_union' },
+      { path: [], pathTruncated: true, reason: 'invalid_type', expected: 'string' },
+    ]);
+    assert.equal(feedback.truncated, false);
+    assert.doesNotMatch(text, /SECRET/);
+    assert.ok(!text.includes(longField));
+  } finally {
+    await model.interactions.settled();
+    model.interactions.close();
+  }
+});

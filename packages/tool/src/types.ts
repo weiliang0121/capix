@@ -28,6 +28,7 @@ export interface ToolConfiguration<Definitions extends Readonly<Record<string, C
   /** Versions refinements, result mappings and the author's execution policy. */
   readonly policyVersion: string;
   readonly checkpoint?: boolean;
+  /** Per-invocation model call fuse. Defaults to 1000; must be a positive safe integer. */
   readonly maxModelCalls?: number;
   readonly waitMs?: number;
   readonly budgets?: Partial<ToolByteBudgets>;

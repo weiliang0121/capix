@@ -1,5 +1,41 @@
 # @weiliang0121/capix-tool
 
+## 0.4.0
+
+### Minor Changes
+
+- c97dc9d: Return bounded schema-safe field paths and static reason/type diagnostics for rejected tool arguments, with explicit preflight/nonexecution markers. Exclude argument values, arbitrary keys and custom validation messages; retain strict validation without coercion or retry. Advance the catalog precheck policy to version 2: prior Tool checkpoints are rejected without migration, while current feedback is verified on cold recovery.
+
+### Patch Changes
+
+- @weiliang0121/capix-checkpoint@0.4.0
+  - @weiliang0121/capix-contracts@0.4.0
+  - @weiliang0121/capix-diagnostics@0.4.0
+  - @weiliang0121/capix-interaction@0.4.0
+  - @weiliang0121/capix-model-exchanges@0.4.0
+  - @weiliang0121/capix-model-provider@0.4.0
+  - @weiliang0121/capix-resources@0.4.0
+  - @weiliang0121/capix-structure@0.4.0
+
+## 0.3.0
+
+### Minor Changes
+
+- d5f0369: Raise the default Tool model-call guard from 8 to 1000 and accept any positive safe integer instead of limiting configuration to 32. Long tool workflows can continue beyond 32 model requests while retaining explicit cancellation, byte budgets, and the author's chosen call limit.
+
+  Export ToolModelCallLimitError with code TOOL_MODEL_CALL_LIMIT, calls, and limit so hosts can report exhaustion separately from provider failures. The guard is checked before the next model invocation; the last permitted response can finish normally, and completed tool effects are retained. Checkpoint recovery preserves the accumulated count and still rejects changed fixed configuration, including the changed default. This does not introduce token quotas or expand context, persistence, or collection capacity.
+
+### Patch Changes
+
+- @weiliang0121/capix-checkpoint@0.3.0
+  - @weiliang0121/capix-contracts@0.3.0
+  - @weiliang0121/capix-diagnostics@0.3.0
+  - @weiliang0121/capix-interaction@0.3.0
+  - @weiliang0121/capix-model-exchanges@0.3.0
+  - @weiliang0121/capix-model-provider@0.3.0
+  - @weiliang0121/capix-resources@0.3.0
+  - @weiliang0121/capix-structure@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@weiliang0121/capix-runtime",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": false,
   "type": "module",
   "exports": {

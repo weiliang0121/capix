@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+import { ToolModelCallLimitError } from '@weiliang0121/capix-tool';
 import { assembly, member, host, journal, input, reply, call, final } from './fixture.mjs';
 
 function config(onRun = () => {}, options = {}) {
@@ -177,5 +178,101 @@ test('cold recovery rejects malformed raw durable Interaction states without sen
     assert.deepEqual(nextHost.sent, [], `${variant} must not resend`);
     assert.deepEqual(next.entity.snapshot(), snapshot);
     nextHost.interactions.close();
+  }
+});
+
+test('cold restore retains spent model calls and rejects a changed call limit without effects', async () => {
+  const send = (request) => reply(`step-${request.exchanges.length}`, [call(`call-${request.exchanges.length}`, 'lookup', { key: String(request.exchanges.length) })]);
+  const originalHost = host(send);
+  let original;
+  let saved;
+  const saves = journal((commit, count) => {
+    const snapshot = original.entity.snapshot();
+    if (!saved && commit.contract.key === 'capix.tool' && commit.point === 'tools' && snapshot.entries.length === 2 && snapshot.entries[1].feedback.length === 1) saved = { count, snapshot: structuredClone(snapshot), states: structuredClone([...originalHost.states]) };
+  });
+  let originalRuns = 0;
+  original = assembly(
+    config(() => originalRuns++, { maxModelCalls: 3 }),
+    originalHost,
+    { store: saves.store },
+  );
+  try {
+    await assert.rejects(original.runner.run(input), ToolModelCallLimitError);
+    assert.equal(originalRuns, 3);
+    assert.equal(originalHost.sent.length, 3);
+    assert.ok(saved);
+  } finally {
+    await originalHost.interactions.settled();
+    originalHost.interactions.close();
+  }
+
+  for (const maxModelCalls of [3, 4]) {
+    let resumedRuns = 0;
+    const nextHost = host(send, new Map(structuredClone(saved.states)));
+    const next = assembly(
+      config(() => resumedRuns++, { maxModelCalls }),
+      nextHost,
+      { entity: ModelExchanges.restore(saved.snapshot), store: saves.replay(saved.count) },
+    );
+    try {
+      if (maxModelCalls === 3) {
+        await assert.rejects(next.runner.resume(saves.contextId), (error) => {
+          assert.ok(error instanceof ToolModelCallLimitError);
+          assert.equal(error.calls, 3);
+          assert.equal(error.limit, 3);
+          return true;
+        });
+        assert.equal(nextHost.sent.length, 1, 'two saved model calls must still consume the limit');
+        assert.equal(resumedRuns, 1, 'accepted tools must not run again');
+        assert.deepEqual(
+          next.entity.snapshot().entries.map((entry) => entry.feedback[0].content[0].text),
+          ['0', '1', '2'],
+        );
+      } else {
+        await assert.rejects(next.runner.resume(saves.contextId));
+        assert.equal(nextHost.sent.length, 0);
+        assert.equal(resumedRuns, 0);
+        assert.deepEqual(next.entity.snapshot(), saved.snapshot);
+      }
+    } finally {
+      await nextHost.interactions.settled();
+      nextHost.interactions.close();
+    }
+  }
+});
+
+test('cold recovery preserves bounded preflight feedback and rejects changed diagnostic policy without sending', async () => {
+  const { z } = await import('zod');
+  const makeConfig = (changed = false) => {
+    const configuration = config(() => assert.fail('rejected preflight executed a member'));
+    configuration.tools.lookup.input = z.strictObject({ key: z.string() }).refine(() => false, { path: changed ? [] : ['key'], message: 'not disclosed' });
+    return configuration;
+  };
+  const send = (request) => (request.exchanges.length ? final : reply('invalid', [call('a', 'lookup', { key: 'fixed' })]));
+  const firstHost = host(send);
+  const saves = journal();
+  const original = assembly(makeConfig(), firstHost, { store: saves.store });
+  try {
+    assert.equal(await original.runner.run(input), 'finished');
+  } finally {
+    await firstHost.interactions.settled();
+    firstHost.interactions.close();
+  }
+  const snapshot = structuredClone(original.entity.snapshot());
+  const feedback = snapshot.entries[0].feedback[0];
+  assert.deepEqual(JSON.parse(feedback.content[0].text).issues, [{ path: ['key'], reason: 'custom' }]);
+  for (const changed of [false, true]) {
+    const nextHost = host(send, new Map(structuredClone([...firstHost.states])));
+    const next = assembly(makeConfig(changed), nextHost, { entity: ModelExchanges.restore(snapshot), store: saves.replay() });
+    assert.equal(next.tool.catalog.digest, original.tool.catalog.digest, 'refinement policy must be versioned by its author');
+    try {
+      if (changed) await assert.rejects(next.runner.resume(saves.contextId));
+      else assert.equal(await next.runner.resume(saves.contextId), 'finished');
+      assert.deepEqual(nextHost.sent, []);
+      assert.deepEqual(next.entity.snapshot(), snapshot);
+    } finally {
+      await nextHost.interactions.settled();
+      nextHost.interactions.close();
+    }
   }
 });
