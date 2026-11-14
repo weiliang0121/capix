@@ -74,7 +74,13 @@ export const ToolModelResource = new ResourceOffer({
       const snapshot = source.exchanges.snapshot();
       reserveToolFeedback(snapshot.entries, current, pending.length, input.budgets, snapshot.origins);
       const estimate = { ...base, exchanges: [...(base.exchanges ?? []), { reply: current.reply, feedback: [...current.feedback, ...placeholders] }] };
-      assertToolRequestBytes(estimate, input.budgets, source.inspection, pending.length * input.budgets.maxFeedbackBytes);
+      assertToolRequestBytes(
+        estimate,
+        input.budgets,
+        source.inspection,
+        pending.length * input.budgets.maxFeedbackBytes,
+        pending.map((call) => call.id),
+      );
     },
     confirm(source: ToolModelSource, input: { readonly reference: InteractionReference; readonly basis: ExchangePrefix; readonly reply?: ModelReply; readonly budgets: ToolByteBudgets }) {
       try {
@@ -145,7 +151,7 @@ export function createToolCompletion(checkpoint: boolean, catalog: ToolCatalog, 
   type Work = NodeWork<ExchangePrefix, ToolCompletion, ResourcesOf<typeof deps>> | ResumeWork<'node', ExchangePrefix, ToolCompletion, ResourcesOf<typeof deps>>;
   function verify(work: Work): void {
     const origin = work.resources.exchanges.origin(work.input.origin);
-    if (origin.catalog.digest !== catalog.digest || origin.catalog.policyVersion !== catalog.policyVersion || !isDeepStrictEqual(origin.catalog.tools, catalog.tools)) throw new ResourcePortError('Tool catalog differs from the fixed model origin', { cause: new RuntimeError('CHECKPOINT_CONTENT_CHANGED', 'Tool catalog differs from the fixed model origin') });
+    if (origin.catalog.digest !== catalog.digest || origin.catalog.policyVersion !== catalog.policyVersion || !isDeepStrictEqual(origin.catalog.tools, catalog.tools) || !isDeepStrictEqual(origin.catalog.imageContext, catalog.imageContext)) throw new ResourcePortError('Tool catalog differs from the fixed model origin', { cause: new RuntimeError('CHECKPOINT_CONTENT_CHANGED', 'Tool catalog differs from the fixed model origin') });
   }
   const point = checkpointPoint<'node', ExchangePrefix, ToolCompletion>();
   const completed = point({

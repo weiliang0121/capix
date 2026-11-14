@@ -4,10 +4,15 @@ export interface JsonObject {
 }
 
 /** Provider messages are transport values, not formal Transcript messages. */
-export interface ModelMessage {
-  readonly role: 'system' | 'user' | 'assistant';
-  readonly content: string;
+export type ModelMessage = { readonly role: 'user'; readonly content: string | readonly ModelInputContent[] } | { readonly role: 'system' | 'assistant'; readonly content: string | readonly ModelTextOutput[] };
+/** Fixed image bytes; remote URLs and local paths are not image material. */
+export interface ModelImageInput {
+  readonly kind: 'image';
+  readonly mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  /** Canonical padded RFC 4648 base64, without a data URL prefix. */
+  readonly data: string;
 }
+export type ModelInputContent = ModelTextOutput | ModelImageInput;
 export interface ModelTextOutput {
   readonly kind: 'text';
   readonly text: string;
@@ -40,7 +45,7 @@ export interface ModelReply {
 }
 export interface ToolResult {
   readonly status: 'ok' | 'error';
-  readonly content: readonly ModelTextOutput[];
+  readonly content: readonly ModelInputContent[];
 }
 export interface ToolFeedback extends ToolResult {
   readonly toolCallId: string;

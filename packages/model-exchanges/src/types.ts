@@ -1,5 +1,11 @@
 import type { ModelReply, ModelRequest, ModelTool, ToolFeedback } from '@weiliang0121/capix-model-provider';
 
+/** Fixed request projection policy. Original exchange images remain available to explicit reads. */
+export interface ModelImageContext {
+  /** Keep this many latest tool-result image parts; zero omits every tool image. */
+  readonly retainLatestToolImages: number;
+}
+
 /** Fixed protocol data. The catalog carries no Node, callback or resource authority. */
 export interface ModelExchangeBasis {
   readonly request: Omit<ModelRequest, 'tools' | 'exchanges'>;
@@ -8,6 +14,7 @@ export interface ModelExchangeBasis {
     /** Compatibility identifier supplied by the structure that will execute tools. */
     readonly digest: string;
     readonly policyVersion: string;
+    readonly imageContext?: ModelImageContext;
   };
 }
 

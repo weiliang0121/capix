@@ -55,3 +55,9 @@ new Tool({ policyVersion: 'v1', tools: { lookup: { ...explicit, result: { succee
 new Tool({ tools: { lookup: explicit } });
 void answer;
 void asyncMember;
+
+const imageTool = new Tool({ policyVersion: 'images-v1', imageContext: { retainLatestToolImages: 1 }, tools: { lookup: { ...explicit, result: { succeeded: () => ({ status: 'ok', content: [{ kind: 'image', mimeType: 'image/png', data: 'fixed-base64' }] }) } } } });
+const retainedImages: number | undefined = imageTool.catalog.imageContext?.retainLatestToolImages;
+void retainedImages;
+// @ts-expect-error context windows require numeric counts
+new Tool({ policyVersion: 'images-v1', tools: { lookup: explicit }, imageContext: { retainLatestToolImages: '1' } });

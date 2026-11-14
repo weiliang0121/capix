@@ -96,7 +96,7 @@ export function assertToolOutputBytes<Value>(value: Value, limit: number): Value
   visit(value, 0);
   return value;
 }
-export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteBudgets, inspection?: ToolRequestInspection, growth = 0): void {
+export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteBudgets, inspection?: ToolRequestInspection, growth = 0, pendingToolCallIds: readonly string[] = []): void {
   requireModelRequest(request);
   if (budgets.maxWireRequestBytes !== undefined && !inspection) throw new TypeError('An explicit tool wire request budget requires host request inspection');
   const measured = inspection?.inspectRequest(request);
@@ -107,9 +107,12 @@ export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteB
   if (inspection && (!measured || typeof measured !== 'object' || !Number.isSafeInteger(measured.requestBytes) || measured.requestBytes < 0 || !Number.isSafeInteger(measured.wireBytes) || measured.wireBytes < 0)) throw new TypeError('Tool request inspection must synchronously return finite byte counts');
   if (!Number.isSafeInteger(growth) || growth < 0) throw new RangeError('Invalid tool request byte reservation');
   within('TOOL_REQUEST_LIMIT', Math.max(measured?.requestBytes ?? 0, bytes(request)) + growth, budgets.maxRequestBytes);
-  // growth counts already-encoded feedback JSON. Encoding that JSON in the wire content
-  // string at most doubles its bytes; raw text length is deliberately never used here.
-  if (measured && budgets.maxWireRequestBytes !== undefined) within('TOOL_WIRE_REQUEST_LIMIT', measured.wireBytes + 2 * growth, budgets.maxWireRequestBytes);
+  // Feedback JSON can double through string escaping. Portable image attachments
+  // add bounded metadata: at most 32 image references/index labels per result,
+  // one escaped call identity per group, and group/user message envelopes.
+  // Reserve metadata separately so large image bytes are not charged four times.
+  const imageOverhead = pendingToolCallIds.reduce((total, id) => total + 32 * 128 + 2 * bytes(id) + 128, 0);
+  if (measured && budgets.maxWireRequestBytes !== undefined) within('TOOL_WIRE_REQUEST_LIMIT', measured.wireBytes + 2 * growth + imageOverhead, budgets.maxWireRequestBytes);
 }
 
 // Entity identities are limited to 512 UTF-16 code units. Worst-case JSON escaping,

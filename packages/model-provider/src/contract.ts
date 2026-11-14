@@ -49,7 +49,22 @@ function checkReply(value: unknown): asserts value is ModelReply {
 }
 function checkText(value: unknown): void {
   shape(value, ['kind', 'text']);
-  if (value.kind !== 'text' || typeof value.text !== 'string') throw new TypeError('Tool content must contain text blocks');
+  if (value.kind !== 'text' || typeof value.text !== 'string') throw new TypeError('Invalid model text block');
+}
+/** Validate encoding and declared format without decoding pixels or executing image metadata. */
+function checkInputContent(value: unknown): void {
+  if (record(value) && value.kind === 'text') {
+    checkText(value);
+    return;
+  }
+  shape(value, ['kind', 'mimeType', 'data']);
+  if (value.kind !== 'image' || !['image/png', 'image/jpeg', 'image/webp'].includes(value.mimeType as string) || typeof value.data !== 'string' || !value.data.length || value.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(value.data)) throw new TypeError('Invalid model image encoding');
+  const bytes = Buffer.from(value.data, 'base64');
+  if (bytes.toString('base64') !== value.data) throw new TypeError('Invalid model image encoding');
+  const png = bytes.length >= 45 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) && bytes.readUInt32BE(8) === 13 && bytes.toString('latin1', 12, 16) === 'IHDR' && bytes.readUInt32BE(16) > 0 && bytes.readUInt32BE(20) > 0 && bytes.subarray(-12).equals(Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]));
+  const jpeg = bytes.length >= 6 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 && bytes[bytes.length - 2] === 255 && bytes[bytes.length - 1] === 217;
+  const webp = bytes.length >= 20 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.readUInt32LE(4) === bytes.length - 8 && bytes.toString('latin1', 8, 12) === 'WEBP' && ['VP8 ', 'VP8L', 'VP8X'].includes(bytes.toString('latin1', 12, 16)) && bytes.readUInt32LE(16) > 0 && bytes.readUInt32LE(16) <= bytes.length - 20;
+  if (!(value.mimeType === 'image/png' ? png : value.mimeType === 'image/jpeg' ? jpeg : webp)) throw new TypeError('Model image does not match its declared format');
 }
 function toolName(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(value)) throw new TypeError('Invalid tool name');
@@ -58,7 +73,7 @@ function checkResult(value: unknown, feedback: boolean): asserts value is ToolRe
   shape(value, feedback ? ['toolCallId', 'status', 'content'] : ['status', 'content']);
   if (feedback) identity(value.toolCallId);
   if (typeof value.status !== 'string' || !['ok', 'error'].includes(value.status) || !Array.isArray(value.content) || !value.content.length || value.content.length > 32) throw new TypeError('Invalid tool feedback content');
-  for (const item of value.content) checkText(item);
+  for (const item of value.content) checkInputContent(item);
 }
 export function requireToolResult(value: unknown): ToolResult {
   requireJson(value);
@@ -107,7 +122,14 @@ function checkRequest(value: unknown): asserts value is ModelRequest {
   if (!Array.isArray(value.messages) || !value.messages.length) throw new TypeError('At least one model message is required');
   for (const message of value.messages) {
     shape(message, ['role', 'content']);
-    if (typeof message.role !== 'string' || !['system', 'user', 'assistant'].includes(message.role) || typeof message.content !== 'string') throw new TypeError('Model message has an unsupported role or content');
+    if (typeof message.role !== 'string' || !['system', 'user', 'assistant'].includes(message.role)) throw new TypeError('Model message has an unsupported role or content');
+    if (typeof message.content !== 'string') {
+      if (!Array.isArray(message.content) || !message.content.length || message.content.length > 32) throw new TypeError('Invalid model message content');
+      for (const item of message.content) {
+        if (message.role !== 'user') checkText(item);
+        else checkInputContent(item);
+      }
+    }
   }
   if (value.exchanges !== undefined) {
     if (!Array.isArray(value.exchanges)) throw new TypeError('Model exchanges must be an array');

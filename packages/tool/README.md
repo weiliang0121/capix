@@ -36,7 +36,7 @@ const scene = new Scene(answer);
 
 `path` 只沿构造时固定的公开 JSON Schema 的直接 `properties` / 数组 `items` 读取，数组下标表示为 `'*'`；动态 record 键、组合分支、引用或不能安全定位的路径停在已确认前缀，`pathTruncated: true` 表示省略后续部分。最多 6 项、每条路径最多 4 段、字段名最多 64 个 UTF-16 单元；`{ issues, truncated }` 的 JSON UTF-8 编码不超过 2048 字节，超限从尾部移除。`truncated` 表示未包含全部问题。作者配置的更小反馈预算仍可拒绝这些反馈，不会扩大预算或自动执行、修正、重试工具。
 
-预检反馈在恢复时按相同规则重新核对。此次规则以目录内 `precheckVersion: 2` 固定，因此此前目录的 CP 明确拒绝恢复；不升级或改写旧材料。
+预检反馈在恢复时按相同规则重新核对。当前预检规则（包括图片附件的传输预算预留）以目录内 `precheckVersion: 3` 固定，因此此前目录的 CP 明确拒绝恢复；不升级或改写旧材料。
 
 构造时固定登记和配置，一棵结构内每个成员实例唯一。`policyVersion` 由作者维护，覆盖 JSON Schema 无法表示的细化判断和映射行为。目录摘要还包含 Schema、成员顺序/种类/CP 契约及预算。Zod 升级可能改变摘要并拒绝原 CP 恢复。
 
@@ -85,6 +85,14 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 `ToolModelSource.inspection` 可直接使用提供同步 `inspectRequest` 的 Provider。显式 wire 限制但缺少测量能力会拒绝发送。集合预算是预设的保守检查，实体和 Provider 的独立上限仍然成立；共享并发调用没有跨实体预留事务。集合核算与累计请求构造目前读取完整材料，不宣称常数成本，也不自动删除历史。
 
 `ToolModelPending` 携带原交互引用。局部等待超时或取消不会重发、取消原模型请求；超时后的失败调用不会因为引用仍存在就自动变成可恢复调用。宿主关闭时须等待自己持有的独立发送完成。
+
+## 工具图片的活动上下文
+
+`imageContext: { retainLatestToolImages: 1 }` 显式保留每次请求中最新的一张工具图片；支持非负安全整数（`0` 省略全部），省略配置时完整保留。选择按交换、工具调用和内容顺序确定，不按反馈到达时间。配置在构造时固定，写入目录摘要和 ModelExchanges 起点；冷恢复中更改窗口会拒绝，不重发。
+
+被省略的工具图片替为带交换 ID、调用 ID、contentIndex 的文字占位，原有文字及工具调用闭合保持，用户初始参考图继续保留。完整原图仍在交换实体中，业务可以显式读取；框架不自动重读、删除历史或压缩。见 [ModelExchanges](../model-exchanges/README.md)。
+
+图片反馈须显式提高默认 4 KiB 的 `maxFeedbackBytes`，并为成员输出、完整交换集合和请求设置相称预算。派发前仍按未知工具结果的最大反馈预算保守预留；窗口减少历史图片积累，不保证单张大图或多个待执行工具一定能满足请求限制，文字历史仍然累计。
 
 ## 显式恢复
 

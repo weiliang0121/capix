@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual, types } from 'node:util';
 import { z } from 'zod';
+import type { ModelImageContext } from '@weiliang0121/capix-model-exchanges';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 import { Callable, type ChildCallable } from '@weiliang0121/capix-structure';
 import { requireModelRequest, type ToolResult, type ModelTool, type JsonObject } from '@weiliang0121/capix-model-provider';
@@ -16,6 +17,7 @@ export interface ToolCatalog {
   readonly tools: readonly ModelTool[];
   readonly digest: string;
   readonly policyVersion: string;
+  readonly imageContext?: ModelImageContext;
 }
 
 /** Read configuration without executing getters. Nodes and schema behavior remain capabilities. */
@@ -72,7 +74,7 @@ function freeze<Value>(value: Value): Value {
   }
   return value;
 }
-export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: string, execution: { readonly maxModelCalls: number; readonly waitMs: number; readonly budgets: ToolByteBudgets }): ToolCatalog {
+export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: string, execution: { readonly maxModelCalls: number; readonly waitMs: number; readonly budgets: ToolByteBudgets; readonly imageContext?: ModelImageContext }): ToolCatalog {
   if (typeof policyVersion !== 'string' || !policyVersion.trim() || policyVersion.length > 512) throw new TypeError('Tool requires an explicit policyVersion');
   const tools = entries.map(({ name, registration }) => {
     const { $schema, ...parameters } = z.toJSONSchema(registration.input, { target: 'draft-7' });
@@ -80,8 +82,8 @@ export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: 
     return freeze({ name, description: registration.description, parameters: schema });
   });
   requireModelRequest({ messages: [{ role: 'user', content: '' }], tools });
-  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 2, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
-  return Object.freeze({ policyVersion, tools: Object.freeze(tools), digest: createHash('sha256').update(canonical(basis)).digest('hex') });
+  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 3, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
+  return Object.freeze({ policyVersion, ...(execution.imageContext === undefined ? {} : { imageContext: execution.imageContext }), tools: Object.freeze(tools), digest: createHash('sha256').update(canonical(basis)).digest('hex') });
 }
 export type ToolSelection = { readonly kind: 'accepted'; readonly entry: ToolEntry; readonly input: unknown } | { readonly kind: 'rejected'; readonly result: ToolResult };
 export function selectTool(entries: readonly ToolEntry[], catalog: ToolCatalog, call: { readonly name: string; readonly arguments: { readonly encoding: 'json-text'; readonly text: string } }): ToolSelection {

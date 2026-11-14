@@ -2,6 +2,7 @@ import type { CallableInput, CallableOutput, Stable } from '@weiliang0121/capix-
 import type { ChildCallable } from '@weiliang0121/capix-structure';
 import type { ModelRequest, ToolResult } from '@weiliang0121/capix-model-provider';
 import type { z } from 'zod';
+import type { ModelImageContext } from '@weiliang0121/capix-model-exchanges';
 import type { ToolByteBudgets } from './budget.js';
 
 /** Member policy, not another callable or a registration lifetime. */
@@ -27,6 +28,8 @@ export interface ToolConfiguration<Definitions extends Readonly<Record<string, C
   readonly tools: ToolMembers<Definitions>;
   /** Versions refinements, result mappings and the author's execution policy. */
   readonly policyVersion: string;
+  /** Fixed projection of tool images in each model request; base user images are retained. */
+  readonly imageContext?: ModelImageContext;
   readonly checkpoint?: boolean;
   /** Per-invocation model call fuse. Defaults to 1000; must be a positive safe integer. */
   readonly maxModelCalls?: number;

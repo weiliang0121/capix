@@ -165,7 +165,7 @@ export class ModelExchanges {
     const reference = requireExchangeOriginReference(prefix.origin);
     const origin = this.origin(reference);
     const entries = this.closed(reference, prefix.exchanges as readonly ExchangeReference[]);
-    return Object.freeze(requireModelRequest({ ...origin.request, ...(origin.catalog.tools.length === 0 ? {} : { tools: origin.catalog.tools }), exchanges: Object.freeze(entries.map((entry) => Object.freeze({ reply: entry.reply, feedback: entry.feedback }))) }));
+    return Object.freeze(requireModelRequest({ ...origin.request, ...(origin.catalog.tools.length === 0 ? {} : { tools: origin.catalog.tools }), exchanges: projectImages(entries, origin.catalog.imageContext?.retainLatestToolImages) }));
   }
 
   /** Creation order is stable; this does not infer a cross-invocation causal order. */
@@ -315,4 +315,27 @@ function limit(value: number, maximum: number, name: string): number {
 }
 function conflict(message: string): RuntimeError {
   return new RuntimeError('MODEL_EXCHANGE_CONFLICT', message);
+}
+
+/** Pure first-K projection. Call order, not feedback arrival order, defines latest. */
+function projectImages(entries: readonly ModelExchangeEntry[], retain: number | undefined) {
+  let remaining = retain === undefined ? 0 : entries.reduce((total, entry) => total + entry.feedback.reduce((count, feedback) => count + feedback.content.filter((part) => part.kind === 'image').length, 0), 0) - retain;
+  return Object.freeze(
+    entries.map((entry) => {
+      if (retain === undefined) return Object.freeze({ reply: entry.reply, feedback: entry.feedback });
+      const feedback = entry.reply.output
+        .filter((part) => part.kind === 'tool-call')
+        .map((call) => {
+          const result = entry.feedback.find((item) => item.toolCallId === call.id)!;
+          const content = Object.freeze(
+            result.content.map((part, index) => {
+              if (part.kind !== 'image' || remaining-- <= 0) return part;
+              return Object.freeze({ kind: 'text' as const, text: `[Tool image omitted from active context: exchange=${entry.id}; toolCall=${call.id}; contentIndex=${index}. Original image remains in the exchange; read it explicitly if needed.]` });
+            }),
+          );
+          return Object.freeze({ ...result, content });
+        });
+      return Object.freeze({ reply: entry.reply, feedback: Object.freeze(feedback) });
+    }),
+  );
 }

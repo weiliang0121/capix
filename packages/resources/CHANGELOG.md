@@ -1,5 +1,12 @@
 # @weiliang0121/capix-resources
 
+## 0.5.0
+
+### Patch Changes
+
+- @weiliang0121/capix-changes@0.5.0
+  - @weiliang0121/capix-contracts@0.5.0
+
 ## 0.4.0
 
 ### Patch Changes

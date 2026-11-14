@@ -4,7 +4,7 @@ import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 import { modelReplyText, requireModelRequest, type ModelToolCall } from '@weiliang0121/capix-model-provider';
-import { ModelExchangeResource, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference, type ExchangeOriginReference } from '@weiliang0121/capix-model-exchanges';
+import { ModelExchangeResource, requireModelImageContext, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference, type ExchangeOriginReference } from '@weiliang0121/capix-model-exchanges';
 import type { ResourcesOf } from '@weiliang0121/capix-resources';
 import { Group, checkpointPoint, childReferences, reception, type ChildCallable, type ChildReference, type ChildCall, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildReferenceSlot, type CheckpointSelection } from '@weiliang0121/capix-structure';
 import { codec, stringCodec } from './codec.js';
@@ -107,7 +107,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
     const entries = toolEntries(options.tools, this.recoverable);
     this.tools = Object.freeze(Object.fromEntries(entries.map((entry) => [entry.name, entry.registration]))) as ToolMembers<Definitions>;
     Object.defineProperty(this, 'tools', { value: this.tools, enumerable: true, writable: false, configurable: false });
-    const catalog = (this.catalog = createToolCatalog(entries, options.policyVersion, { maxModelCalls: this.maxModelCalls, waitMs: this.waitMs, budgets: this.budgets }));
+    const catalog = (this.catalog = createToolCatalog(entries, options.policyVersion, { maxModelCalls: this.maxModelCalls, waitMs: this.waitMs, budgets: this.budgets, ...(options.imageContext === undefined ? {} : { imageContext: options.imageContext }) }));
     this.checkToolCall = (call) => selectTool(entries, catalog, call);
     Object.defineProperty(this, 'checkToolCall', { value: this.checkToolCall, enumerable: false, writable: false, configurable: false });
     const inputCodec = inputCodecFor(catalog);
@@ -390,15 +390,16 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
 function snapshotConfiguration<Definitions extends Readonly<Record<string, ChildCallable>>>(value: ToolConfiguration<Definitions>): ToolConfiguration<Definitions> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value)) throw new TypeError('Tool configuration must be a data object');
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some((key) => !['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets'].includes(key))) throw new TypeError('Unknown Tool configuration field');
+  if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some((key) => !['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext'].includes(key))) throw new TypeError('Unknown Tool configuration field');
   const result: Record<string, unknown> = {};
-  for (const key of ['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets']) {
+  for (const key of ['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext']) {
     const field = Object.getOwnPropertyDescriptor(value, key);
     if ((!field && key in value) || (field && !('value' in field))) throw new TypeError('Tool configuration must use own data properties');
     if (field && !field.enumerable) throw new TypeError('Tool configuration fields must be enumerable');
     if (field) result[key] = field.value;
   }
   if (result.checkpoint !== undefined && typeof result.checkpoint !== 'boolean') throw new TypeError('Tool checkpoint must be boolean');
+  if (result.imageContext !== undefined) result.imageContext = requireModelImageContext(result.imageContext);
   if (result.budgets !== undefined) {
     const budgets = result.budgets;
     if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets) || types.isProxy(budgets) || Object.getOwnPropertySymbols(budgets).length) throw new TypeError('Tool budgets must be a data object');

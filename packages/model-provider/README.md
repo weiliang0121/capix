@@ -1,6 +1,6 @@
 # 模型 Provider
 
-`@weiliang0121/capix-model-provider` 提供 Chat Completions 文本与原生函数调用、可选 SSE，以及唯一的 `ModelReply` 纯值契约。可以从 `.mjs` 使用，不依赖 Runtime、资源、Interaction 或服务。Provider 负责通信和协议接纳；工具选择、参数业务校验、执行、接纳与恢复由调用方组织。
+`@weiliang0121/capix-model-provider` 提供 Chat Completions 文本与固定图片输入、原生函数调用、可选 SSE，以及唯一的 `ModelReply` 纯值契约。可以从 `.mjs` 使用，不依赖 Runtime、资源、Interaction 或服务。Provider 负责通信和协议接纳；工具选择、参数业务校验、执行、接纳与恢复由调用方组织。
 
 ```js
 import { ChatCompletionsProvider, modelReplyText } from '@weiliang0121/capix-model-provider';
@@ -80,11 +80,21 @@ const next = await model.complete({
 });
 ```
 
-`messages` 是固定的 system/user/assistant 文本前缀，`exchanges` 按顺序附加完整的模型交换。每个交换必须有准确且完整的反馈集合；Provider 按模型原调用顺序编码 `assistant.tool_calls` 与 `tool.tool_call_id`，调用方反馈数组的排列不改变关联。`ToolResult` 为 `{status:'ok'|'error',content:[{kind:'text',text}]}`，`ToolFeedback` 另含 `toolCallId`；两种状态都编码为明确的 JSON 数据正文，不能靠措辞暗示失败。工具结果不会成为 system 消息，Provider 也不自动执行其中指令。结果的可信程度、提示策略与实际资源授权仍由宿主和业务确定。
+`messages` 是固定的 system/user/assistant 前缀，`exchanges` 按顺序附加完整的模型交换。每个交换必须有准确且完整的反馈集合；Provider 按模型原调用顺序编码 `assistant.tool_calls` 与 `tool.tool_call_id`，调用方反馈数组的排列不改变关联。`ToolResult` 为 `{status:'ok'|'error',content:readonly ModelInputContent[]}`，`ToolFeedback` 另含 `toolCallId`；纯文本结果的两种状态都编码为明确的 JSON 数据正文，不能靠措辞暗示失败。工具结果不会成为 system 消息，Provider 也不自动执行其中指令。结果的可信程度、提示策略与实际资源授权仍由宿主和业务确定。
 
 `toolChoice` 可为 `auto`、`none`、`required` 或 `{name}`。指定名称必须已登记；除 `none` 外，显式选择要求有工具目录。参数 Schema 为纯 JSON 对象，原样转交，不在 Provider 内建立另一套业务 Schema 执行器。本实现每份目录/回复最多 32 个工具，工具名支持字母、数字、`_`、`-`，长度 1–128。
 
 DeepSeek 思考模式在带 `tools` 的后续请求中要求回传此前回复的 `reasoning_content`，包括没有工具调用的回复。Provider 在 exchanges 中始终保留并编码该字段；不带 tools 时，是否使用由兼容端点决定。调用方不能用只有正文的普通 assistant 消息替代需要精确续接的思考回复。协议依据：[工具调用](https://api-docs.deepseek.com/guides/tool_calls/)、[思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)。
+
+## 固定图片输入
+
+`ModelInputContent` 为文本块 `ModelTextOutput` 或图片块 `ModelImageInput`。图片形状为 `{kind:'image', mimeType:'image/png'|'image/jpeg'|'image/webp', data:string}`；`data` 必须是非空、规范的 RFC 4648 base64（包含所需 padding，不带 data URL 前缀或空白）。user 的 `ModelMessage.content` 接受字符串或 1–32 个有序内容块；system/assistant 只接受字符串或文本块数组。`ToolResult.content` 同样接受 1–32 个文本／图片块。图片是输入材料，`ModelReply.output` 仍只有文本与工具调用。
+
+图片在发送前核验 base64、声明的 MIME 与文件签名、基本头尾结构；不会解码像素，也不保证图片可完整解码或在具体模型中可用。宿主负责来源授权、解码安全、尺寸／像素预算和必要的缩放再编码。远端 URL、本地路径、SVG 与任意 MIME 不属于图片本体；Provider 不读取图片文件、不下载图片、不自动转换格式。图片字节及 base64 膨胀计入同一 2 MiB 纯值预算，编码后的完整 HTTP 请求仍须满足 2 MiB 上限。
+
+内容数组逐块编码为 Chat Completions 的 `text` 或 `image_url`，图片 URL 由固定字节生成 `data:<mimeType>;base64,<data>`。工具反馈始终保持 `role:'tool'`、准确 `tool_call_id` 和 `{status,content}` JSON 字符串正文；图片在此正文中投影为 `{kind:'image-reference',contentIndex}`。本轮所有工具反馈闭合后，追加一条 user 附件消息：依原工具调用顺序，以文本 `{kind:'tool-images',toolCallId}` 标识每组，再按内容顺序以 `{contentIndex}` 文本紧邻对应真实图片。它仅是工具材料的传输投影，不代表新的用户指令，不改变原始实体、反馈回执或图片保留策略。无图片的工具反馈保持原有传输形状，不追加附件消息。
+
+该通用映射只在 user 角色发送图片，要求所选模型支持 user 图片输入。DeepSeek 当前[图像文档](https://api-docs.deepseek.com/guides/vision/#restrictions)也支持 system/tool 图片，但这不是所有 Chat Completions 端点的共同能力；本适配器不使用该扩展。预检与发送共同执行严格校验并计算完整附件展开后的 HTTP 大小，拒绝时不会发送请求，错误中不包含图片正文。
 
 ## 流式与用量
 
@@ -108,6 +118,6 @@ JSON 与 SSE 共用 `ModelUsage`：`promptTokens / completionTokens / totalToken
 - 默认总超时 60 秒，涵盖发送与完整读取。`maxResponseBytes` 是独立的实际传输预算，默认 2 MiB，SSE 计入事件封装、注释和思考内容；提高传输预算不会放宽公开回复的纯值上限。
 - 一次 complete 只有一次 HTTP 请求，无隐式重试。调用取消保持原 reason，不修改调用者 signal；对独立 Interaction 的生命周期不作推断。
 - `ProviderError` 只含 code/message/可选 HTTP status，不保存上游正文、请求、headers、密钥或底层错误。宿主可注入 fetch；实现必须遵守 Fetch 取消与重定向语义。
-- `thinking` 是宿主显式配置的 DeepSeek 扩展。当前实现 Chat Completions 函数调用与文本；不承诺 Responses、Anthropic 原生协议、MCP、多模态或 strict beta。正式 Transcript 的消息角色不因此扩展。
+- `thinking` 是宿主显式配置的 DeepSeek 扩展。当前实现 Chat Completions 函数调用、文本与固定图片输入；不承诺 Responses、Anthropic 原生协议、MCP、音视频或 strict beta。正式 Transcript 的消息角色不因此扩展。
 
 当前架构与限制见[原生工具调用](../../docs/native-tool-integration.md)。完整协议参考 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) 与 [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
