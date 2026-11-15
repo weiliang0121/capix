@@ -1,5 +1,13 @@
 # @weiliang0121/capix-tool
 
+## 0.8.0
+
+### Minor Changes
+
+- Add bounded host-selected request context at closed tool-feedback boundaries. Selected text is fixed with the model child, budgeted before dispatch, and reused exactly during recovery without rerunning selection. Native exchanges and the fixed message prefix remain unchanged. Tool and completion checkpoint contracts advance to version 2; older checkpoint contracts are rejected.
+
+  Compatibility: the new request-context API is available in Tool 0.8.0 with CAPiX dependencies at 0.7.0. The two Tool checkpoint contracts change; the checkpoint package format and the other packages' public contracts do not change in this release.
+
 ## 0.7.0
 
 ### Patch Changes

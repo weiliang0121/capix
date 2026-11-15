@@ -29,7 +29,7 @@ export function resolveToolBudgets(configuration: Partial<ToolByteBudgets> = {})
 }
 export class ToolBudgetError extends Error {
   constructor(
-    readonly code: 'TOOL_REPLY_LIMIT' | 'TOOL_FEEDBACK_LIMIT' | 'TOOL_OUTPUT_LIMIT' | 'TOOL_REQUEST_LIMIT' | 'TOOL_WIRE_REQUEST_LIMIT' | 'TOOL_COLLECTION_LIMIT',
+    readonly code: 'TOOL_REPLY_LIMIT' | 'TOOL_FEEDBACK_LIMIT' | 'TOOL_OUTPUT_LIMIT' | 'TOOL_CONTEXT_LIMIT' | 'TOOL_REQUEST_LIMIT' | 'TOOL_WIRE_REQUEST_LIMIT' | 'TOOL_COLLECTION_LIMIT',
     readonly bytes: number,
     readonly limit: number,
   ) {

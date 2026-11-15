@@ -61,3 +61,24 @@ const retainedImages: number | undefined = imageTool.catalog.imageContext?.retai
 void retainedImages;
 // @ts-expect-error context windows require numeric counts
 new Tool({ policyVersion: 'images-v1', tools: { lookup: explicit }, imageContext: { retainLatestToolImages: '1' } });
+
+const preparedContext: import('@weiliang0121/capix-tool').ToolContextPreparation = {
+  prepare(prefix) {
+    const size: number = prefix.exchanges.length;
+    // @ts-expect-error Preparation cannot replace the exact native exchange prefix.
+    prefix.exchanges.push({});
+    return size ? 'host-selected data' : undefined;
+  },
+};
+const contextCapacity: import('@weiliang0121/capix-tool').ToolRequestContext = { maxBytes: 4096 };
+new Tool({ policyVersion: 'context.v1', requestContext: contextCapacity, tools: { lookup: { ...explicit, node: new Node({ run: () => ({ rows: [] as { text: string }[] }) }) } } });
+// @ts-expect-error Context capacity must be numeric.
+const badCapacity: import('@weiliang0121/capix-tool').ToolRequestContext = { maxBytes: '4096' };
+// @ts-expect-error Context preparation is synchronous.
+const asyncPreparation: import('@weiliang0121/capix-tool').ToolContextPreparation = { prepare: async () => 'text' };
+// @ts-expect-error The context capability cannot replace an entire model request.
+const requestReplacement: import('@weiliang0121/capix-tool').ToolContextPreparation = { prepare: () => ({ messages: [] }) };
+void preparedContext;
+void badCapacity;
+void asyncPreparation;
+void requestReplacement;

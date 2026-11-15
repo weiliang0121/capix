@@ -27,14 +27,12 @@ export async function json(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
-export async function packages() {
+export async function packages(workspaceRoot = root) {
   const directories = ['packages/contracts', 'packages/protocol', 'packages/changes', 'packages/checkpoint', 'packages/diagnostics', 'packages/interaction', 'packages/invocation', 'packages/measurement', 'packages/memory', 'packages/model-exchanges', 'packages/model-provider', 'packages/records', 'packages/resources', 'packages/runtime', 'packages/structure', 'packages/tool', 'packages/transcript', 'packages/view'];
-  const result = await Promise.all(directories.map(async (directory) => ({ directory, path: join(root, directory), manifest: await json(join(root, directory, 'package.json')) })));
+  const result = await Promise.all(directories.map(async (directory) => ({ directory, path: join(workspaceRoot, directory), manifest: await json(join(workspaceRoot, directory, 'package.json')) })));
   const byName = new Map(result.map((entry) => [entry.manifest.name, entry]));
   assert.equal(byName.size, result.length, 'Duplicate release package names');
-  const versions = new Set(result.map((entry) => entry.manifest.version));
-  assert.equal(versions.size, 1, 'The fixed release group must have one version');
-  const license = await readFile(join(root, 'LICENSE'), 'utf8');
+  const license = await readFile(join(workspaceRoot, 'LICENSE'), 'utf8');
   for (const { directory, path, manifest } of result) {
     assert.equal(manifest.name, `@weiliang0121/capix-${directory.split('/').at(-1)}`, `${directory}: unexpected release package name`);
     assert.equal(manifest.private, false, `${manifest.name}: release package is not public`);
@@ -46,16 +44,16 @@ export async function packages() {
     for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
       for (const [name, version] of Object.entries(manifest[field] ?? {})) {
         if (version.startsWith('workspace:')) assert.ok(byName.has(name), `${manifest.name}: unpublished dependency ${name}`);
-        if (byName.has(name)) assert.equal(version, 'workspace:*', `${manifest.name}: internal dependencies must resolve to the released version`);
+        if (byName.has(name)) assert.equal(version, 'workspace:*', `${manifest.name}: internal dependencies must resolve to the target package version`);
       }
     }
   }
   for (const parent of ['packages']) {
-    for (const name of await readdir(join(root, parent))) {
+    for (const name of await readdir(join(workspaceRoot, parent))) {
       if (directories.includes(`${parent}/${name}`)) continue;
       let manifest;
       try {
-        manifest = await json(join(root, parent, name, 'package.json'));
+        manifest = await json(join(workspaceRoot, parent, name, 'package.json'));
       } catch (error) {
         if (error.code === 'ENOENT') continue;
         throw error;
@@ -63,9 +61,10 @@ export async function packages() {
       assert.equal(manifest.private, true, `${manifest.name}: outside the release scope`);
     }
   }
-  assert.equal((await json(join(root, 'package.json'))).private, true, 'The workspace root must remain private');
-  const config = await json(join(root, '.changeset/config.json'));
-  assert.deepEqual(config.fixed, [[...byName.keys()].sort()], 'Changesets must match the exact release group');
+  assert.equal((await json(join(workspaceRoot, 'package.json'))).private, true, 'The workspace root must remain private');
+  const config = await json(join(workspaceRoot, '.changeset/config.json'));
+  assert.deepEqual(config.fixed, [], 'Public packages use independent versions, without fixed release groups');
+  assert.deepEqual(config.linked, [], 'Public packages use independent versions, without linked release groups');
   return result;
 }
 

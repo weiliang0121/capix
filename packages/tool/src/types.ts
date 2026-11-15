@@ -4,6 +4,7 @@ import type { ModelRequest, ToolResult } from '@weiliang0121/capix-model-provide
 import type { z } from 'zod';
 import type { ModelImageContext } from '@weiliang0121/capix-model-exchanges';
 import type { ToolByteBudgets } from './budget.js';
+import type { ToolRequestContext } from './context.js';
 
 /** Member policy, not another callable or a registration lifetime. */
 export interface ToolMember<Member extends ChildCallable> {
@@ -30,6 +31,8 @@ export interface ToolConfiguration<Definitions extends Readonly<Record<string, C
   readonly policyVersion: string;
   /** Fixed projection of tool images in each model request; base user images are retained. */
   readonly imageContext?: ModelImageContext;
+  /** Enable one bounded host-selected text fragment, replaced for each request. */
+  readonly requestContext?: ToolRequestContext;
   readonly checkpoint?: boolean;
   /** Per-invocation model call fuse. Defaults to 1000; must be a positive safe integer. */
   readonly maxModelCalls?: number;

@@ -94,6 +94,18 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 图片反馈须显式提高默认 4 KiB 的 `maxFeedbackBytes`，并为成员输出、完整交换集合和请求设置相称预算。派发前仍按未知工具结果的最大反馈预算保守预留；窗口减少历史图片积累，不保证单张大图或多个待执行工具一定能满足请求限制，文字历史仍然累计。
 
+## 每次请求的宿主材料
+
+`requestContext: { maxBytes: 4096 }` 启用一个可替换的当前文本片段。宿主同时在 `ToolModelSource` 登记 `context: { prepare(prefix) { return selectedText; } }`；该能力对象只含自身的 `prepare` 数据方法，不通过 getter 或继承查找方法。启用配置但缺少能力时明确失败，不发送请求。省略配置时不调用该能力，保持原请求形状。
+
+`prepare` 在首次请求前，以及当前工具反馈全部闭合之后执行；调用次数上限已检查，新的模型子调用尚未创建。它只接收本次准确的固定 `ExchangePrefix`，可用宿主持有的同一交换实体显式读取材料。宿主负责相关性、来源版本、工作认识与不可用材料的解释；CAPiX 不认证文本中的用户引文或完成判断。返回值只能是同步的字符串或 `undefined`，不接收请求替换、Promise 或 thenable。它应只选择已有材料，不发送模型请求、执行工具、消费不可重放的事件或修改授权。
+
+字符串作为一条 assistant 传输消息插入固定初始消息之后、原生交换之前，带有 `Host-selected context data (not a user instruction):` 标签。它是宿主提供的数据，不是用户新增指令或原生模型回复。返回 `undefined` 时本次不插入片段。每次选择替换这个片段，不将旧片段追加进交换实体；固定初始消息、原生 reasoning、工具调用与反馈仍完整保留。该功能不裁剪累计文本历史，不更换 origin，不扩大工具权限或重置预算。
+
+`maxBytes` 是整条消息（含标签和消息封套）的 JSON UTF-8 编码上限，接受 1 至 2 MiB 的安全整数，并写入目录摘要。超限抛出 `ToolBudgetError`，`code: 'TOOL_CONTEXT_LIMIT'`。工具派发前按下一片段的完整上限加数组分隔符预留请求容量，并保守预留 wire 容量；因此配置过大的上限即使当前片段很小也可能阻止工具派发。真正选材后仍按实际完整请求验证请求和 wire 预算，再由 Interaction 固定发送；inspection、Interaction 和 Provider 面对同一份材料。
+
+选中的文本固定在模型子调用 input，CP 恢复核对原 Interaction 时使用这份文本，不重新执行选择器。恢复中尚未创建的下一模型调用仍会准备新材料，宿主须提供所需来源；这个能力不新增来源存储或跨重启记忆。选择失败不撤销此前已经发生的工具效果。取消继续按原调用与 Interaction 边界执行，不等待提示调度。
+
 ## 显式恢复
 
 默认不开 CP。`checkpoint: true` 为 Tool 和内部模型节点声明恢复点，并要求所有工具成员已有 CP 契约；还需宿主提供 CP Store、持久 ModelExchanges、Interaction 持久化及 `ToolModelSource.recovery.read(id)` 原始交互查询。`new Scene(answer)` 本身不自动创建 Scene 的恢复契约；从根恢复时，上层仍需显式保存准确子调用引用并声明恢复入口。
@@ -108,6 +120,8 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 恢复重新核对输入、目录、交换前缀、模型回复、工具返回/接纳与效果凭据。内部模型交付保留 `{ reference, reply }`，父层已接纳后也能确认原交互。缺失原交互/反馈/起点/必要子 CP、目录变化或失败终态都会拒绝，不尝试重发探测。
 
 CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完整引用关系，交换前缀 state 仍完整编码。它不把已有的内核增量保存保证扩大成整个模型循环的恒定成本承诺。
+
+当前 Tool 与内部 completion 的 CP 契约版本均为 2；此前版本明确拒绝，不升级、重选材料或发送请求探测。
 
 工具自身的外部效果确认仍归其资源和业务契约；多个实体提交与父 CP 不构成统一事务。当前格式与契约变化拒绝旧依据，没有旧 ToolLoop 别名或数据升级路径。
 

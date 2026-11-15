@@ -73,7 +73,7 @@ export function journal(onSave = () => {}) {
     },
   };
 }
-export function assembly(configuration, modelHost, { entity = new ModelExchanges(), store, recovery = true, inspection } = {}) {
+export function assembly(configuration, modelHost, { entity = new ModelExchanges(), store, recovery = true, inspection, context } = {}) {
   const tool = new Tool(configuration);
   const waiting = checkpointPoint()({ name: 'waiting', state: codec, references: { tool: childReference(tool) }, resume: { uses: [tool], run: (work, _state, refs) => work.children.resume(refs.tool).invoke() } });
   const scene = new Scene({ ...(configuration.checkpoint ? { checkpoint: { key: 'tool.test.scene', version: 1, input: codec, output: codec, points: [waiting] } } : {}) }).add({ tool });
@@ -82,7 +82,7 @@ export function assembly(configuration, modelHost, { entity = new ModelExchanges
     if (configuration.checkpoint) work.checkpoint({ point: waiting, state: null, refs: { tool: child.ref } });
     return child.invoke();
   };
-  const source = { exchanges: entity, channel: modelHost.interactions.bind(contract), ...(recovery ? { recovery: { read: (id) => modelHost.states.get(id) } } : {}), ...(inspection ? { inspection } : {}) };
+  const source = { exchanges: entity, channel: modelHost.interactions.bind(contract), ...(recovery ? { recovery: { read: (id) => modelHost.states.get(id) } } : {}), ...(inspection ? { inspection } : {}), ...(context ? { context } : {}) };
   const resources = new Resources().register(new Resource(entity), ModelExchangeResource).register(new Resource(source), ToolModelResource);
   const runner = new Runner(scene, resources, modelHost.interactions, store ? { checkpoints: { store } } : {}).build();
   return { tool, entity, runner };

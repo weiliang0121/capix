@@ -13,7 +13,7 @@ import { Runner, Resources, type RunnerOutputEvent } from '@weiliang0121/capix-r
 import { CallableBuilder, type InvocationCapabilities } from '@weiliang0121/capix-runtime/construction';
 import { invocationRecording } from '@weiliang0121/capix-runtime/recording';
 import { z } from 'zod';
-import { Tool, type ToolMember } from '@weiliang0121/capix-tool';
+import { Tool, type ToolMember, type ToolRequestContext, type ToolContextPreparation, type ToolModelSource } from '@weiliang0121/capix-tool';
 import { FactType } from '@weiliang0121/capix-changes';
 import type { ResourceEventConsumer } from '@weiliang0121/capix-resources';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
@@ -107,8 +107,12 @@ void [result, builder, recording, options, received];
 
 // Public preset declarations retain each member's input and readonly output.
 const inlineLookup = defineNode<{ key: string }, { values: string[] }>()({ run: (work) => ({ values: [work.input.key] }) });
+const requestContext: ToolRequestContext = { maxBytes: 1024 };
+const contextPreparation: ToolContextPreparation = { prepare: (prefix) => `current-material-${prefix.exchanges.length}` };
+const modelContext: ToolModelSource['context'] = contextPreparation;
 const inlineTool = new Tool({
   policyVersion: 'release.inline.v1',
+  requestContext,
   tools: {
     lookup: {
       node: inlineLookup,
@@ -144,7 +148,7 @@ if (false) {
   // @ts-expect-error Tool remains a Group and cannot replace Runner's Scene
   new Runner(hoistedTool, new Resources());
 }
-void [hoistedTool, toolResult];
+void [hoistedTool, toolResult, modelContext];
 
 const counterFacts = new FactType<{ count: number }>('counter');
 declare const factOperation: ResourceOperation;

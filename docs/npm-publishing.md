@@ -4,7 +4,9 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，包含 `capix-tool`，由 `scripts/release/packages.mjs` 显式列举。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包属于同一个 Changesets fixed 组，内部依赖使用 `workspace:*`，打包时转换为准确版本。
+公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，包含 `capix-tool`，由 `scripts/release/packages.mjs` 显式列举。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包使用 Changesets 独立发版，不设置 fixed 或 linked 版本组。内部依赖使用 `workspace:*`，打包时转换为依赖目标各自的准确版本，包之间可以使用不同版本号。
+
+各包 CHANGELOG 负责说明自身变更、依赖兼容性和迁移要求；package.json 与实际 tarball 仍是安装器使用的依赖事实，不能只写兼容说明而保留错误的机器依赖。上层包使用新依赖版本时按实际需要更新版本和说明，无依赖关系的包不共同升号。例如 Tool 新增能力可单独发布 `0.8.0`，继续依赖已有的其他包 `0.7.0`。完整清单验证仍覆盖 18 包；上传只处理本次计划中尚未发布的准确包名和版本。
 
 公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。包边界与职责见[架构与包](organization.md#包的所有者)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
@@ -36,8 +38,8 @@ pnpm release:check
 
 版本 PR 与 npm registry 是两份不同的状态。确认包已发布时，查询 registry 中的准确版本，例如 `npm view @weiliang0121/capix-tool@0.2.0 version --registry=https://registry.npmjs.org`，不以 Git 中的版本号作为上传成功的依据。
 
-1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次 18 个准确包名及其发布权限。本地验证不能证明远端名称占用或发布权限。
-2. 确认待发布版本 PR 已按下节流程审阅并合并；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。已经合并的版本不重复升号。在干净的已审阅提交上核对 18 包 fixed 组并完成上述验证。不要重发 registry 中已有的准确版本；`release:publish` 会拒绝尚未处理的 changesets。
+1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次计划中的准确包名、版本及其发布权限。本地验证不能证明远端名称占用或发布权限。
+2. 确认待发布版本 PR 已按下节流程审阅并合并；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。已经合并的版本不重复升号。在干净的已审阅提交上核对本次准确包名、版本和依赖兼容说明，并完成完整清单验证。不要重发 registry 中已有的准确版本；`release:publish` 会拒绝尚未处理的 changesets。
 3. 在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天；发布时按终端提示完成认证。
 4. 执行 `pnpm release:publish`，上传当前尚未存在的版本。此命令会写入 npm，只有决定正式发布时才执行。
 

@@ -12,6 +12,7 @@ import { createToolCompletion, ToolModelResource, type ToolCompletion } from './
 import { createToolCatalog, selectTool, toolEntries, type ToolCatalog, type ToolSelection } from './catalog.js';
 import type { ToolConfiguration, ToolInput, ToolMembers } from './types.js';
 import { assertToolFeedbackBytes, assertToolReplyBytes, assertToolOutputBytes, resolveToolBudgets, ToolBudgetError, type ToolByteBudgets } from './budget.js';
+import { assertToolContextText, requireToolRequestContext } from './context.js';
 
 const refSchema = z.strictObject({ collection: z.string().min(1), id: z.string().min(1), revision: z.number().int().nonnegative() }).readonly();
 function inputCodecFor(catalog: ToolCatalog) {
@@ -107,13 +108,14 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
     const entries = toolEntries(options.tools, this.recoverable);
     this.tools = Object.freeze(Object.fromEntries(entries.map((entry) => [entry.name, entry.registration]))) as ToolMembers<Definitions>;
     Object.defineProperty(this, 'tools', { value: this.tools, enumerable: true, writable: false, configurable: false });
-    const catalog = (this.catalog = createToolCatalog(entries, options.policyVersion, { maxModelCalls: this.maxModelCalls, waitMs: this.waitMs, budgets: this.budgets, ...(options.imageContext === undefined ? {} : { imageContext: options.imageContext }) }));
+    const requestContext = options.requestContext;
+    const catalog = (this.catalog = createToolCatalog(entries, options.policyVersion, { maxModelCalls: this.maxModelCalls, waitMs: this.waitMs, budgets: this.budgets, ...(options.imageContext === undefined ? {} : { imageContext: options.imageContext }), ...(requestContext ? { requestContext } : {}) }));
     this.checkToolCall = (call) => selectTool(entries, catalog, call);
     Object.defineProperty(this, 'checkToolCall', { value: this.checkToolCall, enumerable: false, writable: false, configurable: false });
     const inputCodec = inputCodecFor(catalog);
     for (const name of ['catalog', 'maxModelCalls', 'waitMs', 'recoverable', 'budgets'] as const) Object.defineProperty(this, name, { value: this[name], enumerable: true, writable: false, configurable: false });
     const budgets = this.budgets;
-    const completion = createToolCompletion(this.recoverable, catalog, budgets, this.waitMs);
+    const completion = createToolCompletion(this.recoverable, catalog, budgets, this.waitMs, requestContext);
     this.stages = Object.freeze({ model: completion.id, tools: Object.freeze(entries.map((entry) => Object.freeze({ structureId: entry.registration.node.id, name: entry.name }))) });
     Object.defineProperty(this, 'stages', { value: this.stages, enumerable: true, writable: false, configurable: false });
     const tools = new Map(entries.map((entry) => [entry.name, entry]));
@@ -149,7 +151,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         },
       },
     });
-    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 1, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
+    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 2, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
     const save = (work: Work, name: 'waiting' | 'processing' | 'completed', state: State, refs: Refs) => work.checkpoint?.({ point: name === 'waiting' ? waiting : name === 'processing' ? processing : completed, state, refs });
     // Selection ownership is the current invocation. Both points explicitly use
     // the same choices; normal calls without checkpoints keep ordinary arrays.
@@ -175,7 +177,9 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       if (models.length !== state.exchanges.length + 1 || models.length > maxModelCalls) throw new Error('Tool model prefix changed');
       models.forEach((fact, index) => {
         const child = modelFact(facts.children, fact.ref);
-        if (!equal(child.input, { origin: state.origin, exchanges: state.exchanges.slice(0, index) })) throw new Error('Model input differs from fixed exchange prefix');
+        const { context, ...prefix } = child.input;
+        assertToolContextText(context, requestContext);
+        if (!equal(prefix, { origin: state.origin, exchanges: state.exchanges.slice(0, index) })) throw new Error('Model input differs from fixed exchange prefix');
         const expected = state.exchanges[index];
         if (expected) {
           const receipt = facts.children.accepted(child.ref, modelReception);
@@ -216,11 +220,13 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       save(work, 'processing', next, refs);
       return processTools(work, next, refs);
     }
-    function startModel(work: Work, state: State, refs: Refs): Promise<string> {
+    async function startModel(work: Work, state: State, refs: Refs): Promise<string> {
       const models = refsAt(refs, 'models');
       if (models.length >= maxModelCalls) throw new ToolModelCallLimitError(models.length, maxModelCalls);
       verifyOrigin(work, state);
-      const child = work.children.create(completion, { origin: state.origin, exchanges: state.exchanges }, { key: `model:${models.length}` });
+      const prefix = { origin: state.origin, exchanges: state.exchanges };
+      const context = requestContext ? await work.resources.model.prepare({ prefix, context: requestContext }) : undefined;
+      const child = work.children.create(completion, { ...prefix, ...(context === undefined ? {} : { context }) }, { key: `model:${models.length}` });
       const nextRefs = append(refs, 'models', child.ref);
       save(work, 'waiting', state, nextRefs);
       return receiveModel(work, state, nextRefs, child);
@@ -285,7 +291,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         const entry = work.resources.exchanges.read(state.origin, receipt.reference, false);
         assertToolReplyBytes(entry.reply, budgets);
         if (fact.returned?.status !== 'succeeded' || !equal(entry.reply, fact.returned.output.reply) || !equal(entry.operation, receipt.operation)) throw new Error('Exchange differs from original model return or reception');
-        await work.resources.model.confirm({ reference: fact.returned.output.reference, basis: fact.input, reply: fact.returned.output.reply, budgets });
+        await work.resources.model.confirm({ reference: fact.returned.output.reference, basis: fact.input, reply: fact.returned.output.reply, budgets, ...(requestContext ? { context: requestContext } : {}) });
         const next = modelRefs[index + 1];
         const end = next ? work.children.facts.get(next).order : Infinity;
         for (const feedback of entry.feedback) {
@@ -341,7 +347,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         save(work, 'completed', state, refs);
         return value;
       }
-      await work.resources.model.preflight({ origin: state.origin, exchanges: state.exchanges, current: state.current, budgets });
+      await work.resources.model.preflight({ origin: state.origin, exchanges: state.exchanges, current: state.current, budgets, ...(requestContext ? { context: requestContext } : {}) });
       while (state.cursor < calls.length) {
         const call = calls[state.cursor]!;
         const selected = selectTool(entries, catalog, call);
@@ -390,9 +396,9 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
 function snapshotConfiguration<Definitions extends Readonly<Record<string, ChildCallable>>>(value: ToolConfiguration<Definitions>): ToolConfiguration<Definitions> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value)) throw new TypeError('Tool configuration must be a data object');
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some((key) => !['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext'].includes(key))) throw new TypeError('Unknown Tool configuration field');
+  if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some((key) => !['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext', 'requestContext'].includes(key))) throw new TypeError('Unknown Tool configuration field');
   const result: Record<string, unknown> = {};
-  for (const key of ['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext']) {
+  for (const key of ['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext', 'requestContext']) {
     const field = Object.getOwnPropertyDescriptor(value, key);
     if ((!field && key in value) || (field && !('value' in field))) throw new TypeError('Tool configuration must use own data properties');
     if (field && !field.enumerable) throw new TypeError('Tool configuration fields must be enumerable');
@@ -400,6 +406,7 @@ function snapshotConfiguration<Definitions extends Readonly<Record<string, Child
   }
   if (result.checkpoint !== undefined && typeof result.checkpoint !== 'boolean') throw new TypeError('Tool checkpoint must be boolean');
   if (result.imageContext !== undefined) result.imageContext = requireModelImageContext(result.imageContext);
+  if (result.requestContext !== undefined) result.requestContext = requireToolRequestContext(result.requestContext);
   if (result.budgets !== undefined) {
     const budgets = result.budgets;
     if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets) || types.isProxy(budgets) || Object.getOwnPropertySymbols(budgets).length) throw new TypeError('Tool budgets must be a data object');
