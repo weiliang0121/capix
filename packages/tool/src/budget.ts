@@ -32,6 +32,7 @@ export class ToolBudgetError extends Error {
     readonly code: 'TOOL_REPLY_LIMIT' | 'TOOL_FEEDBACK_LIMIT' | 'TOOL_OUTPUT_LIMIT' | 'TOOL_CONTEXT_LIMIT' | 'TOOL_REQUEST_LIMIT' | 'TOOL_WIRE_REQUEST_LIMIT' | 'TOOL_COLLECTION_LIMIT',
     readonly bytes: number,
     readonly limit: number,
+    readonly phase: 'actual' | 'reserved' = 'actual',
   ) {
     super(`${code}: ${bytes} bytes exceeds ${limit}`);
     this.name = 'ToolBudgetError';
@@ -40,19 +41,19 @@ export class ToolBudgetError extends Error {
 function bytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), 'utf8');
 }
-function within(code: ToolBudgetError['code'], value: number, limit: number): void {
-  if (value > limit) throw new ToolBudgetError(code, value, limit);
+function within(code: ToolBudgetError['code'], value: number, limit: number, phase: ToolBudgetError['phase'] = 'actual'): void {
+  if (value > limit) throw new ToolBudgetError(code, value, limit, phase);
 }
 export function assertToolReplyBytes(reply: ModelReply, budgets: Pick<ToolByteBudgets, 'maxReplyBytes'>): ModelReply {
   requireModelReply(reply);
   within('TOOL_REPLY_LIMIT', bytes(reply), budgets.maxReplyBytes);
   return reply;
 }
-export function assertToolFeedbackBytes(toolCallId: string, result: ToolResult, budgets: ToolByteBudgets): ToolResult {
+export function assertToolFeedbackBytes(toolCallId: string, result: ToolResult, budgets: Pick<ToolByteBudgets, 'maxFeedbackBytes'>, phase: ToolBudgetError['phase'] = 'actual'): ToolResult {
   if (typeof toolCallId !== 'string' || !toolCallId.trim() || toolCallId.length > 512) throw new TypeError('Tool feedback identity cannot be stored in its exchange');
   requireToolResult(result);
   const feedback = requireToolFeedback({ toolCallId, ...result });
-  within('TOOL_FEEDBACK_LIMIT', bytes(feedback), budgets.maxFeedbackBytes);
+  within('TOOL_FEEDBACK_LIMIT', bytes(feedback), budgets.maxFeedbackBytes, phase);
   return result;
 }
 /** Tool implementations call this before their own checkpoint/output. The parent check is later. */
@@ -106,13 +107,13 @@ export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteB
   }
   if (inspection && (!measured || typeof measured !== 'object' || !Number.isSafeInteger(measured.requestBytes) || measured.requestBytes < 0 || !Number.isSafeInteger(measured.wireBytes) || measured.wireBytes < 0)) throw new TypeError('Tool request inspection must synchronously return finite byte counts');
   if (!Number.isSafeInteger(growth) || growth < 0) throw new RangeError('Invalid tool request byte reservation');
-  within('TOOL_REQUEST_LIMIT', Math.max(measured?.requestBytes ?? 0, bytes(request)) + growth, budgets.maxRequestBytes);
+  within('TOOL_REQUEST_LIMIT', Math.max(measured?.requestBytes ?? 0, bytes(request)) + growth, budgets.maxRequestBytes, growth > 0 || pendingToolCallIds.length > 0 ? 'reserved' : 'actual');
   // Feedback JSON can double through string escaping. Portable image attachments
   // add bounded metadata: at most 32 image references/index labels per result,
   // one escaped call identity per group, and group/user message envelopes.
   // Reserve metadata separately so large image bytes are not charged four times.
   const imageOverhead = pendingToolCallIds.reduce((total, id) => total + 32 * 128 + 2 * bytes(id) + 128, 0);
-  if (measured && budgets.maxWireRequestBytes !== undefined) within('TOOL_WIRE_REQUEST_LIMIT', measured.wireBytes + 2 * growth + imageOverhead, budgets.maxWireRequestBytes);
+  if (measured && budgets.maxWireRequestBytes !== undefined) within('TOOL_WIRE_REQUEST_LIMIT', measured.wireBytes + 2 * growth + imageOverhead, budgets.maxWireRequestBytes, growth > 0 || pendingToolCallIds.length > 0 ? 'reserved' : 'actual');
 }
 
 // Entity identities are limited to 512 UTF-16 code units. Worst-case JSON escaping,
@@ -121,15 +122,15 @@ export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteB
 const newEntryEnvelopeBytes = 20 * 1024;
 const feedbackReceiptEnvelopeBytes = 16 * 1024;
 export function assertToolCollectionBytes(entries: readonly ModelExchangeEntry[], budgets: ToolByteBudgets, growth = 0, origins: readonly ModelExchangeOrigin[] = []): void {
-  within('TOOL_COLLECTION_LIMIT', entries.reduce((total, entry) => total + bytes(entry), 0) + origins.reduce((total, origin) => total + bytes(origin), 0) + growth, budgets.maxCollectionBytes);
+  within('TOOL_COLLECTION_LIMIT', entries.reduce((total, entry) => total + bytes(entry), 0) + origins.reduce((total, origin) => total + bytes(origin), 0) + growth, budgets.maxCollectionBytes, growth > 0 ? 'reserved' : 'actual');
 }
 export function reserveToolReply(entries: readonly ModelExchangeEntry[], budgets: ToolByteBudgets, origins: readonly ModelExchangeOrigin[] = []): void {
   const growth = budgets.maxReplyBytes + newEntryEnvelopeBytes;
-  within('TOOL_COLLECTION_LIMIT', growth, maximumModelExchangeEntryBytes);
+  within('TOOL_COLLECTION_LIMIT', growth, maximumModelExchangeEntryBytes, 'reserved');
   assertToolCollectionBytes(entries, budgets, growth, origins);
 }
-export function reserveToolFeedback(entries: readonly ModelExchangeEntry[], current: ModelExchangeEntry, pending: number, budgets: ToolByteBudgets, origins: readonly ModelExchangeOrigin[] = []): void {
-  const growth = pending * (budgets.maxFeedbackBytes + feedbackReceiptEnvelopeBytes);
-  within('TOOL_COLLECTION_LIMIT', bytes(current) + growth, maximumModelExchangeEntryBytes);
+export function reserveToolFeedback(entries: readonly ModelExchangeEntry[], current: ModelExchangeEntry, pending: readonly number[], budgets: ToolByteBudgets, origins: readonly ModelExchangeOrigin[] = []): void {
+  const growth = pending.reduce((total, limit) => total + limit + feedbackReceiptEnvelopeBytes, 0);
+  within('TOOL_COLLECTION_LIMIT', bytes(current) + growth, maximumModelExchangeEntryBytes, 'reserved');
   assertToolCollectionBytes(entries, budgets, growth, origins);
 }

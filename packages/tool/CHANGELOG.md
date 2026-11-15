@@ -1,5 +1,15 @@
 # @weiliang0121/capix-tool
 
+## 0.9.0
+
+### Minor Changes
+
+- Add optional per-member `maxFeedbackBytes` limits for complete tool feedback JSON, including call IDs. Reserve pending feedback by each member's declared capacity, measure fixed invalid/unknown-tool rejections before any member effect, and count request placeholders only once. Enforce the same bound for successful and failed mappings and during cold recovery. Global defaults and request ceilings remain unchanged.
+
+  Add `ToolBudgetError.phase` (`actual` or `reserved`) to distinguish fixed-content measurements from totals that include future capacity reservations. Capacity failures do not roll back effects or automatically retry a failed invocation.
+
+  Migration: the catalog precheck policy advances to version 4 and binds member feedback limits. Older catalog checkpoints are rejected without modifying saved data or resending; start a new invocation after upgrading. Tool and completion checkpoint contracts remain version 3. Tool 0.9.0 continues to use the existing CAPiX 0.7.0 dependencies; no other package release is required.
+
 ## 0.8.1
 
 ### Patch Changes

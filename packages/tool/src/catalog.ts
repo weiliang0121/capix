@@ -32,14 +32,14 @@ function fields(value: unknown): Record<string, unknown> {
   return result;
 }
 
-export function toolEntries(value: unknown, checkpoint: boolean): readonly ToolEntry[] {
+export function toolEntries(value: unknown, checkpoint: boolean, maxFeedbackBytes: number): readonly ToolEntry[] {
   const registrations = fields(value);
   const entries: ToolEntry[] = [];
   const seen = new Set<ChildCallable>();
   for (const [name, configuration] of Object.entries(registrations)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/u.test(name) || ['models', 'completion', '__proto__', 'constructor', 'prototype'].includes(name)) throw new TypeError('Invalid tool member name');
     const item = fields(configuration);
-    if (Object.keys(item).some((key) => !['node', 'description', 'input', 'maxOutputBytes', 'result'].includes(key))) throw new TypeError('Unknown tool member configuration');
+    if (Object.keys(item).some((key) => !['node', 'description', 'input', 'maxOutputBytes', 'maxFeedbackBytes', 'result'].includes(key))) throw new TypeError('Unknown tool member configuration');
     const node = item.node;
     if (types.isProxy(node) || !(node instanceof Callable) || (node.kind !== 'node' && node.kind !== 'group')) throw new TypeError('A tool member must be a Node or Group');
     if (seen.has(node)) throw new TypeError('Tool members require distinct structure identities');
@@ -51,7 +51,9 @@ export function toolEntries(value: unknown, checkpoint: boolean): readonly ToolE
     if (Object.keys(result).some((key) => key !== 'succeeded' && key !== 'failed') || typeof result.succeeded !== 'function' || (result.failed !== undefined && typeof result.failed !== 'function')) throw new TypeError('A tool member requires a result mapping');
     const maxOutputBytes = item.maxOutputBytes;
     if (maxOutputBytes !== undefined && (typeof maxOutputBytes !== 'number' || !Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > 8 * 1024 * 1024)) throw new RangeError('Invalid tool output byte limit');
-    const registration: ToolMember<ChildCallable> = Object.freeze({ node, description: item.description, input, ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }), result: Object.freeze({ succeeded: result.succeeded.bind(item.result), ...(result.failed ? { failed: (result.failed as Function).bind(item.result) } : {}) }) }) as ToolMember<ChildCallable>;
+    const feedbackBytes = item.maxFeedbackBytes;
+    if (feedbackBytes !== undefined && (typeof feedbackBytes !== 'number' || !Number.isSafeInteger(feedbackBytes) || feedbackBytes < 1 || feedbackBytes > maxFeedbackBytes)) throw new RangeError('Invalid member feedback byte limit');
+    const registration: ToolMember<ChildCallable> = Object.freeze({ node, description: item.description, input, ...(feedbackBytes === undefined ? {} : { maxFeedbackBytes: feedbackBytes as number }), ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }), result: Object.freeze({ succeeded: result.succeeded.bind(item.result), ...(result.failed ? { failed: (result.failed as Function).bind(item.result) } : {}) }) }) as ToolMember<ChildCallable>;
     entries.push(Object.freeze({ name, position: entries.length + 1, registration }));
     seen.add(node);
   }
@@ -83,7 +85,7 @@ export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: 
     return freeze({ name, description: registration.description, parameters: schema });
   });
   requireModelRequest({ messages: [{ role: 'user', content: '' }], tools });
-  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 3, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
+  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 4, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, maxFeedbackBytes: registration.maxFeedbackBytes ?? execution.budgets.maxFeedbackBytes, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
   return Object.freeze({ policyVersion, ...(execution.imageContext === undefined ? {} : { imageContext: execution.imageContext }), tools: Object.freeze(tools), digest: createHash('sha256').update(canonical(basis)).digest('hex') });
 }
 export type ToolSelection = { readonly kind: 'accepted'; readonly entry: ToolEntry; readonly input: unknown } | { readonly kind: 'rejected'; readonly result: ToolResult };

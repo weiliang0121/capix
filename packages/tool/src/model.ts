@@ -77,7 +77,7 @@ export const ToolModelResource = new ResourceOffer({
       reserveToolReply(snapshot.entries, input.budgets, snapshot.origins);
       return source.channel.start(value);
     },
-    preflight(source: ToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
+    preflight(source: ToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly feedbackReservations: readonly { readonly toolCallId: string; readonly maxBytes: number }[]; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
       const base = request(source, { origin: input.origin, exchanges: input.exchanges }, input.budgets);
       const current = source.exchanges.read(input.origin, input.current, false);
       assertToolReplyBytes(current.reply, input.budgets);
@@ -85,21 +85,30 @@ export const ToolModelResource = new ResourceOffer({
       const ordered = source.exchanges.values(input.origin);
       if (ordered[input.exchanges.length]?.id !== current.id) throw new Error('Tool exchange is not the next exchange in its origin');
       const calls = current.reply.output.filter((item) => item.kind === 'tool-call');
+      const reservations = new Map(input.feedbackReservations.map((item) => [item.toolCallId, item.maxBytes]));
+      if (reservations.size !== calls.length || input.feedbackReservations.length !== calls.length || calls.some((call) => !reservations.has(call.id)) || [...reservations.values()].some((limit) => !Number.isSafeInteger(limit) || limit < 1 || limit > input.budgets.maxFeedbackBytes)) throw new TypeError('Tool feedback reservations must exactly cover the fixed calls within the global limit');
       const pending = calls.filter((call) => !current.feedback.some((item) => item.toolCallId === call.id));
       const placeholders = pending.map((call) => {
         const content: { kind: 'text'; text: string }[] = [{ kind: 'text', text: '' }];
-        const result = assertToolFeedbackBytes(call.id, { status: 'ok', content }, input.budgets);
+        const limit = reservations.get(call.id)!;
+        const result = assertToolFeedbackBytes(call.id, { status: 'ok', content }, { maxFeedbackBytes: limit }, 'reserved');
         // Reserve node-count overhead as well as bytes before dispatching effects.
         for (let count = 1; count < 32; count++) {
           const candidate = [...content, { kind: 'text', text: '' }];
-          if (Buffer.byteLength(JSON.stringify({ toolCallId: call.id, status: 'ok', content: candidate })) > input.budgets.maxFeedbackBytes) break;
+          if (Buffer.byteLength(JSON.stringify({ toolCallId: call.id, status: 'ok', content: candidate })) > limit) break;
           content.push({ kind: 'text', text: '' });
         }
         return { toolCallId: call.id, ...result };
       });
       for (const feedback of current.feedback) assertToolFeedbackBytes(feedback.toolCallId, { status: feedback.status, content: feedback.content }, input.budgets);
       const snapshot = source.exchanges.snapshot();
-      reserveToolFeedback(snapshot.entries, current, pending.length, input.budgets, snapshot.origins);
+      reserveToolFeedback(
+        snapshot.entries,
+        current,
+        pending.map((call) => reservations.get(call.id)!),
+        input.budgets,
+        snapshot.origins,
+      );
       const emptyContext = toolContextMessage('');
       const contextBytes = Buffer.byteLength(JSON.stringify(emptyContext), 'utf8');
       // Count the message's structure too; byte growth alone cannot reserve nodes.
@@ -109,7 +118,7 @@ export const ToolModelResource = new ResourceOffer({
         estimate,
         input.budgets,
         source.inspection,
-        pending.length * input.budgets.maxFeedbackBytes + toolContextReservation(input.context) - (contextPlaceholder ? contextBytes + 1 : 0),
+        pending.reduce((total, call, index) => total + reservations.get(call.id)! - Buffer.byteLength(JSON.stringify(placeholders[index]), 'utf8'), 0) + toolContextReservation(input.context) - (contextPlaceholder ? contextBytes + 1 : 0),
         pending.map((call) => call.id),
       );
     },

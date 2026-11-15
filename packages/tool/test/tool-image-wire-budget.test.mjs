@@ -15,13 +15,17 @@ test('portable image projection reserves escaped identities and all attachments 
   for (const constrained of [false, true]) {
     let executions = 0;
     let estimate;
+    let placeholderBytes;
     let actual;
     const inspection = {
       inspectRequest(request) {
         const measured = provider.inspectRequest(request);
         if (request.exchanges.length) {
           if (request.exchanges[0].feedback[0].content.some((item) => item.kind === 'image')) actual = measured.wireBytes;
-          else estimate = measured.wireBytes;
+          else {
+            estimate = measured.wireBytes;
+            placeholderBytes = Buffer.byteLength(JSON.stringify(request.exchanges[0].feedback[0]));
+          }
         }
         return measured;
       },
@@ -41,7 +45,7 @@ test('portable image projection reserves escaped identities and all attachments 
       } else {
         assert.equal(await fixture.runner.run(input), 'finished');
         assert.equal(executions, 1);
-        reserved = estimate + 2 * feedbackBytes + 32 * 128 + 2 * Buffer.byteLength(JSON.stringify(toolCallId)) + 128;
+        reserved = estimate + 2 * (feedbackBytes - placeholderBytes) + 32 * 128 + 2 * Buffer.byteLength(JSON.stringify(toolCallId)) + 128;
         assert.ok(Number.isSafeInteger(actual) && actual <= reserved);
       }
     } finally {

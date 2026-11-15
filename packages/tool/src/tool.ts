@@ -105,7 +105,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
     this.budgets = resolveToolBudgets(options.budgets);
     if (!Number.isSafeInteger(this.maxModelCalls) || this.maxModelCalls < 1) throw new RangeError('Tool model call limit must be a positive safe integer');
     if (!Number.isSafeInteger(this.waitMs) || this.waitMs < 0 || this.waitMs > 2147483647) throw new RangeError('Tool wait must be a nonnegative timer duration');
-    const entries = toolEntries(options.tools, this.recoverable);
+    const entries = toolEntries(options.tools, this.recoverable, this.budgets.maxFeedbackBytes);
     this.tools = Object.freeze(Object.fromEntries(entries.map((entry) => [entry.name, entry.registration]))) as ToolMembers<Definitions>;
     Object.defineProperty(this, 'tools', { value: this.tools, enumerable: true, writable: false, configurable: false });
     const requestContext = options.requestContext;
@@ -250,7 +250,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       const result = {
         succeeded: async (value: unknown) => {
           if (entry.registration.maxOutputBytes !== undefined) assertToolOutputBytes(value, entry.registration.maxOutputBytes);
-          const mapped = assertToolFeedbackBytes(active.callId, await entry.registration.result.succeeded(value), budgets);
+          const mapped = assertToolFeedbackBytes(active.callId, await entry.registration.result.succeeded(value), { maxFeedbackBytes: entry.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes });
           return work.resources.exchanges.receive(state.origin, reference, active.callId, mapped);
         },
         ...(entry.registration.result.failed
@@ -259,7 +259,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
                 // This preset stops on its own budget failures. This is not a new
                 // kernel error category and a matching business code is not enough.
                 if (failure instanceof ToolBudgetError) throw failure;
-                return work.resources.exchanges.receive(state.origin, reference, active.callId, assertToolFeedbackBytes(active.callId, await entry.registration.result.failed!(failure), budgets));
+                return work.resources.exchanges.receive(state.origin, reference, active.callId, assertToolFeedbackBytes(active.callId, await entry.registration.result.failed!(failure), { maxFeedbackBytes: entry.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }));
               },
             }
           : {}),
@@ -299,6 +299,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
           const call = entry.reply.output.find((item) => item.kind === 'tool-call' && item.id === feedback.toolCallId);
           if (!call || call.kind !== 'tool-call') throw new Error('Feedback has no original model call');
           const selected = selectTool(entries, catalog, call);
+          assertToolFeedbackBytes(feedback.toolCallId, { status: feedback.status, content: feedback.content }, { maxFeedbackBytes: tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes });
           if (selected.kind === 'rejected') {
             if (!equal(feedback, { toolCallId: call.id, ...selected.result }) || entry.receptions.some((receipt) => receipt.callId === call.id)) throw new Error('Precheck feedback differs from fixed policy');
             continue;
@@ -347,12 +348,20 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         save(work, 'completed', state, refs);
         return value;
       }
-      await work.resources.model.preflight({ origin: state.origin, exchanges: state.exchanges, current: state.current, budgets, ...(requestContext ? { context: requestContext } : {}) });
+      const selectedCalls = calls.map((call) => selectTool(entries, catalog, call));
+      const feedbackReservations = calls.map((call, index) => {
+        const selected = selectedCalls[index]!;
+        const maxBytes = tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes;
+        if (selected.kind === 'accepted') return { toolCallId: call.id, maxBytes };
+        assertToolFeedbackBytes(call.id, selected.result, { maxFeedbackBytes: maxBytes });
+        return { toolCallId: call.id, maxBytes: Buffer.byteLength(JSON.stringify({ toolCallId: call.id, ...selected.result }), 'utf8') };
+      });
+      await work.resources.model.preflight({ feedbackReservations, origin: state.origin, exchanges: state.exchanges, current: state.current, budgets, ...(requestContext ? { context: requestContext } : {}) });
       while (state.cursor < calls.length) {
         const call = calls[state.cursor]!;
-        const selected = selectTool(entries, catalog, call);
+        const selected = selectedCalls[state.cursor]!;
         if (selected.kind === 'rejected') {
-          const current = work.resources.exchanges.complete(state.origin, state.current!, call.id, assertToolFeedbackBytes(call.id, selected.result, budgets));
+          const current = work.resources.exchanges.complete(state.origin, state.current!, call.id, assertToolFeedbackBytes(call.id, selected.result, { maxFeedbackBytes: tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }));
           state = { ...state, current, cursor: state.cursor + 1 };
           save(work, 'processing', state, refs);
           continue;

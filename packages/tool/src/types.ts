@@ -13,6 +13,8 @@ export interface ToolMember<Member extends ChildCallable> {
   readonly input: z.ZodType<CallableInput<NoInfer<Member>>>;
   /** Enforce this inside the member before its own checkpoint; Tool checks the return too. */
   readonly maxOutputBytes?: number;
+  /** Complete feedback JSON, including call ID; defaults to budgets.maxFeedbackBytes. */
+  readonly maxFeedbackBytes?: number;
   readonly result: {
     /** Pure mapping: recovery may recompute it before the parent acceptance is saved. */
     readonly succeeded: (value: Stable<CallableOutput<NoInfer<Member>>>) => ToolResult | Promise<ToolResult>;

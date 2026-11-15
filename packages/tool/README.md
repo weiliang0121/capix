@@ -73,14 +73,19 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 次数按同一调用累计，显式恢复不会重置。它仍属于目录的固定配置：上限改变会拒绝原 CP；此前省略配置的调用使用默认 8，与现在的默认 1000 不同。提高次数不扩大上下文、实体、持久材料或时间容量，也不提供累计 token 额度；需要 token 或费用策略时由宿主独立计量。下列容量按完整 JSON 的 UTF-8 字节计量。
 
-| 配置                          | 默认值 | 检查位置                                            |
-| ----------------------------- | ------ | --------------------------------------------------- |
-| `budgets.maxReplyBytes`       | 64 KiB | 模型回复接纳及恢复                                  |
-| `budgets.maxFeedbackBytes`    | 4 KiB  | 包含 callId 的反馈；派发前保守预留                  |
-| `budgets.maxRequestBytes`     | 2 MiB  | 展开请求、发送前及工具派发前                        |
-| `budgets.maxWireRequestBytes` | 不设置 | 显式设置时必须登记 inspection，按实际 wire 编码检查 |
-| `budgets.maxCollectionBytes`  | 8 MiB  | 当前实体所有起点、交换与待写入预留                  |
-| `tools[name].maxOutputBytes`  | 不设置 | 成员返回后核对；成员应在自身 CP 前主动限制输出      |
+| 配置                           | 默认值       | 检查位置                                                 |
+| ------------------------------ | ------------ | -------------------------------------------------------- |
+| `budgets.maxReplyBytes`        | 64 KiB       | 模型回复接纳及恢复                                       |
+| `budgets.maxFeedbackBytes`     | 4 KiB        | 包含 callId 的反馈；派发前保守预留                       |
+| `budgets.maxRequestBytes`      | 2 MiB        | 展开请求、发送前及工具派发前                             |
+| `budgets.maxWireRequestBytes`  | 不设置       | 显式设置时必须登记 inspection，按实际 wire 编码检查      |
+| `budgets.maxCollectionBytes`   | 8 MiB        | 当前实体所有起点、交换与待写入预留                       |
+| `tools[name].maxFeedbackBytes` | 全局反馈上限 | 本成员完整反馈上限；派发前按调用求和，接纳与恢复再次检查 |
+| `tools[name].maxOutputBytes`   | 不设置       | 成员返回后核对；成员应在自身 CP 前主动限制输出           |
+
+`tools[name].maxFeedbackBytes` 接受正安全整数，不得超过 `budgets.maxFeedbackBytes`；省略时沿用全局上限。它覆盖成功与失败映射、参数拒绝，包含 `toolCallId`、`status`、`content` 的完整 JSON UTF-8 字节，并固定进目录摘要。派发前逐调用预留对应成员上限；已确定的参数错误或未知工具反馈按实际固定字节预留，并先核对成员或全局上限。当前回复的全部调用预检完成后才执行首个工具，因此后续拒绝反馈超限也不会先产生前面工具的效果。接纳时结果超出声明即终止，不截断、不再次进入失败映射，也不自动重试已发生的效果。原始输出上限与映射后的反馈上限独立。
+
+`ToolBudgetError.phase` 区分 `actual`（已取得固定内容的实际计量）与 `reserved`（为尚未取得的回复、反馈或下次材料预留）；`bytes` 是对应的实际或预留总量，`limit` 是触发的上限。错误阶段不表示工具效果已回滚。
 
 `ToolModelSource.inspection` 可直接使用提供同步 `inspectRequest` 的 Provider。显式 wire 限制但缺少测量能力会拒绝发送。集合预算是预设的保守检查，实体和 Provider 的独立上限仍然成立；共享并发调用没有跨实体预留事务。集合核算与累计请求构造目前读取完整材料，不宣称常数成本，也不自动删除历史。
 
@@ -92,7 +97,7 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 被省略的工具图片替为带交换 ID、调用 ID、contentIndex 的文字占位，原有文字及工具调用闭合保持，用户初始参考图继续保留。完整原图仍在交换实体中，业务可以显式读取；框架不自动重读、删除历史或压缩。见 [ModelExchanges](../model-exchanges/README.md)。
 
-图片反馈须显式提高默认 4 KiB 的 `maxFeedbackBytes`，并为成员输出、完整交换集合和请求设置相称预算。派发前仍按未知工具结果的最大反馈预算保守预留；窗口减少历史图片积累，不保证单张大图或多个待执行工具一定能满足请求限制，文字历史仍然累计。
+图片反馈须显式提高默认 4 KiB 的 `maxFeedbackBytes`，并为成员输出、完整交换集合和请求设置相称预算。可为小文本工具分别声明更小的 `tools[name].maxFeedbackBytes`，使同批小工具按自己的可信上限预留，而图片工具保留较大的全局上限；窗口减少历史图片积累，不保证单张大图或多个待执行工具一定能满足请求限制，文字历史仍然累计。
 
 ## 每次请求的宿主材料
 
@@ -121,7 +126,7 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完整引用关系，交换前缀 state 仍完整编码。它不把已有的内核增量保存保证扩大成整个模型循环的恒定成本承诺。
 
-当前 Tool 与内部 completion 的 CP 契约版本均为 3；0.8.0 使用的 v2（assistant 材料载体）及此前版本明确拒绝，不升级、重选材料或发送请求探测。升级后应从新调用开始；既有持久材料保持不变，不能通过改写旧请求来恢复。
+当前 Tool 与内部 completion 的 CP 契约版本均为 3；目录预检策略版本为 4，加入逐成员反馈容量，旧目录摘要明确拒绝；0.8.0 使用的 v2（assistant 材料载体）及此前版本明确拒绝，不升级、重选材料或发送请求探测。升级后应从新调用开始；既有持久材料保持不变，不能通过改写旧请求来恢复。
 
 工具自身的外部效果确认仍归其资源和业务契约；多个实体提交与父 CP 不构成统一事务。当前格式与契约变化拒绝旧依据，没有旧 ToolLoop 别名或数据升级路径。
 
