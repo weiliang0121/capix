@@ -1,5 +1,11 @@
 # @weiliang0121/capix-checkpoint
 
+## 0.6.0
+
+### Patch Changes
+
+- @weiliang0121/capix-contracts@0.6.0
+
 ## 0.5.0
 
 ### Patch Changes

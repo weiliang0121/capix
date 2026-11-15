@@ -102,7 +102,11 @@ DeepSeek 思考模式在带 `tools` 的后续请求中要求回传此前回复�
 const reply = await model.complete({ messages: [{ role: 'user', content: '解释这份材料。' }], stream: true }, { signal, emit: (delta) => process.stdout.write(delta) });
 ```
 
-`stream` 默认 false；单独提供 emit 不开启流式。emit 只同步交付正文预览，工具参数与思考文本不会被当作正文发布。未提供 emit 时仍完整消费。回调抛错保留原错误身份，回调返回 Promise 会被拒绝。预览不代表最终回复或业务接纳已成立。
+`stream` 默认 false；单独提供 emit 或 progress 不开启流式。emit 只同步交付正文预览，工具参数与思考文本不会被当作正文发布。未提供 emit 时仍完整消费。回调抛错保留原错误身份，回调返回 Promise 会被拒绝。预览不代表最终回复或业务接纳已成立。
+
+`ModelControls.progress?: (progress: ModelStreamProgress) => void` 同步报告实际流式活动，公开值只有 `{ kind: 'reasoning' | 'text' | 'tool-call' }`。只有当前 SSE chunk 完整校验后，其中非空的 reasoning_content、正文或工具 ID/名称/参数增量才触发；空字段、role-only、usage 与终态不会触发。连续同类增量只通知一次，切换后再次出现可重新通知；同一 chunk 同时含多类增量时按 reasoning、tool-call、text 顺序报告。通知不包含思考正文、工具名称或参数；tool-call 仅表示模型正在生成调用，不表示工具执行或完成。非流式回复不合成进度，通知也不代表最终回复或业务接纳成功。原始 reasoning_content 仍完整保留在最终回复并随 exchanges 回传。
+
+progress 与 emit 使用相同的同步消费者失败语义：抛错保留原错误身份，返回 Promise 或 thenable 拒绝为 TypeError，停止后续通知并释放流读取；内部 ModelEmissionFailure 仅用于保留错误来源。消费者触发取消后不继续通知。进度无需新的实体、协议状态或计时推断。
 
 SSE 按 `tool_calls[index]` 拼接名称与参数片段，保留 reasoning_content，终态与独立 usage 均支持。缺少 ID、重复 ID、索引缺口、超过 32 个调用、终态后继续 choice、重复 usage、缺少 finish_reason 或 `[DONE]` 均拒绝。`[DONE]` 结束协议后立即释放读取，不要求上游 HTTP 连接先关闭；不重发或退回非流式请求。原有 UTF-8 分片、SSE 换行/注释、多行 data、接收者失败、取消和总超时行为保持。
 

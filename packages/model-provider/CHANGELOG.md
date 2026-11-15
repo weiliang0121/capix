@@ -1,5 +1,11 @@
 # @weiliang0121/capix-model-provider
 
+## 0.6.0
+
+### Minor Changes
+
+- Add synchronous ModelControls.progress notifications for validated, nonempty reasoning, text and tool-call stream activity, without exposing reasoning or tool contents. Preserve complete reasoning exchanges and existing text preview, cancellation and consumer failure behavior.
+
 ## 0.5.0
 
 ### Minor Changes

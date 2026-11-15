@@ -1,5 +1,12 @@
 # @weiliang0121/capix-structure
 
+## 0.6.0
+
+### Patch Changes
+
+- @weiliang0121/capix-contracts@0.6.0
+  - @weiliang0121/capix-resources@0.6.0
+
 ## 0.5.0
 
 ### Patch Changes

@@ -70,7 +70,7 @@ maxWireRequestBytes 显式设置时要求同步 inspection，可用 Provider.ins
 
 Provider 共同请求／回复／反馈为至多 2 MiB JSON、深度 64、100000 值；HTTP 编码请求另受 2 MiB 限制。默认总超时 60 秒、传输响应预算 2 MiB。合法单项不保证累计历史仍能装入下一请求，限制也不是堆内存或 token 上界。ModelExchanges 默认最多 10000 起点、10000 交换、累计 64 MiB，单起点／交换最多 8 MiB；较大实体容量不会放宽 Provider 限额。
 
-Provider 一次 complete 仅发送一次 HTTP，无隐式重试。SSE 固定回复身份，检查索引、完整终态、usage 与 DONE；缺失或冲突明确拒绝，不回退非流式或重发。DONE 后释放读取，不要求 HTTP 连接先关闭。只发布正文预览，不把工具参数或思考文本作为正文。
+Provider 一次 complete 仅发送一次 HTTP，无隐式重试。SSE 固定回复身份，检查索引、完整终态、usage 与 DONE；缺失或冲突明确拒绝，不回退非流式或重发。DONE 后释放读取，不要求 HTTP 连接先关闭。emit 只发布正文预览，不把工具参数或思考文本作为正文。可选同步 progress 以 `ModelStreamProgress` 的 `{ kind: 'reasoning' | 'text' | 'tool-call' }` 报告已校验非空流式增量的类别变化，同类连续增量去重；不含思考或工具内容，不表示执行或完成。空字段和非流式回复不生成进度，消费者失败、取消与流读取清理沿用 emit 规则。
 
 Tool 的 stream 可让 Provider 消费 SSE，但预设只交付最终正文，不转交中间候选。stages 仅提供内部结构 ID 供宿主投影真实进度。候选正文、完整模型回复、最终 Transcript 消息、父接纳和 Runner settled 分别表达不同事实。
 

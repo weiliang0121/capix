@@ -1,11 +1,11 @@
 import { isRequestCancellation, ModelEmissionFailure, ProviderError } from './error.js';
-import type { ModelReply } from './types.js';
+import type { ModelReply, ModelStreamProgress } from './types.js';
 import { acceptUsage } from './usage.js';
 import { acceptWireReply } from './wire.js';
 import { toolLimit } from './value.js';
 
 /** A stream is complete only after its terminal choice and the provider's [DONE] marker. */
-export async function readModelStream(response: Response, signal: AbortSignal, limit: number, emit?: (delta: string) => void): Promise<ModelReply> {
+export async function readModelStream(response: Response, signal: AbortSignal, limit: number, emit?: (delta: string) => void, progress?: (progress: ModelStreamProgress) => void): Promise<ModelReply> {
   if (!response.body) throw envelope();
   if (response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'text/event-stream') {
     await response.body.cancel().catch(() => undefined);
@@ -16,7 +16,7 @@ export async function readModelStream(response: Response, signal: AbortSignal, l
   signal.addEventListener('abort', abort, { once: true });
   try {
     signal.throwIfAborted();
-    const completion = new ChatCompletionStream(signal, emit);
+    const completion = new ChatCompletionStream(signal, emit, progress);
     const events = new ServerSentEvents((data) => completion.receive(data));
     const decoder = new TextDecoder('utf-8', { fatal: true });
     let bytes = 0;
@@ -102,10 +102,12 @@ class ChatCompletionStream {
   #hasReasoning = false;
   #calls = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>();
   #done = false;
+  #progressKind: ModelStreamProgress['kind'] | undefined;
 
   constructor(
     private readonly signal: AbortSignal,
     private readonly emit?: (delta: string) => void,
+    private readonly progress?: (progress: ModelStreamProgress) => void,
   ) {}
 
   get done(): boolean {
@@ -152,6 +154,7 @@ class ChatCompletionStream {
       this.#reasoning.push(delta.reasoning_content);
       this.#hasReasoning = true;
     }
+    let hasToolDelta = false;
     if (delta.tool_calls != null) {
       if (!Array.isArray(delta.tool_calls) || delta.tool_calls.length > toolLimit) throw envelope();
       for (const fragment of delta.tool_calls) {
@@ -162,36 +165,37 @@ class ChatCompletionStream {
           this.#calls.set(fragment.index, call);
         }
         if (typeof fragment.id === 'string') {
-          if (call.id) throw envelope();
+          if (call.id || [...this.#calls.values()].some((existing) => existing.id === fragment.id)) throw envelope();
           call.id = fragment.id;
+          hasToolDelta = true;
         }
         if (record(fragment.function)) {
           const { name, arguments: args } = fragment.function;
           if ((name !== undefined && typeof name !== 'string') || (args !== undefined && typeof args !== 'string')) throw envelope();
           if (typeof name === 'string') call.function.name += name;
           if (typeof args === 'string') call.function.arguments += args;
+          if ((typeof name === 'string' && name.length > 0) || (typeof args === 'string' && args.length > 0)) hasToolDelta = true;
         }
       }
     }
+    // Notify only after the entire chunk (including every tool fragment) is validated.
+    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length) this.reportProgress('reasoning');
+    if (hasToolDelta) this.reportProgress('tool-call');
+    if (typeof delta.content === 'string' && delta.content.length) this.reportProgress('text');
     if (typeof delta.content === 'string') this.#hasContent = true;
     if (typeof delta.content === 'string' && delta.content.length) {
       this.#fragments.push(delta.content);
-      if (this.emit) {
-        try {
-          const returned: unknown = this.emit(delta.content);
-          if ((typeof returned === 'object' && returned !== null) || typeof returned === 'function') {
-            if ('then' in returned && typeof returned.then === 'function') {
-              void Promise.resolve(returned).catch(() => undefined);
-              throw new TypeError('Model preview consumer must be synchronous');
-            }
-          }
-        } catch (failure) {
-          throw new ModelEmissionFailure(failure);
-        }
-      }
+      if (this.emit) deliver(() => this.emit!(delta.content as string), 'Model preview consumer must be synchronous');
       this.signal.throwIfAborted();
     }
     return false;
+  }
+
+  private reportProgress(kind: ModelStreamProgress['kind']): void {
+    if (this.#progressKind === kind) return;
+    this.#progressKind = kind;
+    if (this.progress) deliver(() => this.progress!(Object.freeze({ kind })), 'Model progress consumer must be synchronous');
+    this.signal.throwIfAborted();
   }
 
   result(): ModelReply {
@@ -199,6 +203,21 @@ class ChatCompletionStream {
     const indexes = [...this.#calls.keys()].sort((left, right) => left - right);
     if (indexes.some((index, position) => index !== position)) throw envelope();
     return acceptWireReply({ id: this.#id, model: this.#model, choices: [{ index: 0, message: { role: 'assistant', content: this.#hasContent || !this.#calls.size ? this.#fragments.join('') : null, ...(this.#hasReasoning ? { reasoning_content: this.#reasoning.join('') } : {}), ...(this.#calls.size ? { tool_calls: indexes.map((index) => this.#calls.get(index)) } : {}) }, finish_reason: this.#finishReason }], usage: this.#wireUsage });
+  }
+}
+
+/** Shared provenance and synchronous contract for both stream consumers. */
+function deliver(consumer: () => unknown, message: string): void {
+  try {
+    const returned = consumer();
+    if ((typeof returned === 'object' && returned !== null) || typeof returned === 'function') {
+      if ('then' in returned && typeof returned.then === 'function') {
+        void Promise.resolve(returned).catch(() => undefined);
+        throw new TypeError(message);
+      }
+    }
+  } catch (failure) {
+    throw new ModelEmissionFailure(failure);
   }
 }
 

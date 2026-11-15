@@ -355,3 +355,118 @@ test('invalid stream configuration fails before sending', async () => {
   await assert.rejects(model.complete({ messages, stream: true }, { emit: 'receiver' }));
   assert.equal(sends, 0);
 });
+
+test('progress observes validated nonempty stream kinds, deduplicates phases and preserves reasoning exchanges', async () => {
+  const progress = [];
+  const deltas = [];
+  const wire = [chunk({ role: 'assistant' }), chunk({ reasoning_content: '', content: '', tool_calls: [] }), chunk({ reasoning_content: 'private ' }), chunk({ reasoning_content: 'thought' }), chunk({ content: 'answer' }), chunk({ content: ' more' }), chunk({ reasoning_content: ' again' }), chunk({ tool_calls: [{ index: 0, function: { name: '', arguments: '' } }] }), chunk({ tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{' } }] }), chunk({ tool_calls: [{ index: 0, function: { arguments: '}' } }] }), chunk({}, 'tool_calls')].map(event).join('') + event('[DONE]');
+  const reply = await provider(async () => fragmented(wire, 7)).complete({ messages, stream: true }, { emit: (text) => deltas.push(text), progress: (value) => progress.push(value) });
+  assert.deepEqual(progress, [{ kind: 'reasoning' }, { kind: 'text' }, { kind: 'reasoning' }, { kind: 'tool-call' }]);
+  assert.ok(progress.every(Object.isFrozen));
+  assert.deepEqual(deltas, ['answer', ' more']);
+  assert.equal(reply.native.reasoningContent, 'private thought again');
+  const next = provider(async (_url, options) => {
+    const encoded = JSON.parse(options.body).messages;
+    assert.equal(encoded[1].reasoning_content, 'private thought again');
+    assert.equal(encoded[1].tool_calls[0].function.arguments, '{}');
+    return Response.json({ id: 'reply-2', model: 'fixture-model', choices: [{ index: 0, message: { content: 'done' }, finish_reason: 'stop' }] });
+  });
+  await next.complete({ messages, exchanges: [{ reply, feedback: [{ toolCallId: 'call-1', status: 'ok', content: [{ kind: 'text', text: 'result' }] }] }] });
+});
+
+test('empty, role-only and non-streaming replies produce no progress', async () => {
+  const progress = [];
+  await provider(async () => response(event(chunk({ role: 'assistant', reasoning_content: '', content: '', tool_calls: [] })) + event(chunk({}, 'stop')) + event('[DONE]'))).complete({ messages, stream: true }, { progress: (value) => progress.push(value) });
+  await provider(async (_url, options) => {
+    assert.equal(JSON.parse(options.body).stream, false);
+    return Response.json({ id: 'reply-1', model: 'fixture-model', choices: [{ index: 0, message: { content: 'final', reasoning_content: 'private' }, finish_reason: 'stop' }] });
+  }).complete({ messages }, { progress: (value) => progress.push(value) });
+  assert.deepEqual(progress, []);
+});
+
+test('malformed chunks cannot announce reasoning, text or a partly validated tool fragment', async () => {
+  for (const delta of [
+    { reasoning_content: 'private', content: 42 },
+    {
+      reasoning_content: 'private',
+      content: 'answer',
+      tool_calls: [
+        { index: 0, id: 'call-1', function: { name: 'lookup' } },
+        { index: 1, function: { arguments: 42 } },
+      ],
+    },
+    {
+      reasoning_content: 'private',
+      content: 'answer',
+      tool_calls: [
+        { index: 0, id: 'duplicate', type: 'function', function: { name: 'first', arguments: '{}' } },
+        { index: 1, id: 'duplicate', type: 'function', function: { name: 'second', arguments: '{}' } },
+      ],
+    },
+    { tool_calls: [{ index: 0, id: 'call-1', type: 'unsupported' }] },
+  ]) {
+    const progress = [];
+    const deltas = [];
+    await assert.rejects(provider(async () => response(event(chunk(delta)))).complete({ messages, stream: true }, { progress: (value) => progress.push(value), emit: (text) => deltas.push(text) }), (error) => error instanceof ProviderError && error.code === 'ENVELOPE');
+    assert.deepEqual(progress, []);
+    assert.deepEqual(deltas, []);
+  }
+});
+
+test('progress arrives while reading and cancellation, callback failure and thenables release the stream', async (t) => {
+  for (const mode of ['cancel', 'throw', 'cancel-and-throw', 'promise', 'thenable', 'wait-timeout']) {
+    await t.test(mode, async () => {
+      const caller = new AbortController();
+      const failure = new Error('progress consumer failure');
+      const reason = new Error('stop progress');
+      let cancelled = 0;
+      const progress = [];
+      const deltas = [];
+      const body = new ReadableStream({
+        start(stream) {
+          stream.enqueue(encoder.encode(event(chunk({ reasoning_content: 'private' })) + (mode === 'wait-timeout' ? '' : event(chunk({ content: 'later' }, 'stop')) + event('[DONE]'))));
+        },
+        cancel() {
+          cancelled++;
+        },
+      });
+      await assert.rejects(
+        provider(async () => response(body), { timeoutMs: mode === 'wait-timeout' ? 30 : 1000 }).complete(
+          { messages, stream: true },
+          {
+            signal: caller.signal,
+            emit: (text) => deltas.push(text),
+            progress(value) {
+              progress.push(value);
+              if (mode === 'cancel' || mode === 'cancel-and-throw') caller.abort(reason);
+              if (mode === 'throw' || mode === 'cancel-and-throw') throw failure;
+              if (mode === 'promise') return Promise.reject(failure);
+              if (mode === 'thenable')
+                return {
+                  then(_resolve, reject) {
+                    reject(failure);
+                  },
+                };
+            },
+          },
+        ),
+        (error) => (mode === 'cancel' ? error === reason : mode === 'throw' || mode === 'cancel-and-throw' ? error === failure : mode === 'wait-timeout' ? error instanceof ProviderError && error.code === 'TIMEOUT' : error instanceof TypeError && !(error instanceof ProviderError)),
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(progress, [{ kind: 'reasoning' }]);
+      assert.deepEqual(deltas, []);
+      assert.equal(cancelled, 1);
+      assert.equal(body.locked, false);
+    });
+  }
+});
+
+test('invalid progress consumers fail before opening transport', async () => {
+  let sends = 0;
+  const model = provider(async () => {
+    sends++;
+    return response(completeStream());
+  });
+  await assert.rejects(model.complete({ messages, stream: true }, { progress: 'receiver' }), (error) => error instanceof ProviderError && error.code === 'REQUEST');
+  assert.equal(sends, 0);
+});
