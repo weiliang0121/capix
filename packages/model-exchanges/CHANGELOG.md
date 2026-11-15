@@ -1,5 +1,17 @@
 # @weiliang0121/capix-model-exchanges
 
+## 0.7.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @weiliang0121/capix-model-provider@0.7.0
+  - @weiliang0121/capix-changes@0.7.0
+  - @weiliang0121/capix-contracts@0.7.0
+  - @weiliang0121/capix-diagnostics@0.7.0
+  - @weiliang0121/capix-resources@0.7.0
+  - @weiliang0121/capix-view@0.7.0
+
 ## 0.6.0
 
 ### Patch Changes

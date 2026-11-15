@@ -359,29 +359,34 @@ test('invalid stream configuration fails before sending', async () => {
 test('progress observes validated nonempty stream kinds, deduplicates phases and preserves reasoning exchanges', async () => {
   const progress = [];
   const deltas = [];
-  const wire = [chunk({ role: 'assistant' }), chunk({ reasoning_content: '', content: '', tool_calls: [] }), chunk({ reasoning_content: 'private ' }), chunk({ reasoning_content: 'thought' }), chunk({ content: 'answer' }), chunk({ content: ' more' }), chunk({ reasoning_content: ' again' }), chunk({ tool_calls: [{ index: 0, function: { name: '', arguments: '' } }] }), chunk({ tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{' } }] }), chunk({ tool_calls: [{ index: 0, function: { arguments: '}' } }] }), chunk({}, 'tool_calls')].map(event).join('') + event('[DONE]');
-  const reply = await provider(async () => fragmented(wire, 7)).complete({ messages, stream: true }, { emit: (text) => deltas.push(text), progress: (value) => progress.push(value) });
+  const reasoning = [];
+  const wire = [chunk({ role: 'assistant' }), chunk({ reasoning_content: null, content: null }), chunk({ reasoning_content: '', content: '', tool_calls: [] }), chunk({ reasoning_content: '思考🌏' }), chunk({ reasoning_content: '\n继续' }), chunk({ reasoning_content: ' \n' }), chunk({ content: 'answer' }), chunk({ content: ' more' }), chunk({ reasoning_content: ' again' }), chunk({ tool_calls: [{ index: 0, function: { name: '', arguments: '' } }] }), chunk({ tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{' } }] }), chunk({ tool_calls: [{ index: 0, function: { arguments: '}' } }] }), chunk({}, 'tool_calls')].map(event).join('') + event('[DONE]');
+  const reply = await provider(async () => fragmented(wire, 1)).complete({ messages, stream: true }, { emit: (text) => deltas.push(text), emitReasoning: (text) => reasoning.push(text), progress: (value) => progress.push(value) });
   assert.deepEqual(progress, [{ kind: 'reasoning' }, { kind: 'text' }, { kind: 'reasoning' }, { kind: 'tool-call' }]);
   assert.ok(progress.every(Object.isFrozen));
   assert.deepEqual(deltas, ['answer', ' more']);
-  assert.equal(reply.native.reasoningContent, 'private thought again');
+  assert.deepEqual(reasoning, ['思考🌏', '\n继续', ' \n', ' again']);
+  assert.equal(reply.native.reasoningContent, reasoning.join(''));
   const next = provider(async (_url, options) => {
     const encoded = JSON.parse(options.body).messages;
-    assert.equal(encoded[1].reasoning_content, 'private thought again');
+    assert.equal(encoded[1].reasoning_content, '思考🌏\n继续 \n again');
     assert.equal(encoded[1].tool_calls[0].function.arguments, '{}');
     return Response.json({ id: 'reply-2', model: 'fixture-model', choices: [{ index: 0, message: { content: 'done' }, finish_reason: 'stop' }] });
   });
   await next.complete({ messages, exchanges: [{ reply, feedback: [{ toolCallId: 'call-1', status: 'ok', content: [{ kind: 'text', text: 'result' }] }] }] });
 });
 
-test('empty, role-only and non-streaming replies produce no progress', async () => {
+test('empty, role-only and non-streaming replies produce no progress or reasoning preview', async () => {
   const progress = [];
-  await provider(async () => response(event(chunk({ role: 'assistant', reasoning_content: '', content: '', tool_calls: [] })) + event(chunk({}, 'stop')) + event('[DONE]'))).complete({ messages, stream: true }, { progress: (value) => progress.push(value) });
-  await provider(async (_url, options) => {
+  const reasoning = [];
+  await provider(async () => response(event(chunk({ role: 'assistant', reasoning_content: null })) + event(chunk({ reasoning_content: '', content: '', tool_calls: [] })) + event(chunk({}, 'stop')) + event('[DONE]'))).complete({ messages, stream: true }, { progress: (value) => progress.push(value), emitReasoning: (text) => reasoning.push(text) });
+  const reply = await provider(async (_url, options) => {
     assert.equal(JSON.parse(options.body).stream, false);
     return Response.json({ id: 'reply-1', model: 'fixture-model', choices: [{ index: 0, message: { content: 'final', reasoning_content: 'private' }, finish_reason: 'stop' }] });
-  }).complete({ messages }, { progress: (value) => progress.push(value) });
+  }).complete({ messages }, { progress: (value) => progress.push(value), emitReasoning: (text) => reasoning.push(text) });
+  assert.equal(reply.native.reasoningContent, 'private');
   assert.deepEqual(progress, []);
+  assert.deepEqual(reasoning, []);
 });
 
 test('malformed chunks cannot announce reasoning, text or a partly validated tool fragment', async () => {
@@ -407,9 +412,11 @@ test('malformed chunks cannot announce reasoning, text or a partly validated too
   ]) {
     const progress = [];
     const deltas = [];
-    await assert.rejects(provider(async () => response(event(chunk(delta)))).complete({ messages, stream: true }, { progress: (value) => progress.push(value), emit: (text) => deltas.push(text) }), (error) => error instanceof ProviderError && error.code === 'ENVELOPE');
+    const reasoning = [];
+    await assert.rejects(provider(async () => response(event(chunk(delta)))).complete({ messages, stream: true }, { progress: (value) => progress.push(value), emit: (text) => deltas.push(text), emitReasoning: (text) => reasoning.push(text) }), (error) => error instanceof ProviderError && error.code === 'ENVELOPE');
     assert.deepEqual(progress, []);
     assert.deepEqual(deltas, []);
+    assert.deepEqual(reasoning, []);
   }
 });
 
@@ -422,6 +429,7 @@ test('progress arrives while reading and cancellation, callback failure and then
       let cancelled = 0;
       const progress = [];
       const deltas = [];
+      const reasoning = [];
       const body = new ReadableStream({
         start(stream) {
           stream.enqueue(encoder.encode(event(chunk({ reasoning_content: 'private' })) + (mode === 'wait-timeout' ? '' : event(chunk({ content: 'later' }, 'stop')) + event('[DONE]'))));
@@ -436,6 +444,7 @@ test('progress arrives while reading and cancellation, callback failure and then
           {
             signal: caller.signal,
             emit: (text) => deltas.push(text),
+            emitReasoning: (text) => reasoning.push(text),
             progress(value) {
               progress.push(value);
               if (mode === 'cancel' || mode === 'cancel-and-throw') caller.abort(reason);
@@ -455,6 +464,7 @@ test('progress arrives while reading and cancellation, callback failure and then
       await new Promise((resolve) => setImmediate(resolve));
       assert.deepEqual(progress, [{ kind: 'reasoning' }]);
       assert.deepEqual(deltas, []);
+      assert.deepEqual(reasoning, mode === 'wait-timeout' ? ['private'] : []);
       assert.equal(cancelled, 1);
       assert.equal(body.locked, false);
     });
@@ -468,5 +478,115 @@ test('invalid progress consumers fail before opening transport', async () => {
     return response(completeStream());
   });
   await assert.rejects(model.complete({ messages, stream: true }, { progress: 'receiver' }), (error) => error instanceof ProviderError && error.code === 'REQUEST');
+  for (const emitReasoning of [null, 'receiver', 1, {}]) {
+    for (const stream of [false, true]) await assert.rejects(model.complete({ messages, stream }, { emitReasoning }), (error) => error instanceof ProviderError && error.code === 'REQUEST');
+  }
   assert.equal(sends, 0);
+});
+
+test('mixed chunks notify in order and retain reasoning without a reasoning subscriber', async () => {
+  const wire = event(chunk({ reasoning_content: '思考', content: 'answer', tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } }] }, 'tool_calls')) + event('[DONE]');
+  for (const subscribed of [false, true]) {
+    const notifications = [];
+    const reply = await provider(async () => response(wire)).complete(
+      { messages, stream: true },
+      {
+        progress: ({ kind }) => notifications.push(`progress:${kind}`),
+        ...(subscribed ? { emitReasoning: (text) => notifications.push(`reasoning:${text}`) } : {}),
+        emit: (text) => notifications.push(`text:${text}`),
+      },
+    );
+    assert.deepEqual(notifications, ['progress:reasoning', ...(subscribed ? ['reasoning:思考'] : []), 'progress:tool-call', 'progress:text', 'text:answer']);
+    assert.equal(reply.native.reasoningContent, '思考');
+    assert.equal(reply.output.find((item) => item.kind === 'text').text, 'answer');
+    assert.equal(reply.output.find((item) => item.kind === 'tool-call').arguments.text, '{}');
+  }
+});
+
+test('reasoning preview arrives before completion but missing DONE still fails', async () => {
+  for (const done of [false, true]) {
+    const { promise: preview, resolve: sawPreview } = Promise.withResolvers();
+    let controller;
+    let settled = false;
+    let cancelled = 0;
+    const body = new ReadableStream({
+      start(stream) {
+        controller = stream;
+        stream.enqueue(encoder.encode(event(chunk({ reasoning_content: '先思考🌏' }))));
+      },
+      cancel() {
+        cancelled++;
+      },
+    });
+    const pending = provider(async () => response(body)).complete({ messages, stream: true }, { emitReasoning: sawPreview });
+    const outcome = pending.then(
+      (reply) => {
+        settled = true;
+        return reply;
+      },
+      (error) => {
+        settled = true;
+        throw error;
+      },
+    );
+    const result = done ? outcome : assert.rejects(outcome, (error) => error instanceof ProviderError && error.code === 'ENVELOPE');
+    assert.equal(await preview, '先思考🌏');
+    assert.equal(settled, false);
+    controller.enqueue(encoder.encode(event(chunk({ content: 'final' }, 'stop')) + (done ? event('[DONE]') : '')));
+    if (!done) controller.close();
+    const reply = await result;
+    if (done) {
+      assert.equal(reply.native.reasoningContent, '先思考🌏');
+      assert.equal(modelReplyText(reply), 'final');
+    }
+    assert.equal(cancelled, done ? 1 : 0);
+    assert.equal(body.locked, false);
+  }
+});
+
+test('reasoning consumer failures and cancellation stop same-chunk notifications and release the reader', async (t) => {
+  for (const mode of ['cancel', 'throw', 'cancel-and-throw', 'promise', 'thenable']) {
+    await t.test(mode, async () => {
+      const caller = new AbortController();
+      const failure = new Error('reasoning consumer failure');
+      const reason = new Error('stop reasoning preview');
+      const notifications = [];
+      let cancelled = 0;
+      const body = new ReadableStream({
+        start(stream) {
+          stream.enqueue(encoder.encode(event(chunk({ reasoning_content: 'first', content: 'same-chunk text', tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } }] })) + event(chunk({ reasoning_content: 'later', content: 'later text' }, 'tool_calls')) + event('[DONE]')));
+        },
+        cancel() {
+          cancelled++;
+        },
+      });
+      await assert.rejects(
+        provider(async () => response(body)).complete(
+          { messages, stream: true },
+          {
+            signal: caller.signal,
+            progress: ({ kind }) => notifications.push(`progress:${kind}`),
+            emit: (text) => notifications.push(`text:${text}`),
+            emitReasoning(text) {
+              notifications.push(`reasoning:${text}`);
+              if (mode === 'cancel' || mode === 'cancel-and-throw') caller.abort(reason);
+              if (mode === 'throw' || mode === 'cancel-and-throw') throw failure;
+              if (mode === 'promise') return Promise.reject(failure);
+              if (mode === 'thenable')
+                return {
+                  then(_resolve, reject) {
+                    reject(failure);
+                  },
+                };
+            },
+          },
+        ),
+        (error) => (mode === 'cancel' ? error === reason : mode === 'throw' || mode === 'cancel-and-throw' ? error === failure : error instanceof TypeError && !(error instanceof ProviderError)),
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(notifications, ['progress:reasoning', 'reasoning:first']);
+      assert.equal(cancelled, 1);
+      assert.equal(body.locked, false);
+    });
+  }
 });

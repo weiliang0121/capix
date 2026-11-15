@@ -1,5 +1,11 @@
 # @weiliang0121/capix-model-provider
 
+## 0.7.0
+
+### Minor Changes
+
+- Add optional synchronous `ModelControls.emitReasoning` to receive validated, nonempty provider reasoning text increments during streaming. Reasoning previews remain separate from answer text and phase-only progress, preserve final reply and exchange content, and use the existing cancellation and consumer-failure contract.
+
 ## 0.6.0
 
 ### Minor Changes

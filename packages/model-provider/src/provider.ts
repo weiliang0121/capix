@@ -40,6 +40,8 @@ export class ChatCompletionsProvider implements ModelProvider {
     external?.throwIfAborted();
     const emit = controls.emit;
     if (emit !== undefined && typeof emit !== 'function') throw new ProviderError('REQUEST', 'Model preview consumer must be a function');
+    const emitReasoning = controls.emitReasoning;
+    if (emitReasoning !== undefined && typeof emitReasoning !== 'function') throw new ProviderError('REQUEST', 'Model reasoning preview consumer must be a function');
     const progress = controls.progress;
     if (progress !== undefined && typeof progress !== 'function') throw new ProviderError('REQUEST', 'Model progress consumer must be a function');
     // Inspection is not a reservation: the current value is always checked again before sending.
@@ -67,7 +69,7 @@ export class ChatCompletionsProvider implements ModelProvider {
         await response.body?.cancel().catch(() => undefined);
         throw failure;
       }
-      return streaming ? await readModelStream(response, controller.signal, this.#configuration.maxResponseBytes, emit, progress) : await readModelReply(response, controller.signal, this.#configuration.maxResponseBytes);
+      return streaming ? await readModelStream(response, controller.signal, this.#configuration.maxResponseBytes, emit, progress, emitReasoning) : await readModelReply(response, controller.signal, this.#configuration.maxResponseBytes);
     } catch (error) {
       if (error instanceof ModelEmissionFailure) throw error.failure;
       if (isRequestCancellation(error, controller.signal)) throw controller.signal.reason;

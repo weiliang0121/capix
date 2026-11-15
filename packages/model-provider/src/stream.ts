@@ -5,7 +5,7 @@ import { acceptWireReply } from './wire.js';
 import { toolLimit } from './value.js';
 
 /** A stream is complete only after its terminal choice and the provider's [DONE] marker. */
-export async function readModelStream(response: Response, signal: AbortSignal, limit: number, emit?: (delta: string) => void, progress?: (progress: ModelStreamProgress) => void): Promise<ModelReply> {
+export async function readModelStream(response: Response, signal: AbortSignal, limit: number, emit?: (delta: string) => void, progress?: (progress: ModelStreamProgress) => void, emitReasoning?: (delta: string) => void): Promise<ModelReply> {
   if (!response.body) throw envelope();
   if (response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'text/event-stream') {
     await response.body.cancel().catch(() => undefined);
@@ -16,7 +16,7 @@ export async function readModelStream(response: Response, signal: AbortSignal, l
   signal.addEventListener('abort', abort, { once: true });
   try {
     signal.throwIfAborted();
-    const completion = new ChatCompletionStream(signal, emit, progress);
+    const completion = new ChatCompletionStream(signal, emit, progress, emitReasoning);
     const events = new ServerSentEvents((data) => completion.receive(data));
     const decoder = new TextDecoder('utf-8', { fatal: true });
     let bytes = 0;
@@ -108,6 +108,7 @@ class ChatCompletionStream {
     private readonly signal: AbortSignal,
     private readonly emit?: (delta: string) => void,
     private readonly progress?: (progress: ModelStreamProgress) => void,
+    private readonly emitReasoning?: (delta: string) => void,
   ) {}
 
   get done(): boolean {
@@ -179,7 +180,11 @@ class ChatCompletionStream {
       }
     }
     // Notify only after the entire chunk (including every tool fragment) is validated.
-    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length) this.reportProgress('reasoning');
+    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length) {
+      this.reportProgress('reasoning');
+      if (this.emitReasoning) deliver(() => this.emitReasoning!(delta.reasoning_content as string), 'Model reasoning preview consumer must be synchronous');
+      this.signal.throwIfAborted();
+    }
     if (hasToolDelta) this.reportProgress('tool-call');
     if (typeof delta.content === 'string' && delta.content.length) this.reportProgress('text');
     if (typeof delta.content === 'string') this.#hasContent = true;
@@ -206,7 +211,7 @@ class ChatCompletionStream {
   }
 }
 
-/** Shared provenance and synchronous contract for both stream consumers. */
+/** Shared provenance and synchronous contract for stream consumers. */
 function deliver(consumer: () => unknown, message: string): void {
   try {
     const returned = consumer();

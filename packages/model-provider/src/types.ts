@@ -69,7 +69,7 @@ export interface ModelRequest {
   readonly maxTokens?: number;
   readonly responseFormat?: 'text' | 'json_object';
   readonly temperature?: number;
-  /** Request incremental text previews and progress; the complete reply remains authoritative. */
+  /** Request incremental text/reasoning previews and progress; the complete reply remains authoritative. */
   readonly stream?: boolean;
 }
 /** Observed stream activity only; never completion, tool execution or reasoning content. */
@@ -78,8 +78,10 @@ export interface ModelStreamProgress {
 }
 export interface ModelControls {
   readonly signal?: AbortSignal;
-  /** Synchronous text preview only. Tools/reasoning are available in the complete reply. */
+  /** Synchronous answer text preview only; excludes reasoning and tool arguments. */
   readonly emit?: (delta: string) => void;
+  /** Synchronous preview of provider-returned reasoning text; not answer text or execution evidence. */
+  readonly emitReasoning?: (delta: string) => void;
   /** Synchronous notification on changes between nonempty, validated stream delta kinds. */
   readonly progress?: (progress: ModelStreamProgress) => void;
 }

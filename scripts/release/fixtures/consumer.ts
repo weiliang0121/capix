@@ -19,6 +19,25 @@ import type { ResourceEventConsumer } from '@weiliang0121/capix-resources';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import * as memory from '@weiliang0121/capix-memory';
 import { View, createViewSource, openView, type ViewAccess } from '@weiliang0121/capix-view';
+import type { ModelControls } from '@weiliang0121/capix-model-provider';
+
+// Separate preview channels remain usable through the published declarations.
+const modelControls: ModelControls = {
+  emit(delta) {
+    delta satisfies string;
+  },
+  emitReasoning(delta) {
+    delta satisfies string;
+  },
+  progress(event) {
+    event.kind satisfies 'reasoning' | 'text' | 'tool-call';
+    // @ts-expect-error Phase-only progress is not a reasoning text preview.
+    event.text;
+  },
+};
+// @ts-expect-error Reasoning previews are strings, not structured progress events.
+const invalidReasoningConsumer: ModelControls = { emitReasoning: (event: { kind: string }) => {} };
+void [modelControls, invalidReasoningConsumer];
 
 const dictionary = new ResourceOffer({
   methods: {
