@@ -237,7 +237,7 @@ export function createToolCompletion(checkpoint: boolean, catalog: ToolCatalog, 
   return new Node<ToolModelInput, ToolCompletion, ResourcesOf<typeof deps>>({
     name: 'tool-model-completion',
     deps,
-    ...(checkpoint ? { checkpoint: { key: 'tool.completion', version: 2, input: prefixCodec, output: completionCodec, points: [established, completed] } } : {}),
+    ...(checkpoint ? { checkpoint: { key: 'tool.completion', version: 3, input: prefixCodec, output: completionCodec, points: [established, completed] } } : {}),
     async run(work) {
       verify(work);
       const reference = await work.resources.model.start({ prefix: work.input, budgets, ...(context ? { context } : {}) });

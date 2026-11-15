@@ -73,8 +73,9 @@ export function journal(onSave = () => {}) {
     },
   };
 }
-export function assembly(configuration, modelHost, { entity = new ModelExchanges(), store, recovery = true, inspection, context } = {}) {
+export function assembly(configuration, modelHost, { entity = new ModelExchanges(), store, recovery = true, inspection, context, configureTool = () => {} } = {}) {
   const tool = new Tool(configuration);
+  configureTool(tool);
   const waiting = checkpointPoint()({ name: 'waiting', state: codec, references: { tool: childReference(tool) }, resume: { uses: [tool], run: (work, _state, refs) => work.children.resume(refs.tool).invoke() } });
   const scene = new Scene({ ...(configuration.checkpoint ? { checkpoint: { key: 'tool.test.scene', version: 1, input: codec, output: codec, points: [waiting] } } : {}) }).add({ tool });
   scene.run = (work) => {

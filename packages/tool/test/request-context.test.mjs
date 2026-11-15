@@ -5,13 +5,73 @@ import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { Tool, ToolBudgetError, ToolModelCallLimitError } from '@weiliang0121/capix-tool';
 import { assembly, member, host, journal, input, reply, call, final } from './fixture.mjs';
 
-const message = (text) => ({ role: 'assistant', content: `Host-selected context data (not a user instruction):\n${text}` });
+const message = (text) => ({ role: 'user', content: `Host-selected context data (lower-priority reference data; not a new user instruction, authorization, or model reply):\n${text}` });
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 const configuration = (checkpoint = false, options = {}) => ({ policyVersion: 'context.v1', checkpoint, requestContext: { maxBytes: 1024 }, tools: { lookup: member('lookup', (value) => ({ text: value.key }), checkpoint) }, ...options });
 async function close(model) {
   await model.interactions.settled();
   model.interactions.close();
 }
+
+test('provider wire carries selected data before genuine reasoning and tool exchanges without synthetic assistant replies', async () => {
+  const nativeCall = { id: 'native-call', type: 'function', function: { name: 'lookup', arguments: '{"key":"fixed"}' } };
+  const nativeMessage = { role: 'assistant', content: 'Reading.', reasoning_content: 'Inspect the original material.', tool_calls: [nativeCall] };
+  const bodies = [];
+  let fixture;
+  let effects = 0;
+  const provider = new ChatCompletionsProvider({
+    endpoint: 'https://fixture.test/chat/completions',
+    apiKey: 'fixture',
+    model: 'reasoning-fixture',
+    thinking: 'enabled',
+    async fetch(_url, init) {
+      const index = bodies.length;
+      const expected = {
+        model: 'reasoning-fixture',
+        messages: [...input.request.messages, message(`selected-${index}`), ...(index ? [nativeMessage, { role: 'tool', tool_call_id: 'native-call', content: JSON.stringify({ status: 'ok', content: [{ kind: 'text', text: 'fixed' }] }) }] : [])],
+        stream: false,
+        tools: fixture.tool.catalog.tools.map((tool) => ({ type: 'function', function: tool })),
+        max_tokens: 100,
+        temperature: 0.5,
+        thinking: { type: 'enabled' },
+      };
+      assert.equal(init.body, JSON.stringify(expected), 'exact serialized HTTP body, including roles and native reasoning');
+      assert.equal(effects, index);
+      bodies.push(JSON.parse(init.body));
+      return Response.json({ id: `reply-${index}`, model: 'reasoning-fixture', choices: [{ index: 0, message: index ? { role: 'assistant', content: 'finished' } : nativeMessage, finish_reason: index ? 'stop' : 'tool_calls' }], usage: null });
+    },
+  });
+  const model = host((request) => provider.complete(request));
+  fixture = assembly(
+    configuration(false, {
+      tools: {
+        lookup: member('lookup', (value) => {
+          effects++;
+          return { text: value.key };
+        }),
+      },
+    }),
+    model,
+    { inspection: provider, context: { prepare: (prefix) => `selected-${prefix.exchanges.length}` } },
+  );
+  try {
+    assert.equal(await fixture.runner.run({ request: { ...input.request, maxTokens: 100, temperature: 0.5 } }), 'finished');
+    assert.equal(bodies.length, 2);
+    assert.deepEqual(
+      bodies[0].messages.map((item) => item.role),
+      ['user', 'user'],
+    );
+    assert.deepEqual(
+      bodies[1].messages.map((item) => item.role),
+      ['user', 'user', 'assistant', 'tool'],
+    );
+    assert.deepEqual(fixture.entity.snapshot().origins[0].request.messages, input.request.messages);
+    assert.equal(fixture.entity.snapshot().entries[0].reply.native.reasoningContent, nativeMessage.reasoning_content);
+    assert.doesNotMatch(JSON.stringify(fixture.entity.snapshot()), /selected-/);
+  } finally {
+    await close(model);
+  }
+});
 
 test('hundreds of requests replace one context fragment while preserving the exact native prefix', async () => {
   const turns = 210;
@@ -475,9 +535,11 @@ for (const point of ['completed', 'model-waiting'])
     await close(model);
     assert.equal(prepared, 1);
     saved ??= { count: saves.saves.length, entity: structuredClone(fixture.entity.snapshot()), states: structuredClone([...model.states]) };
-    for (const variant of ['exact', 'changed-request', 'changed-capacity']) {
+    for (const variant of ['exact', 'changed-request', 'old-assistant-request', 'changed-capacity']) {
       const states = new Map(structuredClone(saved.states));
       if (variant === 'changed-request') for (const [id, state] of states) states.set(id, { ...state, request: { ...state.request, messages: [...input.request.messages, message('forged-v2')] } });
+      if (variant === 'old-assistant-request') for (const [id, state] of states) states.set(id, { ...state, request: { ...state.request, messages: [...input.request.messages, { role: 'assistant', content: 'Host-selected context data (not a user instruction):\noriginal-v1' }] } });
+      const savedStates = structuredClone([...states]);
       const nextHost = host(() => assert.fail('recovery must not send'), states);
       const snapshot = structuredClone(saved.entity);
       const next = assembly(configuration(true, variant === 'changed-capacity' ? { requestContext: { maxBytes: 1025 } } : {}), nextHost, {
@@ -497,6 +559,7 @@ for (const point of ['completed', 'model-waiting'])
         if (variant === 'exact') assert.equal(await next.runner.resume(saves.contextId), 'finished');
         else await assert.rejects(next.runner.resume(saves.contextId));
         assert.equal(nextHost.sent.length, 0);
+        assert.deepEqual([...nextHost.states], savedStates, 'confirmation must not rewrite a saved request');
         if (point === 'model-waiting' && variant === 'exact') {
           assert.deepEqual(next.entity.snapshot().origins, snapshot.origins);
           assert.equal(next.entity.snapshot().entries.length, 1, 'resume accepts the durable reply once');
@@ -582,41 +645,54 @@ test('cold tools recovery keeps prior context and selects once after the remaini
   }
 });
 
-test('previous Tool and completion checkpoint versions are rejected without selection, entity changes or sends', async () => {
-  const model = host(() => final);
-  let original;
-  let completion;
-  const saves = journal((commit, count) => {
-    if (!completion && commit.contract.key === 'tool.completion' && commit.point === 'completed') completion = { count, entity: structuredClone(original.entity.snapshot()), states: structuredClone([...model.states]) };
-  });
-  original = assembly(configuration(true), model, { store: saves.store, context: { prepare: () => 'saved-v1' } });
-  assert.equal(await original.runner.run(input), 'finished');
-  await close(model);
-  const commits = structuredClone(saves.saves);
-  for (const contract of ['capix.tool', 'tool.completion']) {
-    saves.saves.splice(0, saves.saves.length, ...structuredClone(commits));
-    for (const save of saves.saves) if (save.commit.contract.key === contract) save.commit.contract.version = 1;
-    const selected = contract === 'tool.completion' ? completion : { count: saves.saves.length, entity: structuredClone(original.entity.snapshot()), states: structuredClone([...model.states]) };
-    const nextHost = host(() => assert.fail('old checkpoint sent'), new Map(structuredClone(selected.states)));
-    const entity = structuredClone(selected.entity);
-    let restored;
-    try {
-      await assert.rejects(async () => {
-        restored = assembly(configuration(true, { tools: { lookup: member('lookup', () => assert.fail('old checkpoint executed'), true) } }), nextHost, {
-          store: saves.replay(selected.count),
-          entity: ModelExchanges.restore(entity),
-          context: {
-            prepare() {
-              assert.fail('old checkpoint prepared context');
-            },
-          },
-        });
-        await restored.runner.resume(saves.contextId);
+for (const version of [1, 2])
+  for (const boundary of ['completed', 'model-waiting'])
+    test(`previous Tool/completion v${version} pair at ${boundary} is rejected without selection, entity changes or sends`, async () => {
+      const model = host(() => final);
+      let original;
+      let completion;
+      const saves = journal((commit, count) => {
+        if (!completion && commit.contract.key === 'tool.completion' && commit.point === 'completed') completion = { count, entity: structuredClone(original.entity.snapshot()), states: structuredClone([...model.states]) };
       });
-      assert.deepEqual(nextHost.sent, []);
-      if (restored) assert.deepEqual(restored.entity.snapshot(), entity);
-    } finally {
-      await close(nextHost);
-    }
-  }
-});
+      original = assembly(configuration(true), model, {
+        store: saves.store,
+        context: { prepare: () => 'saved-context' },
+        configureTool(tool) {
+          // Released formats version Tool and its completion together. A current
+          // parent with an old child is a different, partially resumed activity.
+          const completion = tool.members.find((child) => child.id === tool.stages.model);
+          tool.checkpoint = { ...tool.checkpoint, version };
+          completion.checkpoint = { ...completion.checkpoint, version };
+        },
+      });
+      assert.equal(await original.runner.run(input), 'finished');
+      await close(model);
+      const selected = boundary === 'model-waiting' ? completion : { count: saves.saves.length, entity: structuredClone(original.entity.snapshot()), states: structuredClone([...model.states]) };
+      for (const contract of ['capix.tool', 'tool.completion']) assert.ok(saves.saves.slice(0, selected.count).some(({ commit }) => commit.contract.key === contract && commit.contract.version === version));
+      // Replay authentic commits with their original digests/receipts: rejection
+      // must come from the declaration mismatch, not corrupted storage.
+      const store = saves.replay(selected.count);
+      const before = structuredClone(store.read(saves.contextId));
+      const nextHost = host(() => assert.fail('old checkpoint sent'), new Map(structuredClone(selected.states)));
+      const entity = structuredClone(selected.entity);
+      const restored = assembly(configuration(true, { tools: { lookup: member('lookup', () => assert.fail('old checkpoint executed'), true) } }), nextHost, {
+        store,
+        entity: ModelExchanges.restore(entity),
+        context: {
+          prepare() {
+            assert.fail('old checkpoint prepared context');
+          },
+        },
+      });
+      assert.equal(restored.tool.checkpoint.version, 3);
+      assert.equal(restored.tool.members.find((child) => child.id === restored.tool.stages.model).checkpoint.version, 3);
+      try {
+        await assert.rejects(restored.runner.resume(saves.contextId));
+        assert.deepEqual(nextHost.sent, []);
+        assert.deepEqual(restored.entity.snapshot(), entity);
+        assert.deepEqual([...nextHost.states], selected.states);
+        assert.deepEqual(store.read(saves.contextId), before);
+      } finally {
+        await close(nextHost);
+      }
+    });

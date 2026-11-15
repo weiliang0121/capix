@@ -151,7 +151,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         },
       },
     });
-    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 2, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
+    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 3, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
     const save = (work: Work, name: 'waiting' | 'processing' | 'completed', state: State, refs: Refs) => work.checkpoint?.({ point: name === 'waiting' ? waiting : name === 'processing' ? processing : completed, state, refs });
     // Selection ownership is the current invocation. Both points explicitly use
     // the same choices; normal calls without checkpoints keep ordinary arrays.

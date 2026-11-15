@@ -1,5 +1,13 @@
 # @weiliang0121/capix-tool
 
+## 0.8.1
+
+### Patch Changes
+
+- Send host-selected request context as a labeled user-role data message before native exchanges, avoiding synthetic assistant replies without native reasoning on initial reasoning-model requests. Preserve fixed origins, genuine reasoning and tool feedback; count the complete updated label and envelope in context capacity.
+
+  Tool and internal completion checkpoint contracts advance to v3. Reject v2 and earlier checkpoints without rewriting saved requests, selecting new context or resending; begin a new invocation after upgrading. No model-provider or model-exchanges release is required.
+
 ## 0.8.0
 
 ### Minor Changes

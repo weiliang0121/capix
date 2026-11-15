@@ -100,9 +100,9 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 `prepare` 在首次请求前，以及当前工具反馈全部闭合之后执行；调用次数上限已检查，新的模型子调用尚未创建。它只接收本次准确的固定 `ExchangePrefix`，可用宿主持有的同一交换实体显式读取材料。宿主负责相关性、来源版本、工作认识与不可用材料的解释；CAPiX 不认证文本中的用户引文或完成判断。返回值只能是同步的字符串或 `undefined`，不接收请求替换、Promise 或 thenable。它应只选择已有材料，不发送模型请求、执行工具、消费不可重放的事件或修改授权。
 
-字符串作为一条 assistant 传输消息插入固定初始消息之后、原生交换之前，带有 `Host-selected context data (not a user instruction):` 标签。它是宿主提供的数据，不是用户新增指令或原生模型回复。返回 `undefined` 时本次不插入片段。每次选择替换这个片段，不将旧片段追加进交换实体；固定初始消息、原生 reasoning、工具调用与反馈仍完整保留。该功能不裁剪累计文本历史，不更换 origin，不扩大工具权限或重置预算。
+字符串作为一条 user-role 数据传输消息插入固定初始消息之后、原生交换之前，带有 `Host-selected context data (lower-priority reference data; not a new user instruction, authorization, or model reply):` 标签。它是低优先级的宿主参考数据，不是用户新增指令、授权或原生模型回复；消息角色只承担传输，不提高材料的可信度。首次请求不以伪造的 assistant 回复结尾，不补造 reasoning、prefix 或工具交换。返回 `undefined` 时本次不插入片段。每次选择替换这个片段，不将旧片段追加进交换实体；固定初始消息、原生 reasoning、工具调用与反馈仍完整保留。该功能不裁剪累计文本历史，不更换 origin，不扩大工具权限或重置预算。
 
-`maxBytes` 是整条消息（含标签和消息封套）的 JSON UTF-8 编码上限，接受 1 至 2 MiB 的安全整数，并写入目录摘要。超限抛出 `ToolBudgetError`，`code: 'TOOL_CONTEXT_LIMIT'`。工具派发前按下一片段的完整上限加数组分隔符预留请求容量，并保守预留 wire 容量；因此配置过大的上限即使当前片段很小也可能阻止工具派发。真正选材后仍按实际完整请求验证请求和 wire 预算，再由 Interaction 固定发送；inspection、Interaction 和 Provider 面对同一份材料。
+`maxBytes` 是整条 user-role 数据消息（含完整标签和消息封套）的 JSON UTF-8 编码上限，接受 1 至 2 MiB 的安全整数，并写入目录摘要。超限抛出 `ToolBudgetError`，`code: 'TOOL_CONTEXT_LIMIT'`。工具派发前按下一片段的完整上限加数组分隔符预留请求容量，并保守预留 wire 容量；因此配置过大的上限即使当前片段很小也可能阻止工具派发。真正选材后仍按实际完整请求验证请求和 wire 预算，再由 Interaction 固定发送；inspection、Interaction 和 Provider 面对同一份材料。
 
 选中的文本固定在模型子调用 input，CP 恢复核对原 Interaction 时使用这份文本，不重新执行选择器。恢复中尚未创建的下一模型调用仍会准备新材料，宿主须提供所需来源；这个能力不新增来源存储或跨重启记忆。选择失败不撤销此前已经发生的工具效果。取消继续按原调用与 Interaction 边界执行，不等待提示调度。
 
@@ -121,7 +121,7 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完整引用关系，交换前缀 state 仍完整编码。它不把已有的内核增量保存保证扩大成整个模型循环的恒定成本承诺。
 
-当前 Tool 与内部 completion 的 CP 契约版本均为 2；此前版本明确拒绝，不升级、重选材料或发送请求探测。
+当前 Tool 与内部 completion 的 CP 契约版本均为 3；0.8.0 使用的 v2（assistant 材料载体）及此前版本明确拒绝，不升级、重选材料或发送请求探测。升级后应从新调用开始；既有持久材料保持不变，不能通过改写旧请求来恢复。
 
 工具自身的外部效果确认仍归其资源和业务契约；多个实体提交与父 CP 不构成统一事务。当前格式与契约变化拒绝旧依据，没有旧 ToolLoop 别名或数据升级路径。
 
