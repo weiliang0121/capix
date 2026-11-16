@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { codec } from './codec.js';
 import type { ToolCatalog } from './catalog.js';
 import { assertToolReplyBytes, assertToolFeedbackBytes, assertToolRequestBytes, reserveToolReply, reserveToolFeedback, type ToolByteBudgets, type ToolRequestInspection } from './budget.js';
-import { assertToolContextText, toolContextMessage, toolContextReservation, type ToolContextPreparation, type ToolRequestContext } from './context.js';
+import { assertToolContextText, toolContextMessage, toolContextReservation, type ToolCapacityBoundary, type ToolContextPreparation, type ToolRequestContext } from './context.js';
 
 /** Host registration contains no per-call input or mutable Tool configuration. */
 export interface ToolModelSource {
@@ -51,7 +51,7 @@ function request(source: ToolModelSource, input: ToolModelInput, budgets: ToolBy
 export const ToolModelResource = new ResourceOffer({
   name: 'tool.model',
   methods: {
-    prepare(source: ToolModelSource, input: { readonly prefix: ExchangePrefix; readonly context: ToolRequestContext }) {
+    prepare(source: ToolModelSource, input: { readonly prefix: ExchangePrefix; readonly context: ToolRequestContext; readonly boundary?: ToolCapacityBoundary }) {
       if (types.isProxy(source)) throw new TypeError('Tool request context requires a host preparation capability');
       const prefix = stableValue(input.prefix);
       const closed = source.exchanges.closed(prefix.origin, prefix.exchanges);
@@ -63,7 +63,7 @@ export const ToolModelResource = new ResourceOffer({
       const descriptors = Object.getOwnPropertyDescriptors(capability);
       const prepare = descriptors.prepare;
       if (Object.keys(descriptors).length !== 1 || !prepare || !prepare.enumerable || !('value' in prepare) || typeof prepare.value !== 'function' || types.isProxy(prepare.value)) throw new TypeError('Tool context preparation must be an own synchronous method');
-      const value: unknown = Reflect.apply(prepare.value, capability, [prefix]);
+      const value: unknown = Reflect.apply(prepare.value, capability, [prefix, input.boundary === undefined ? undefined : stableValue(input.boundary)]);
       if (types.isPromise(value)) {
         void Promise.prototype.then.call(value, undefined, () => undefined);
         throw new TypeError('Tool request context preparation must be synchronous');
@@ -77,7 +77,7 @@ export const ToolModelResource = new ResourceOffer({
       reserveToolReply(snapshot.entries, input.budgets, snapshot.origins);
       return source.channel.start(value);
     },
-    preflight(source: ToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly feedbackReservations: readonly { readonly toolCallId: string; readonly maxBytes: number }[]; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
+    preflight(source: ToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly defer?: boolean; readonly feedbackReservations: readonly { readonly toolCallId: string; readonly maxBytes: number }[]; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
       const base = request(source, { origin: input.origin, exchanges: input.exchanges }, input.budgets);
       const current = source.exchanges.read(input.origin, input.current, false);
       assertToolReplyBytes(current.reply, input.budgets);
@@ -114,13 +114,28 @@ export const ToolModelResource = new ResourceOffer({
       // Count the message's structure too; byte growth alone cannot reserve nodes.
       const contextPlaceholder = input.context && input.context.maxBytes >= contextBytes ? emptyContext : undefined;
       const estimate = { ...base, ...(contextPlaceholder ? { messages: Object.freeze([...base.messages, contextPlaceholder]) } : {}), exchanges: [...(base.exchanges ?? []), { reply: current.reply, feedback: [...current.feedback, ...placeholders] }] };
-      assertToolRequestBytes(
+      return assertToolRequestBytes(
         estimate,
         input.budgets,
         source.inspection,
         pending.reduce((total, call, index) => total + reservations.get(call.id)! - Buffer.byteLength(JSON.stringify(placeholders[index]), 'utf8'), 0) + toolContextReservation(input.context) - (contextPlaceholder ? contextBytes + 1 : 0),
         pending.map((call) => call.id),
+        input.defer,
       );
+    },
+    closure(source: ToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly feedback: readonly { readonly toolCallId: string; readonly result: import('@weiliang0121/capix-model-provider').ToolResult }[]; readonly budgets: ToolByteBudgets }) {
+      const base = source.exchanges.request({ origin: input.origin, exchanges: input.exchanges });
+      const current = source.exchanges.read(input.origin, input.current, false);
+      const feedback = input.feedback.map(({ toolCallId, result }) => ({ toolCallId, ...assertToolFeedbackBytes(toolCallId, result, input.budgets) }));
+      const snapshot = source.exchanges.snapshot();
+      reserveToolFeedback(
+        snapshot.entries,
+        current,
+        feedback.map((value) => Buffer.byteLength(JSON.stringify(value))),
+        input.budgets,
+        snapshot.origins,
+      );
+      assertToolRequestBytes({ ...base, exchanges: [...(base.exchanges ?? []), { reply: current.reply, feedback: [...current.feedback, ...feedback] }] }, input.budgets, source.inspection);
     },
     confirm(source: ToolModelSource, input: { readonly reference: InteractionReference; readonly basis: ToolModelInput; readonly reply?: ModelReply; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
       try {

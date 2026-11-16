@@ -77,7 +77,7 @@ function freeze<Value>(value: Value): Value {
   }
   return value;
 }
-export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: string, execution: { readonly maxModelCalls: number; readonly waitMs: number; readonly budgets: ToolByteBudgets; readonly imageContext?: ModelImageContext; readonly requestContext?: ToolRequestContext }): ToolCatalog {
+export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: string, execution: { readonly capacityPolicy?: 'fail' | 'defer'; readonly maxModelCalls: number; readonly waitMs: number; readonly budgets: ToolByteBudgets; readonly imageContext?: ModelImageContext; readonly requestContext?: ToolRequestContext }): ToolCatalog {
   if (typeof policyVersion !== 'string' || !policyVersion.trim() || policyVersion.length > 512) throw new TypeError('Tool requires an explicit policyVersion');
   const tools = entries.map(({ name, registration }) => {
     const { $schema, ...parameters } = z.toJSONSchema(registration.input, { target: 'draft-7' });

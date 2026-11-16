@@ -1,5 +1,15 @@
 # @weiliang0121/capix-tool
 
+## 0.10.0
+
+### Minor Changes
+
+- Add opt-in `capacityPolicy: 'defer'` for request and wire capacity reservations. When pending tool results cannot fit the reserved budget, close only the unexecuted calls with bounded `TOOL_CAPACITY_DEFERRED` feedback. Preserve completed effects and receipts. The default policy remains `fail`; actual capacity, collection, inspection, persistence and cancellation failures are not converted into deferrals.
+
+  Pass a trusted `ToolCapacityBoundary` as the optional second argument of host context `prepare` after feedback closes, allowing the host to choose a new bounded invocation. Skip future-result reservation after the final tool feedback. Closing feedback must fit actual request and collection limits before the decision is saved.
+
+  Migration: Tool checkpoints advance to v4 and bind the capacity policy and saved deferral decisions. Older Tool checkpoints are rejected without modifying their data or replaying effects; start a new invocation after upgrading. Completion checkpoints remain v3. Tool 0.10.0 uses the existing CAPiX 0.7.0 dependencies; the other 17 packages do not require release.
+
 ## 0.9.0
 
 ### Minor Changes

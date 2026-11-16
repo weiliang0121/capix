@@ -645,7 +645,7 @@ test('cold tools recovery keeps prior context and selects once after the remaini
   }
 });
 
-for (const version of [1, 2])
+for (const version of [1, 2, 3])
   for (const boundary of ['completed', 'model-waiting'])
     test(`previous Tool/completion v${version} pair at ${boundary} is rejected without selection, entity changes or sends`, async () => {
       const model = host(() => final);
@@ -684,7 +684,7 @@ for (const version of [1, 2])
           },
         },
       });
-      assert.equal(restored.tool.checkpoint.version, 3);
+      assert.equal(restored.tool.checkpoint.version, 4);
       assert.equal(restored.tool.members.find((child) => child.id === restored.tool.stages.model).checkpoint.version, 3);
       try {
         await assert.rejects(restored.runner.resume(saves.contextId));

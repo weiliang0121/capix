@@ -1,7 +1,7 @@
 import { types } from 'node:util';
-import type { ExchangePrefix } from '@weiliang0121/capix-model-exchanges';
+import type { ExchangePrefix, ExchangeOriginReference, ExchangeReference } from '@weiliang0121/capix-model-exchanges';
 import type { ModelMessage } from '@weiliang0121/capix-model-provider';
-import { ToolBudgetError } from './budget.js';
+import { ToolBudgetError, type ToolCapacityReason } from './budget.js';
 
 /** Fixed capacity for one replaceable host-selected text fragment. */
 export interface ToolRequestContext {
@@ -10,8 +10,15 @@ export interface ToolRequestContext {
 }
 
 /** Host capability with one own data method; called before each newly created model child. */
+export interface ToolCapacityBoundary {
+  readonly reason: ToolCapacityReason;
+  readonly origin: ExchangeOriginReference;
+  readonly exchange: ExchangeReference;
+  readonly callIds: readonly string[];
+}
+
 export interface ToolContextPreparation {
-  prepare(prefix: ExchangePrefix): string | undefined;
+  prepare(prefix: ExchangePrefix, boundary?: ToolCapacityBoundary): string | undefined;
 }
 
 export function requireToolRequestContext(value: unknown): ToolRequestContext {

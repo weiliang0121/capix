@@ -35,6 +35,8 @@ export interface ToolConfiguration<Definitions extends Readonly<Record<string, C
   readonly imageContext?: ModelImageContext;
   /** Enable one bounded host-selected text fragment, replaced for each request. */
   readonly requestContext?: ToolRequestContext;
+  /** Defer pending calls only when a framework request reservation exceeds capacity. */
+  readonly capacityPolicy?: 'fail' | 'defer';
   readonly checkpoint?: boolean;
   /** Per-invocation model call fuse. Defaults to 1000; must be a positive safe integer. */
   readonly maxModelCalls?: number;
