@@ -97,12 +97,18 @@ export interface ModelRequestInspection {
   readonly requestBytes: number;
   /** UTF-8 bytes of the actual HTTP body, including fixed provider configuration. */
   readonly wireBytes: number;
+  /** Effective provider send budgets; custom providers may omit these. */
+  readonly limits?: { readonly maxRequestBytes: number; readonly maxWireRequestBytes: number };
 }
 export interface ChatCompletionsConfiguration {
   readonly endpoint: string;
   readonly apiKey: string;
   readonly model: string;
   readonly timeoutMs?: number;
+  /** Common request send budget; defaults to 2 MiB, up to maximumModelRequestBytes. */
+  readonly maxRequestBytes?: number;
+  /** Encoded HTTP body send budget; defaults to 2 MiB, up to maximumModelWireRequestBytes. */
+  readonly maxWireRequestBytes?: number;
   /** Transport budget may be lower than the fixed 2 MiB public value limit. */
   readonly maxResponseBytes?: number;
   readonly thinking?: 'enabled' | 'disabled';

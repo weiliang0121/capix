@@ -277,3 +277,52 @@ test('durable capacity decision resumes both before feedback and after an instal
     }
   }
 });
+
+for (const scope of ['wire', 'exchange'])
+  test(`a ${scope} capacity decision defers before effects and authenticates its limit on cold recovery`, async () => {
+    const { ChatCompletionsProvider, maximumModelExchangeBytes } = await import('@weiliang0121/capix-model-provider');
+    const inspector = (wireLimit = 6000) => new ChatCompletionsProvider({ endpoint: 'https://offline.invalid', apiKey: 'offline', model: 'fixture', maxRequestBytes: 8 * 1024 * 1024, maxWireRequestBytes: scope === 'wire' ? wireLimit : 8 * 1024 * 1024 });
+    const configuration = () => config(true, { budgets: { maxFeedbackBytes: scope === 'exchange' ? 1200 * 1024 : 4096, maxRequestBytes: 8 * 1024 * 1024, maxWireRequestBytes: 8 * 1024 * 1024 } });
+    const model = host(send);
+    const boundaries = [];
+    const saves = journal();
+    const fixture = assembly(configuration(), model, {
+      store: saves.store,
+      inspection: inspector(),
+      context: {
+        prepare(_prefix, boundary) {
+          if (boundary) boundaries.push(boundary);
+        },
+      },
+    });
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      assert.equal(boundaries.length, 1);
+      assert.equal(boundaries[0].reason.code, scope === 'wire' ? 'TOOL_WIRE_REQUEST_LIMIT' : 'TOOL_EXCHANGE_LIMIT');
+      assert.equal(boundaries[0].reason.limit, scope === 'wire' ? 6000 : maximumModelExchangeBytes);
+      assert.equal(fixture.entity.snapshot().entries[0].receptions.length, 0);
+    } finally {
+      await close(model);
+    }
+    for (const changed of scope === 'wire' ? [false, true] : [false]) {
+      const snapshot = structuredClone(fixture.entity.snapshot());
+      const nextHost = host(() => assert.fail('completed recovery must not send'), new Map(model.states));
+      const next = assembly(configuration(), nextHost, {
+        store: saves.replay(),
+        entity: ModelExchanges.restore(snapshot),
+        inspection: inspector(changed ? 6001 : 6000),
+        context: {
+          prepare() {
+            assert.fail('completed recovery must not prepare');
+          },
+        },
+      });
+      try {
+        if (changed) await assert.rejects(next.runner.resume(saves.contextId));
+        else assert.equal(await next.runner.resume(saves.contextId), 'finished');
+        assert.deepEqual(next.entity.snapshot(), snapshot);
+      } finally {
+        await close(nextHost);
+      }
+    }
+  });

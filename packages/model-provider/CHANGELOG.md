@@ -1,5 +1,12 @@
 # @weiliang0121/capix-model-provider
 
+## 0.8.0
+
+### Minor Changes
+
+- Add independent `maxRequestBytes` and `maxWireRequestBytes` to Chat Completions configuration. Defaults remain 2 MiB each; explicit budgets support up to 64 MiB. `inspectRequest` returns fixed operational limits without rejecting a structurally valid over-budget request. `complete` checks the same encoder before HTTP and reports `ProviderRequestLimitError` with metric, bytes and limit.
+- Aggregate requests may exceed 2 MiB, while replies, feedback and individual closed exchanges retain their 2 MiB bounds. This is a framework support range, not a vendor capacity claim or process memory limit. Consumers assembling requests through ModelExchanges or Tool should use ModelExchanges 0.7.1 or Tool 0.11.0 respectively; Interaction data budgets must be configured separately. No runtime dependency is added.
+
 ## 0.7.0
 
 ### Minor Changes

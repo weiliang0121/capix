@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { requireModelRequest } from '@weiliang0121/capix-model-provider';
+import { ChatCompletionsProvider, ProviderRequestLimitError, requireModelRequest } from '@weiliang0121/capix-model-provider';
 import { ModelExchanges, requireModelImageContext } from '@weiliang0121/capix-model-exchanges';
 
 const image = { kind: 'image', mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC' };
@@ -83,7 +83,7 @@ test('image policy is fixed origin data; invalid policies and changed recovery b
   assert.deepEqual(entity.snapshot(), saved);
 });
 
-test('historical images are selected before enforcing the aggregate provider request budget', () => {
+test('historical image projection reduces a valid large request to the default provider sending budget', async () => {
   // A valid PNG ancillary text chunk makes the fixture large without decoding pixels.
   const png = Buffer.from(image.data, 'base64');
   const data = Buffer.from('fixture\0' + 'x'.repeat(450 * 1024));
@@ -107,8 +107,23 @@ test('historical images are selected before enforcing the aggregate provider req
     references.push(entity.complete(origin, ref, id, { status: 'ok', content: [largeImage] }));
   }
   const raw = entity.closed(origin, references).map(({ reply, feedback }) => ({ reply, feedback }));
-  assert.throws(() => requireModelRequest({ ...basis(1).request, tools: basis(1).catalog.tools, exchanges: raw }));
+  const full = requireModelRequest({ ...basis(1).request, tools: basis(1).catalog.tools, exchanges: raw });
+  assert.ok(Buffer.byteLength(JSON.stringify(full)) > 2 * 1024 * 1024);
+  let sends = 0;
+  const provider = new ChatCompletionsProvider({
+    endpoint: 'https://offline.fixture.test/chat/completions',
+    apiKey: 'offline',
+    model: 'offline',
+    fetch: async () => {
+      sends++;
+      return Response.json({ id: 'final', model: 'offline', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }], usage: null });
+    },
+  });
+  await assert.rejects(provider.complete(full), ProviderRequestLimitError);
+  assert.equal(sends, 0);
   const actual = entity.request({ origin, exchanges: references });
   assert.equal(actual.exchanges.flatMap((entry) => entry.feedback.flatMap((item) => item.content)).filter((part) => part.kind === 'image').length, 1);
   assert.deepEqual(ModelExchanges.restore(structuredClone(entity.snapshot())).request({ origin, exchanges: references }), actual);
+  await provider.complete(actual);
+  assert.equal(sends, 1);
 });

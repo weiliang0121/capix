@@ -1,10 +1,38 @@
 import { isProxy } from 'node:util/types';
 import { isArray } from 'es-toolkit/compat';
 
-const limits = Object.freeze({ depth: 64, values: 100_000, characters: 16 * 1024 * 1024 });
+import { DEFAULT_INTERACTION_TEXT_UNITS, MAX_INTERACTION_TEXT_UNITS, type InteractionDataLimits } from './contract.js';
+
+const limits = Object.freeze({ depth: 64, values: 100_000 });
+
+export function interactionDataLimits(options: InteractionDataLimits = {}): Required<InteractionDataLimits> {
+  const requestTextUnits = options.requestTextUnits ?? DEFAULT_INTERACTION_TEXT_UNITS;
+  const replyTextUnits = options.replyTextUnits ?? DEFAULT_INTERACTION_TEXT_UNITS;
+  for (const value of [requestTextUnits, replyTextUnits]) {
+    if (!Number.isSafeInteger(value) || value < 1 || value > MAX_INTERACTION_TEXT_UNITS) throw new RangeError('Interaction text limits must be positive integers no greater than MAX_INTERACTION_TEXT_UNITS');
+  }
+  return Object.freeze({ requestTextUnits, replyTextUnits });
+}
+
+/** Inspect the complete wrapper without reading accessors; deferred payloads are captured separately. */
+export function captureInteractionEnvelope<T extends object>(value: T, allowed: readonly string[], separate: readonly string[]): T {
+  if (!value || typeof value !== 'object' || isProxy(value)) throw new TypeError('Invalid persisted interaction fields');
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) throw new TypeError('Invalid persisted interaction fields');
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const metadata: Record<string, unknown> = {};
+  const deferred: Record<string, unknown> = {};
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key as string]!;
+    if (typeof key !== 'string' || !allowed.includes(key) || !('value' in descriptor) || !descriptor.enumerable) throw new TypeError('Invalid persisted interaction fields');
+    Object.defineProperty(metadata, key, { value: separate.includes(key) ? null : descriptor.value, enumerable: true });
+    if (separate.includes(key)) Object.defineProperty(deferred, key, { value: descriptor.value, enumerable: true });
+  }
+  return Object.freeze({ ...captureInteractionValue(metadata), ...deferred }) as T;
+}
 
 /** Fixed interaction data is JSON-shaped. No getters, live entities, or recording conversion. */
-export function captureInteractionValue<T>(value: T): T {
+export function captureInteractionValue<T>(value: T, maxTextUnits: number = DEFAULT_INTERACTION_TEXT_UNITS): T {
   let values = 0;
   let characters = 0;
   const ancestors = new Set<object>();
@@ -15,7 +43,7 @@ export function captureInteractionValue<T>(value: T): T {
     if (typeof current === 'number' && Number.isFinite(current)) return current;
     if (typeof current === 'string') {
       characters += current.length;
-      if (characters > limits.characters) throw new TypeError('Interaction data exceeds its text limit');
+      if (characters > maxTextUnits) throw new TypeError('Interaction data exceeds its text limit');
       return current;
     }
     if (typeof current !== 'object' || isProxy(current)) throw new TypeError('Interaction data must contain only JSON values');
@@ -42,7 +70,7 @@ export function captureInteractionValue<T>(value: T): T {
         const descriptor = descriptors[key as string]!;
         if (typeof key !== 'string' || !('value' in descriptor) || !descriptor.enumerable) throw new TypeError('Interaction data must contain only enumerable data properties');
         characters += key.length;
-        if (characters > limits.characters) throw new TypeError('Interaction data exceeds its text limit');
+        if (characters > maxTextUnits) throw new TypeError('Interaction data exceeds its text limit');
         Object.defineProperty(result, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
       }
       return Object.freeze(result);

@@ -1,5 +1,5 @@
 import type { ModelExchange, ModelReply, ModelRequest, ToolFeedback, ToolResult } from './types.js';
-import { count, identity, record, requireJson, shape, toolLimit } from './value.js';
+import { count, identity, maximumModelExchangeBytes, maximumModelRequestBytes, record, requireJson, shape, toolLimit } from './value.js';
 
 export function terminationKind(reason: string): ModelReply['termination']['kind'] {
   return reason === 'stop' || reason === 'tool_calls' ? 'completed' : reason === 'content_filter' ? 'refused' : 'incomplete';
@@ -101,7 +101,7 @@ function checkExchange(value: unknown): asserts value is ModelExchange {
   }
 }
 export function requireModelExchange(value: unknown): ModelExchange {
-  requireJson(value);
+  requireJson(value, maximumModelExchangeBytes);
   checkExchange(value);
   return value;
 }
@@ -112,7 +112,7 @@ export function requireModelRequest(value: unknown): ModelRequest {
 
 /** Internal preparation boundary shared by request validation and provider inspection. */
 export function measureModelRequest(value: unknown): number {
-  const bytes = requireJson(value);
+  const bytes = requireJson(value, maximumModelRequestBytes);
   checkRequest(value);
   return bytes;
 }
@@ -133,7 +133,7 @@ function checkRequest(value: unknown): asserts value is ModelRequest {
   }
   if (value.exchanges !== undefined) {
     if (!Array.isArray(value.exchanges)) throw new TypeError('Model exchanges must be an array');
-    for (const exchange of value.exchanges) checkExchange(exchange);
+    for (const exchange of value.exchanges) requireModelExchange(exchange);
   }
   const names = new Set<string>();
   if (value.tools !== undefined) {

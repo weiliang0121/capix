@@ -1,5 +1,11 @@
 # @weiliang0121/capix-model-exchanges
 
+## 0.7.1
+
+### Patch Changes
+
+- Update the exact model-provider dependency to 0.8.0. Accumulated histories above 2 MiB can be reconstructed within its aggregate request support range; actual sending still enforces host/provider budgets. Origin and entry storage ceilings remain 8 MiB, and individual closed exchanges remain 2 MiB. Other runtime dependencies remain at 0.7.0.
+
 ## 0.7.0
 
 ### Patch Changes

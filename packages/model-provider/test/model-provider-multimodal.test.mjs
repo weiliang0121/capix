@@ -94,7 +94,7 @@ test('image bytes count against common and wire budgets and are revalidated afte
   const overhead = Buffer.byteLength(JSON.stringify(bounded));
   bounded.messages[0].content[1].text = 'x'.repeat(2 * 1024 * 1024 - overhead);
   assert.equal(requireModelRequest(bounded), bounded);
-  await assert.rejects(model.complete(bounded), (error) => error.code === 'REQUEST');
+  await assert.rejects(model.complete(bounded), (error) => error.code === 'REQUEST_LIMIT' && error.metric === 'wireBytes');
   assert.equal(sends, 0);
 });
 
@@ -158,10 +158,43 @@ test('expanded tool attachments enforce the exact wire limit before sending', as
   await model.complete(request);
   request.exchanges[0].feedback[0].content[1].text += 'x';
   assert.equal(requireModelRequest(request), request);
+  assert.equal(model.inspectRequest(request).wireBytes, 2 * 1024 * 1024 + 1);
+  await assert.rejects(model.complete(request), (error) => error.code === 'REQUEST_LIMIT' && error.metric === 'wireBytes');
+  assert.equal(sends, 1);
+});
+
+test('raised request budgets admit large fixed images without expanding feedback or block limits', async () => {
+  // Signature-only synthetic JPEG: pixel decodability is deliberately outside this contract.
+  const bytes = Buffer.alloc(2 * 1024 * 1024);
+  bytes.set([255, 216, 255]);
+  bytes.set([255, 217], bytes.length - 2);
+  const image = { kind: 'image', mimeType: 'image/jpeg', data: bytes.toString('base64') };
+  const request = { messages: [{ role: 'user', content: [image] }] };
+  let sent;
+  let sends = 0;
+  const model = new ChatCompletionsProvider({
+    endpoint: 'https://fixture.test/chat/completions',
+    apiKey: 'fixture',
+    model: 'fixture',
+    maxRequestBytes: 4 * 1024 * 1024,
+    maxWireRequestBytes: 4 * 1024 * 1024,
+    fetch: async (_url, init) => {
+      sends++;
+      sent = init.body;
+      return Response.json(raw);
+    },
+  });
+  const inspection = model.inspectRequest(request);
+  assert.ok(inspection.requestBytes > 2 * 1024 * 1024);
+  await model.complete(request);
+  assert.equal(inspection.wireBytes, Buffer.byteLength(sent));
+  assert.equal(inspection.requestBytes, Buffer.byteLength(JSON.stringify(request)));
+  assert.throws(() => requireToolResult({ status: 'ok', content: [image] }), /byte limit/);
+  const tooMany = { messages: [{ role: 'user', content: Array.from({ length: 33 }, () => png) }] };
   assert.throws(
-    () => model.inspectRequest(request),
+    () => model.inspectRequest(tooMany),
     (error) => error.code === 'REQUEST',
   );
-  await assert.rejects(model.complete(request), (error) => error.code === 'REQUEST');
+  await assert.rejects(model.complete(tooMany), (error) => error.code === 'REQUEST');
   assert.equal(sends, 1);
 });

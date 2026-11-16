@@ -90,7 +90,7 @@ DeepSeek 思考模式在带 `tools` 的后续请求中要求回传此前回复�
 
 `ModelInputContent` 为文本块 `ModelTextOutput` 或图片块 `ModelImageInput`。图片形状为 `{kind:'image', mimeType:'image/png'|'image/jpeg'|'image/webp', data:string}`；`data` 必须是非空、规范的 RFC 4648 base64（包含所需 padding，不带 data URL 前缀或空白）。user 的 `ModelMessage.content` 接受字符串或 1–32 个有序内容块；system/assistant 只接受字符串或文本块数组。`ToolResult.content` 同样接受 1–32 个文本／图片块。图片是输入材料，`ModelReply.output` 仍只有文本与工具调用。
 
-图片在发送前核验 base64、声明的 MIME 与文件签名、基本头尾结构；不会解码像素，也不保证图片可完整解码或在具体模型中可用。宿主负责来源授权、解码安全、尺寸／像素预算和必要的缩放再编码。远端 URL、本地路径、SVG 与任意 MIME 不属于图片本体；Provider 不读取图片文件、不下载图片、不自动转换格式。图片字节及 base64 膨胀计入同一 2 MiB 纯值预算，编码后的完整 HTTP 请求仍须满足 2 MiB 上限。
+图片在发送前核验 base64、声明的 MIME 与文件签名、基本头尾结构；不会解码像素，也不保证图片可完整解码或在具体模型中可用。宿主负责来源授权、解码安全、尺寸／像素预算和必要的缩放再编码。远端 URL、本地路径、SVG 与任意 MIME 不属于图片本体；Provider 不读取图片文件、不下载图片、不自动转换格式。图片字节及 base64 膨胀计入请求纯值和 HTTP 正文各自的预算；默认均为 2 MiB，宿主可显式提高至框架支持范围。工具反馈与交换的独立 2 MiB 上限不变。
 
 内容数组逐块编码为 Chat Completions 的 `text` 或 `image_url`，图片 URL 由固定字节生成 `data:<mimeType>;base64,<data>`。工具反馈始终保持 `role:'tool'`、准确 `tool_call_id` 和 `{status,content}` JSON 字符串正文；图片在此正文中投影为 `{kind:'image-reference',contentIndex}`。本轮所有工具反馈闭合后，追加一条 user 附件消息：依原工具调用顺序，以文本 `{kind:'tool-images',toolCallId}` 标识每组，再按内容顺序以 `{contentIndex}` 文本紧邻对应真实图片。它仅是工具材料的传输投影，不代表新的用户指令，不改变原始实体、反馈回执或图片保留策略。无图片的工具反馈保持原有传输形状，不追加附件消息。
 
@@ -116,14 +116,16 @@ JSON 与 SSE 共用 `ModelUsage`：`promptTokens / completionTokens / totalToken
 
 ## 容量与范围
 
-`ChatCompletionsProvider.inspectRequest(request)` 同步完成请求预检，返回冻结的 `{requestBytes, wireBytes}`：前者是共同请求完整 JSON 的 UTF-8 字节数，后者是实际 HTTP 正文字节数，包括固定的 model/thinking 配置、工具目录、交换编码和流式字段。它与 `complete` 共用校验和编码路径，能够计算 Unicode、转义字符以及工具反馈嵌套 JSON 带来的真实大小；不发请求、不读取网络，也不返回正文、headers 或密钥。
+`ChatCompletionsProvider.inspectRequest(request)` 同步完成请求预检，返回冻结的 `{requestBytes, wireBytes, limits: {maxRequestBytes, maxWireRequestBytes}}`，内层 `limits` 也被冻结：前者是共同请求完整 JSON 的 UTF-8 字节数，后者是实际 HTTP 正文字节数，包括固定的 model/thinking 配置、工具目录、交换编码和流式字段。它与 `complete` 共用校验和编码路径，能够计算 Unicode、转义字符以及工具反馈嵌套 JSON 带来的真实大小；不发请求、不读取网络，也不返回正文、headers 或密钥。
 
-`ModelProvider` 上此端口可选，依赖精确发送预算的宿主应在装配时要求它存在。无效或超出共同请求／HTTP 正文 2 MiB 限额时，预检与 `complete` 一样抛出 `ProviderError('REQUEST')`。预检不冻结输入、不预留额度，也不保证模型上下文 token 容量；实际发送仍重新校验当前请求，修改过输入后必须以本次检查为准。
+`ModelProvider` 上此端口可选，依赖精确发送预算的宿主应在装配时要求它存在。无效或超出框架支持范围时，预检与 `complete` 一样抛出 `ProviderError('REQUEST')`。框架支持范围内，即使超过配置的发送预算，预检仍返回计量；内置 Provider 总返回有效预算 `limits`，自定义 Provider 可省略。预检不冻结输入、不预留额度，也不保证模型上下文 token 容量；实际发送仍重新校验当前请求，修改过输入后必须以本次检查为准。
 
-- 公开请求、回复、反馈、交换值均限制为 2 MiB 的纯 JSON，深度最多 64、值数最多 100,000。请求编码后的 HTTP 正文也受 2 MiB 限制。合法的单项不代表任意累计历史都能继续装入请求。
+- `maximumModelRequestBytes` 与 `maximumModelWireRequestBytes` 均为 64 MiB，分别定义公开请求纯 JSON 与编码后 HTTP 正文经回归覆盖的框架支持范围，不代表厂商通用限制、模型上下文容量或可用 token 数。深度最多 64、值数最多 100,000；图片块数、工具数、输出等结构限制不变。
+- `ChatCompletionsConfiguration.maxRequestBytes / maxWireRequestBytes` 是独立发送预算，默认各 2 MiB，可显式配置为对应支持范围内的正安全整数。`complete` 使用本次实际计量，在打开传输前执行两个预算；超预算抛出继承 `ProviderError` 的 `ProviderRequestLimitError`，`code` 为 `REQUEST_LIMIT`，`metric` 为 `requestBytes` 或 `wireBytes`，并仅携带数值 `bytes / limit`，不保存正文。共同请求先检查，HTTP 正文随后检查。
+- 公开回复、工具结果、反馈仍各限 2 MiB；`maximumModelExchangeBytes` 为 2 MiB，限制单个闭合交换的完整公共 JSON，请求中嵌套的交换也必须符合该独立上限。较大请求只允许累计多个合法材料，不会扩大单份回复或反馈。合法的单项不代表任意累计历史都能继续装入请求。
 - 默认总超时 60 秒，涵盖发送与完整读取。`maxResponseBytes` 是独立的实际传输预算，默认 2 MiB，SSE 计入事件封装、注释和思考内容；提高传输预算不会放宽公开回复的纯值上限。
 - 一次 complete 只有一次 HTTP 请求，无隐式重试。调用取消保持原 reason，不修改调用者 signal；对独立 Interaction 的生命周期不作推断。
-- `ProviderError` 只含 code/message/可选 HTTP status，不保存上游正文、请求、headers、密钥或底层错误。宿主可注入 fetch；实现必须遵守 Fetch 取消与重定向语义。
+- `ProviderError` 含 code/message/可选 HTTP status；请求预算错误另含上述数值诊断，不保存上游正文、请求、headers、密钥或底层错误。宿主可注入 fetch；实现必须遵守 Fetch 取消与重定向语义。
 - `thinking` 是宿主显式配置的 DeepSeek 扩展。当前实现 Chat Completions 函数调用、文本与固定图片输入；不承诺 Responses、Anthropic 原生协议、MCP、音视频或 strict beta。正式 Transcript 的消息角色不因此扩展。
 
 当前架构与限制见[原生工具调用](../../docs/native-tool-integration.md)。完整协议参考 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) 与 [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。

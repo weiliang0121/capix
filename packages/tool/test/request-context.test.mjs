@@ -645,9 +645,9 @@ test('cold tools recovery keeps prior context and selects once after the remaini
   }
 });
 
-for (const version of [1, 2, 3])
+for (const version of [1, 2, 3, 4])
   for (const boundary of ['completed', 'model-waiting'])
-    test(`previous Tool/completion v${version} pair at ${boundary} is rejected without selection, entity changes or sends`, async () => {
+    test(`previous Tool v${version}/completion v${Math.min(version, 3)} at ${boundary} is rejected without selection, entity changes or sends`, async () => {
       const model = host(() => final);
       let original;
       let completion;
@@ -658,17 +658,17 @@ for (const version of [1, 2, 3])
         store: saves.store,
         context: { prepare: () => 'saved-context' },
         configureTool(tool) {
-          // Released formats version Tool and its completion together. A current
-          // parent with an old child is a different, partially resumed activity.
+          // Reconstruct released contract pairs; Tool v4 kept completion v3.
+          // A current parent with an old child is a different recovery boundary.
           const completion = tool.members.find((child) => child.id === tool.stages.model);
           tool.checkpoint = { ...tool.checkpoint, version };
-          completion.checkpoint = { ...completion.checkpoint, version };
+          completion.checkpoint = { ...completion.checkpoint, version: Math.min(version, 3) };
         },
       });
       assert.equal(await original.runner.run(input), 'finished');
       await close(model);
       const selected = boundary === 'model-waiting' ? completion : { count: saves.saves.length, entity: structuredClone(original.entity.snapshot()), states: structuredClone([...model.states]) };
-      for (const contract of ['capix.tool', 'tool.completion']) assert.ok(saves.saves.slice(0, selected.count).some(({ commit }) => commit.contract.key === contract && commit.contract.version === version));
+      for (const contract of ['capix.tool', 'tool.completion']) assert.ok(saves.saves.slice(0, selected.count).some(({ commit }) => commit.contract.key === contract && commit.contract.version === (contract === 'capix.tool' ? version : Math.min(version, 3))));
       // Replay authentic commits with their original digests/receipts: rejection
       // must come from the declaration mismatch, not corrupted storage.
       const store = saves.replay(selected.count);
@@ -684,7 +684,7 @@ for (const version of [1, 2, 3])
           },
         },
       });
-      assert.equal(restored.tool.checkpoint.version, 4);
+      assert.equal(restored.tool.checkpoint.version, 5);
       assert.equal(restored.tool.members.find((child) => child.id === restored.tool.stages.model).checkpoint.version, 3);
       try {
         await assert.rejects(restored.runner.resume(saves.contextId));

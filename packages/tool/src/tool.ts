@@ -3,7 +3,7 @@ import { types } from 'node:util';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
-import { modelReplyText, requireModelRequest, type ModelToolCall } from '@weiliang0121/capix-model-provider';
+import { maximumModelExchangeBytes, maximumModelWireRequestBytes, modelReplyText, requireModelRequest, type ModelToolCall } from '@weiliang0121/capix-model-provider';
 import { ModelExchangeResource, requireModelImageContext, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference, type ExchangeOriginReference } from '@weiliang0121/capix-model-exchanges';
 import type { ResourcesOf } from '@weiliang0121/capix-resources';
 import { Group, checkpointPoint, childReferences, reception, type ChildCallable, type ChildReference, type ChildCall, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildReferenceSlot, type CheckpointSelection } from '@weiliang0121/capix-structure';
@@ -49,7 +49,7 @@ interface State extends Prepared {
   readonly cursor: number;
   readonly active: { readonly name: string; readonly index: number; readonly callId: string } | null;
 }
-const boundarySchema = z.strictObject({ reason: z.strictObject({ code: z.enum(['TOOL_REQUEST_LIMIT', 'TOOL_WIRE_REQUEST_LIMIT']), bytes: z.number().int().positive(), limit: z.number().int().positive(), phase: z.literal('reserved') }).readonly(), origin: originSchema, exchange: refSchema, callIds: z.array(z.string().min(1)).nonempty().readonly() }).readonly();
+const boundarySchema = z.strictObject({ reason: z.strictObject({ code: z.enum(['TOOL_REQUEST_LIMIT', 'TOOL_WIRE_REQUEST_LIMIT', 'TOOL_EXCHANGE_LIMIT']), bytes: z.number().int().positive(), limit: z.number().int().positive(), phase: z.literal('reserved') }).readonly(), origin: originSchema, exchange: refSchema, callIds: z.array(z.string().min(1)).nonempty().readonly() }).readonly();
 function capacityFeedback(boundary: ToolCapacityBoundary) {
   return { status: 'error' as const, content: [{ kind: 'text' as const, text: JSON.stringify({ code: 'TOOL_CAPACITY_DEFERRED', message: 'Tool was not executed because the pending batch exceeds request capacity. Request fewer or smaller tool results.', stage: 'preflight', executed: false, reason: boundary.reason }) }] };
 }
@@ -157,7 +157,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         },
       },
     });
-    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 4, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
+    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 5, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
     const save = (work: Work, name: 'waiting' | 'processing' | 'completed', state: State, refs: Refs) => work.checkpoint?.({ point: name === 'waiting' ? waiting : name === 'processing' ? processing : completed, state, refs });
     // Selection ownership is the current invocation. Both points explicitly use
     // the same choices; normal calls without checkpoints keep ordinary arrays.
@@ -194,8 +194,10 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       });
       const deferredIds = new Set<string>();
       for (const boundary of state.deferred) {
-        const expectedLimit = boundary.reason.code === 'TOOL_REQUEST_LIMIT' ? budgets.maxRequestBytes : budgets.maxWireRequestBytes;
-        if (capacityPolicy !== 'defer' || !equal(boundary.origin, state.origin) || boundary.reason.limit !== expectedLimit || boundary.reason.bytes <= boundary.reason.limit || new Set(boundary.callIds).size !== boundary.callIds.length || deferredIds.has(boundary.exchange.id)) throw new Error('Invalid saved capacity decision');
+        const upperLimit = boundary.reason.code === 'TOOL_REQUEST_LIMIT' ? budgets.maxRequestBytes : boundary.reason.code === 'TOOL_WIRE_REQUEST_LIMIT' ? (budgets.maxWireRequestBytes ?? maximumModelWireRequestBytes) : maximumModelExchangeBytes;
+        // The current provider's exact lower limit is checked against durable
+        // model material during confirmExchanges, outside this facts-only window.
+        if (capacityPolicy !== 'defer' || !equal(boundary.origin, state.origin) || boundary.reason.limit > upperLimit || boundary.reason.bytes <= boundary.reason.limit || new Set(boundary.callIds).size !== boundary.callIds.length || deferredIds.has(boundary.exchange.id)) throw new Error('Invalid saved capacity decision');
         deferredIds.add(boundary.exchange.id);
         const index = models.findIndex((model) => {
           const fact = modelFact(facts.children, model.ref);
@@ -329,10 +331,10 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         const entry = work.resources.exchanges.read(state.origin, receipt.reference, false);
         assertToolReplyBytes(entry.reply, budgets);
         if (fact.returned?.status !== 'succeeded' || !equal(entry.reply, fact.returned.output.reply) || !equal(entry.operation, receipt.operation)) throw new Error('Exchange differs from original model return or reception');
-        await work.resources.model.confirm({ reference: fact.returned.output.reference, basis: fact.input, reply: fact.returned.output.reply, budgets, ...(requestContext ? { context: requestContext } : {}) });
+        const deferred = state.deferred.find((boundary) => boundary.exchange.id === entry.id);
+        await work.resources.model.confirm({ reference: fact.returned.output.reference, basis: fact.input, reply: fact.returned.output.reply, budgets, ...(requestContext ? { context: requestContext } : {}), ...(deferred ? { capacity: deferred.reason } : {}) });
         const next = modelRefs[index + 1];
         const end = next ? work.children.facts.get(next).order : Infinity;
-        const deferred = state.deferred.find((boundary) => boundary.exchange.id === entry.id);
         if (deferred) {
           const calls = entry.reply.output.filter((item) => item.kind === 'tool-call');
           for (const callId of deferred.callIds) {

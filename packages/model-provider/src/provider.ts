@@ -1,9 +1,9 @@
-import { isRequestCancellation, ModelEmissionFailure, ProviderError } from './error.js';
+import { isRequestCancellation, ModelEmissionFailure, ProviderError, ProviderRequestLimitError } from './error.js';
 import { readModelReply } from './response.js';
 import { readModelStream } from './stream.js';
 import { measureModelRequest } from './contract.js';
 import { encodeMessages } from './wire.js';
-import { valueLimit } from './value.js';
+import { maximumModelRequestBytes, maximumModelWireRequestBytes, valueLimit } from './value.js';
 import type { ChatCompletionsConfiguration, ModelControls, ModelProvider, ModelReply, ModelRequest, ModelRequestInspection } from './types.js';
 
 /** One bounded HTTP request. No resource, interaction or conversation lifecycle is owned here. */
@@ -22,11 +22,14 @@ export class ChatCompletionsProvider implements ModelProvider {
     if (typeof configuration.apiKey !== 'string' || !configuration.apiKey.trim() || /[\r\n]/.test(configuration.apiKey)) throw new ProviderError('CONFIGURATION', 'A model API key is required');
     if (typeof configuration.model !== 'string' || !configuration.model.trim()) throw new ProviderError('CONFIGURATION', 'A model name is required');
     const timeoutMs = configuration.timeoutMs ?? 60_000;
+    const maxRequestBytes = configuration.maxRequestBytes === undefined ? valueLimit : configuration.maxRequestBytes;
+    const maxWireRequestBytes = configuration.maxWireRequestBytes === undefined ? valueLimit : configuration.maxWireRequestBytes;
+    if (!Number.isSafeInteger(maxRequestBytes) || maxRequestBytes < 1 || maxRequestBytes > maximumModelRequestBytes || !Number.isSafeInteger(maxWireRequestBytes) || maxWireRequestBytes < 1 || maxWireRequestBytes > maximumModelWireRequestBytes) throw new ProviderError('CONFIGURATION', 'Request byte budgets must be positive integers within framework support bounds');
     const maxResponseBytes = configuration.maxResponseBytes ?? 2 * 1024 * 1024;
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2_147_483_647 || !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1) throw new ProviderError('CONFIGURATION', 'Positive bounded timeout and response byte limit are required');
     if (configuration.thinking !== undefined && !['enabled', 'disabled'].includes(configuration.thinking)) throw new ProviderError('CONFIGURATION', 'Unsupported thinking setting');
     if (configuration.fetch !== undefined && typeof configuration.fetch !== 'function') throw new ProviderError('CONFIGURATION', 'Fetch transport must be a function');
-    this.#configuration = Object.freeze({ endpoint: endpoint.href, apiKey: configuration.apiKey, model: configuration.model, timeoutMs, maxResponseBytes, thinking: configuration.thinking });
+    this.#configuration = Object.freeze({ endpoint: endpoint.href, apiKey: configuration.apiKey, model: configuration.model, timeoutMs, maxRequestBytes, maxWireRequestBytes, maxResponseBytes, thinking: configuration.thinking });
     this.#fetch = configuration.fetch ?? globalThis.fetch;
   }
 
@@ -45,7 +48,9 @@ export class ChatCompletionsProvider implements ModelProvider {
     const progress = controls.progress;
     if (progress !== undefined && typeof progress !== 'function') throw new ProviderError('REQUEST', 'Model progress consumer must be a function');
     // Inspection is not a reservation: the current value is always checked again before sending.
-    const { body, streaming } = this.prepareRequest(request);
+    const { body, streaming, inspection } = this.prepareRequest(request);
+    if (inspection.requestBytes > this.#configuration.maxRequestBytes) throw new ProviderRequestLimitError('requestBytes', inspection.requestBytes, this.#configuration.maxRequestBytes);
+    if (inspection.wireBytes > this.#configuration.maxWireRequestBytes) throw new ProviderRequestLimitError('wireBytes', inspection.wireBytes, this.#configuration.maxWireRequestBytes);
     const controller = new AbortController();
     const abort = () => controller.abort(external?.reason);
     external?.addEventListener('abort', abort, { once: true });
@@ -88,8 +93,8 @@ export class ChatCompletionsProvider implements ModelProvider {
       const streaming = request.stream === true;
       const body = this.requestBody(request, streaming);
       const wireBytes = Buffer.byteLength(body);
-      if (wireBytes > valueLimit) throw new TypeError('Model wire request exceeds byte limit');
-      return { body, streaming, inspection: Object.freeze({ requestBytes, wireBytes }) };
+      if (wireBytes > maximumModelWireRequestBytes) throw new TypeError('Model wire request exceeds byte limit');
+      return { body, streaming, inspection: Object.freeze({ requestBytes, wireBytes, limits: Object.freeze({ maxRequestBytes: this.#configuration.maxRequestBytes, maxWireRequestBytes: this.#configuration.maxWireRequestBytes }) }) };
     } catch {
       throw new ProviderError('REQUEST', 'Model request has invalid, unsupported or excessive content');
     }

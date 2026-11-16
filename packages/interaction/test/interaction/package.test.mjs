@@ -92,7 +92,7 @@ test('interaction builds declarations and runs a typed consumer without Runtime,
     await writeFile(
       fixture,
       `import assert from 'node:assert/strict';
-import { Interaction, Interactions, type InteractionContract, type InteractionState } from '@weiliang0121/capix-interaction';
+import { Interaction, Interactions, MAX_INTERACTION_TEXT_UNITS, type InteractionDataLimits, type InteractionContract, type InteractionState } from '@weiliang0121/capix-interaction';
 type Reply = { text: string };
 const contract: InteractionContract<string, Reply> = {
   key: 'standalone.echo.v1',
@@ -141,7 +141,8 @@ assert.equal(restored.kind, 'received');
 if (restored.kind !== 'received') throw new Error('Expected saved feedback');
 const saved = stored.get(ref.id);
 assert.ok(saved);
-const restoredEntity = Interaction.restore(saved, { contract });
+const limits: InteractionDataLimits = { requestTextUnits: MAX_INTERACTION_TEXT_UNITS };
+const restoredEntity = Interaction.restore(saved, { contract, limits });
 assert.equal(restoredEntity.id, ref.id);
 assert.throws(() => restoredEntity.start(() => ({ text: 'resent' })), { code: 'INTERACTION_RESTORED' });
 restoredHost.close();

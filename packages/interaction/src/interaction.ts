@@ -2,14 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { PersistenceError, RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 import { isNonBlankString } from './value.js';
-import type { InteractionFact, InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
-import { captureInteractionValue, sameInteractionValue } from './value.js';
+import type { InteractionDataLimits, InteractionFact, InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
+import { captureInteractionEnvelope, captureInteractionValue, interactionDataLimits, sameInteractionValue } from './value.js';
 import { ProgressChannel } from '@weiliang0121/capix-changes';
 
 /** One fixed external exchange. Invocation waiters neither own its delivery nor consume its reply. */
 export class Interaction<Request, Reply> {
   #state: InteractionState<Request, Reply>;
   readonly #options: InteractionOptions<Request, Reply>;
+  readonly #limits: Required<InteractionDataLimits>;
   readonly #observation?: ProgressChannel<InteractionFact<Request, Reply>>;
   readonly #listeners = new Set<() => void>();
   #settled: Promise<void> = Promise.resolve();
@@ -20,10 +21,11 @@ export class Interaction<Request, Reply> {
 
   constructor(request: Request, options: InteractionOptions<Request, Reply>) {
     if (!isNonBlankString(options.contract.key)) throw new TypeError('Interaction contract key must be nonempty');
-    this.#options = Object.freeze({ ...options, contract: Object.freeze({ key: options.contract.key, request: options.contract.request.bind(options.contract), reply: options.contract.reply.bind(options.contract) }) });
+    this.#limits = interactionDataLimits(options.limits);
+    this.#options = Object.freeze({ ...options, limits: this.#limits, contract: Object.freeze({ key: options.contract.key, request: options.contract.request.bind(options.contract), reply: options.contract.reply.bind(options.contract) }) });
     this.#observation = options.observation ? new ProgressChannel(options.observation) : undefined;
-    const captured = captureInteractionValue(request);
-    this.#state = Object.freeze({ id: randomUUID(), contract: this.#options.contract.key, revision: 0, request: captureInteractionValue(this.#options.contract.request(captured)), delivery: 'prepared' });
+    const captured = captureInteractionValue(request, this.#limits.requestTextUnits);
+    this.#state = captureInteractionEnvelope(Object.freeze({ id: randomUUID(), contract: this.#options.contract.key, revision: 0, request: captureInteractionValue(this.#options.contract.request(captured), this.#limits.requestTextUnits), delivery: 'prepared' as const }), ['id', 'contract', 'revision', 'request', 'delivery'], ['request']);
     try {
       const committed: unknown = this.#options.persistence?.create(this.#state);
       if (committed !== undefined) {
@@ -46,18 +48,18 @@ export class Interaction<Request, Reply> {
 
   /** Restored facts are readable, but no running sender or receiver is reconstructed. */
   static restore<Request, Reply>(state: InteractionState, options: InteractionOptions<Request, Reply>): Interaction<Request, Reply> {
-    const saved = captureInteractionValue(state);
-    const allowed = new Set(['id', 'contract', 'revision', 'request', 'delivery', 'feedback', 'failure']);
-    if (Object.keys(saved).some((key) => !allowed.has(key)) || !Object.hasOwn(saved, 'request') || (Object.hasOwn(saved, 'feedback') && !saved.feedback) || (Object.hasOwn(saved, 'failure') && !saved.failure)) throw new TypeError('Invalid persisted interaction fields');
+    const limits = interactionDataLimits(options.limits);
+    const envelope = captureInteractionEnvelope(state, ['id', 'contract', 'revision', 'request', 'delivery', 'feedback', 'failure'], ['request', 'feedback', 'failure']);
+    if (!Object.hasOwn(envelope, 'request') || (Object.hasOwn(envelope, 'feedback') && !envelope.feedback) || (Object.hasOwn(envelope, 'failure') && !envelope.failure)) throw new TypeError('Invalid persisted interaction fields');
+    const saved = Object.freeze({ ...envelope, request: captureInteractionValue(envelope.request, limits.requestTextUnits), ...(Object.hasOwn(envelope, 'feedback') ? { feedback: Interaction.captureFeedback(envelope.feedback!, limits.replyTextUnits) } : {}), ...(Object.hasOwn(envelope, 'failure') ? { failure: captureInteractionValue(envelope.failure) } : {}) });
     if (!isNonBlankString(saved.id) || saved.contract !== options.contract.key || !Number.isSafeInteger(saved.revision) || saved.revision < 0 || (saved.delivery !== 'prepared' && saved.delivery !== 'started')) throw new TypeError('Invalid persisted interaction identity or delivery');
     const expectedRevision = (saved.delivery === 'started' ? 1 : 0) + (saved.feedback ? 1 : 0) + (saved.failure ? 1 : 0);
     if (saved.revision !== expectedRevision || (saved.delivery === 'prepared' && (saved.feedback || saved.failure))) throw new TypeError('Invalid persisted interaction progress');
-    if (saved.feedback && !isNonBlankString(saved.feedback.id)) throw new TypeError('Invalid persisted interaction feedback identity');
     if (saved.failure && (!isNonBlankString(saved.failure.code) || typeof saved.failure.message !== 'string')) throw new TypeError('Invalid persisted interaction diagnostic');
-    const interaction = new Interaction(saved.request as Request, { contract: options.contract });
+    const interaction = new Interaction(saved.request as Request, { contract: options.contract, limits });
     const request = interaction.#state.request;
     if (!sameInteractionValue(request, saved.request)) throw new TypeError('Persisted interaction request does not match its contract');
-    const feedback = saved.feedback ? Object.freeze({ id: saved.feedback.id, payload: captureInteractionValue(options.contract.reply(saved.feedback.payload)) }) : undefined;
+    const feedback = saved.feedback ? Object.freeze({ id: saved.feedback.id, payload: captureInteractionValue(interaction.#options.contract.reply(saved.feedback.payload), limits.replyTextUnits) }) : undefined;
     if (feedback && !sameInteractionValue(feedback.payload, saved.feedback!.payload)) throw new TypeError('Persisted interaction feedback does not match its contract');
     interaction.#state = Object.freeze({ id: saved.id, contract: saved.contract, revision: saved.revision, request, delivery: saved.delivery, ...(feedback ? { feedback } : {}), ...(saved.failure ? { failure: saved.failure } : {}) });
     interaction.#restored = true;
@@ -93,9 +95,8 @@ export class Interaction<Request, Reply> {
   receive(feedback: InteractionFeedback<Reply>): void {
     this.requireMutable();
     if (this.#state.delivery !== 'started') throw new RuntimeError('INTERACTION_NOT_STARTED', 'An unstarted interaction cannot receive feedback');
-    const captured = captureInteractionValue(feedback);
-    if (!isNonBlankString(captured.id)) throw new TypeError('Interaction feedback identity must be nonempty');
-    const accepted = Object.freeze({ id: captured.id, payload: captureInteractionValue(this.#options.contract.reply(captured.payload)) });
+    const captured = Interaction.captureFeedback(feedback, this.#limits.replyTextUnits);
+    const accepted = Object.freeze({ id: captured.id, payload: captureInteractionValue(this.#options.contract.reply(captured.payload), this.#limits.replyTextUnits) });
     if (this.#state.feedback) {
       if (this.#state.feedback.id === accepted.id && sameInteractionValue(this.#state.feedback.payload, accepted.payload)) return;
       throw new RuntimeError('INTERACTION_FEEDBACK_CONFLICT', 'Interaction feedback cannot replace a previously received reply');
@@ -160,6 +161,12 @@ export class Interaction<Request, Reply> {
     return this.#settled;
   }
 
+  private static captureFeedback<Reply>(feedback: InteractionFeedback<Reply>, maxTextUnits: number): InteractionFeedback<Reply> {
+    const envelope = captureInteractionEnvelope(feedback, ['id', 'payload'], ['payload']);
+    if (!Object.hasOwn(envelope, 'id') || !Object.hasOwn(envelope, 'payload') || !isNonBlankString(envelope.id)) throw new TypeError('Interaction feedback identity and payload are required');
+    return Object.freeze({ id: envelope.id, payload: captureInteractionValue(envelope.payload, maxTextUnits) });
+  }
+
   private fail(error: unknown): void {
     if (this.#state.feedback) return;
     const failure = captureInteractionValue(RuntimeErrorHelper.format(error));
@@ -176,6 +183,7 @@ export class Interaction<Request, Reply> {
 
   private commit(state: InteractionState<Request, Reply>): void {
     this.requireMutable();
+    state = captureInteractionEnvelope(state, ['id', 'contract', 'revision', 'request', 'delivery', 'feedback', 'failure'], ['request', 'feedback', 'failure']);
     this.#mutating = true;
     try {
       try {

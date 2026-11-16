@@ -38,7 +38,18 @@ export interface InteractionPersistence<Request = unknown, Reply = unknown> {
   commit(change: InteractionCommit<Request, Reply>): undefined;
 }
 
+/** UTF-16 code units in string values and object keys, independently per request/reply payload. */
+export interface InteractionDataLimits {
+  readonly requestTextUnits?: number;
+  readonly replyTextUnits?: number;
+}
+
+export const DEFAULT_INTERACTION_TEXT_UNITS = 16 * 1024 * 1024;
+export const MAX_INTERACTION_TEXT_UNITS = 64 * 1024 * 1024;
+
 export interface InteractionOptions<Request, Reply> {
+  /** Fixed at construction; cold restore must use the same limits. Structure budgets stay unchanged. */
+  readonly limits?: InteractionDataLimits;
   readonly contract: Pick<InteractionContract<Request, Reply>, 'key' | 'request' | 'reply'>;
   readonly persistence?: InteractionPersistence<Request, Reply>;
   /** Passive facts after state installation. A failed observer never rejects delivery or feedback. */

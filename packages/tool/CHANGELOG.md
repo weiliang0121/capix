@@ -1,5 +1,14 @@
 # @weiliang0121/capix-tool
 
+## 0.11.0
+
+### Minor Changes
+
+- Allow request and wire budgets up to 64 MiB and preflight against the smaller host/provider limit. Independently reserve each closed exchange before tool effects; `TOOL_EXCHANGE_LIMIT` supports explicit `capacityPolicy: 'defer'` so oversized batches can be split without executing rejected calls. Defaults, response/feedback budgets and collection limits are unchanged.
+- Fix Interaction recovery data limits before reading durable state and reauthenticate saved provider-derived capacity decisions. Keep original host capability receivers, including class private fields. Restoration never resends model requests or repeats tool effects.
+- Tool checkpoints advance to v5; earlier versions are rejected without migration or data changes. Completion checkpoints remain v3. ModelExchanges origins and entries remain bounded by 8 MiB, individual exchanges by 2 MiB, and checkpoint logical images by 8 MiB. Larger aggregate requests do not imply arbitrary large raw outputs can be checkpointed.
+- Requires model-provider 0.8.0, interaction 0.8.0 and model-exchanges 0.7.1. Other runtime dependencies remain at 0.7.0; consumers using Runtime interactions should upgrade Runtime to 0.7.1 to preserve shared Interaction identity.
+
 ## 0.10.0
 
 ### Minor Changes

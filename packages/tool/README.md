@@ -87,19 +87,21 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 `ToolBudgetError.phase` 区分 `actual`（已取得固定内容的实际计量）与 `reserved`（为尚未取得的回复、反馈或下次材料预留）；`bytes` 是对应的实际或预留总量，`limit` 是触发的上限。错误阶段不表示工具效果已回滚。
 
-`ToolModelSource.inspection` 可直接使用提供同步 `inspectRequest` 的 Provider。显式 wire 限制但缺少测量能力会拒绝发送。集合预算是预设的保守检查，实体和 Provider 的独立上限仍然成立；共享并发调用没有跨实体预留事务。集合核算与累计请求构造目前读取完整材料，不宣称常数成本，也不自动删除历史。
+请求与 wire 预算可显式配置到 model-provider 公布的 64 MiB 支持范围，默认请求预算仍为 2 MiB；回复和单份反馈上限保持 2 MiB。单个闭合 exchange 的完整公共 JSON 仍为 2 MiB，派发前独立预留，超限产生 `TOOL_EXCHANGE_LIMIT`，不会因整体请求预算较大而先执行工具。
+
+`ToolModelSource.inspection` 可直接使用提供同步 `inspectRequest` 的 Provider。显式 wire 限制但缺少测量能力会拒绝发送。inspection 返回 `limits` 时，即使 Tool 未显式设置 wire 预算，也会遵守 Provider 的较小上限；结构合法但超过配置预算的 inspection 应返回计量，由 Tool 决定预留边界，真正发送仍由 Provider 再次拒绝超限。集合预算是预设的保守检查，实体和 Provider 的独立上限仍然成立；共享并发调用没有跨实体预留事务。集合核算与累计请求构造目前读取完整材料，不宣称常数成本，也不自动删除历史。
 
 `ToolModelPending` 携带原交互引用。局部等待超时或取消不会重发、取消原模型请求；超时后的失败调用不会因为引用仍存在就自动变成可恢复调用。宿主关闭时须等待自己持有的独立发送完成。
 
 ### 容量预留的受控延后
 
-默认 `capacityPolicy: 'fail'` 保持预留超限即失败。显式设置 `capacityPolicy: 'defer'` 后，仅框架自身比较产生的 request/wire **reserved** 超限可延后当前批次尚未执行的调用。Inspector 抛错（包括自行抛出的同类 ToolBudgetError）、actual 超限、回复、反馈、集合、持久、取消与 CP 故障仍失败。
+默认 `capacityPolicy: 'fail'` 保持预留超限即失败。显式设置 `capacityPolicy: 'defer'` 后，仅框架自身比较产生的 request/wire/exchange **reserved** 超限可延后当前批次尚未执行的调用。Inspector 抛错（包括自行抛出的同类 ToolBudgetError）、actual 超限、回复、反馈、集合、持久、取消与 CP 故障仍失败。
 
 Tool 先验证每个未执行调用的精确小反馈同时满足成员与全局限制，再验证完整闭合请求的实际容量及集合预留；通过后逐条写入 `TOOL_CAPACITY_DEFERRED`、`stage: 'preflight'`、`executed: false` 与固定 `reason`。本批已有反馈和接纳回执保持原样，延后项不创建子调用或工具接纳回执。反馈自身放不下时失败。最后一个反馈已接纳后直接闭合，不再预留下一批工具的最大反馈。
 
 启用 requestContext 的宿主通过 `prepare(prefix, boundary?)` 收到真实框架边界。`ToolCapacityBoundary` 包含 `reason: { code, bytes, limit, phase: 'reserved' }`、`origin`、闭合后的最终 `exchange` 引用及有序 `callIds`；初次及普通推进不传该参数。宿主应使用此能力参数识别边界，不通过模型或普通工具产生的 JSON 推断来源。宿主可据此选择较小材料；实际模型发送仍检查硬预算。无宿主材料时，模型也可读取小反馈后缩小下一批，`maxModelCalls` 仍限制循环。
 
-容量策略进入目录摘要。Tool v4 CP 保存历史延后决定，恢复核对固定调用、精确反馈、未执行与无工具接纳事实；不在同步 point.check 中重新执行 inspector。旧 Tool CP 明确拒绝，不转换、不修改原材料。
+容量策略进入目录摘要。Tool v5 CP 保存历史延后决定，恢复核对固定调用、精确反馈、未执行与无工具接纳事实；有效上限取 Tool 预算与 Provider inspection 公布上限的较小值；同步 point.check 只检查事实范围，冷恢复在重新认证原始模型材料时核对有效上限，变更该上限会拒绝已保存的延后决定。旧 Tool CP 明确拒绝，不转换、不修改原材料。
 
 ## 工具图片的活动上下文
 
@@ -136,7 +138,7 @@ Tool 先验证每个未执行调用的精确小反馈同时满足成员与全局
 
 CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完整引用关系，交换前缀 state 仍完整编码。它不把已有的内核增量保存保证扩大成整个模型循环的恒定成本承诺。
 
-当前 Tool CP 契约版本为 4，内部 completion 为 3；目录预检策略版本为 4，绑定逐成员反馈容量和容量策略；旧 Tool CP 与旧目录摘要明确拒绝；0.8.0 使用的 v2（assistant 材料载体）及此前版本明确拒绝，不升级、重选材料或发送请求探测。升级后应从新调用开始；既有持久材料保持不变，不能通过改写旧请求来恢复。
+当前 Tool CP 契约版本为 5，内部 completion 为 3；目录预检策略版本为 4，绑定逐成员反馈容量和容量策略；旧 Tool CP 与旧目录摘要明确拒绝；0.8.0 使用的 v2（assistant 材料载体）及此前版本明确拒绝，不升级、重选材料或发送请求探测。升级后应从新调用开始；既有持久材料保持不变，不能通过改写旧请求来恢复。
 
 工具自身的外部效果确认仍归其资源和业务契约；多个实体提交与父 CP 不构成统一事务。当前格式与契约变化拒绝旧依据，没有旧 ToolLoop 别名或数据升级路径。
 
@@ -145,3 +147,9 @@ CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完�
 `pnpm --filter @weiliang0121/capix-tool test` 独立构建依赖并运行本包测试，覆盖普通/CP 调用、错误分流、预算、取消、共享实体、多步推进、类型负例，以及新 Runner/Store 的恢复和缺失依据拒绝。夹具只使用公开包，验证不依赖外部服务或应用测试。
 
 MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
+
+## 大请求与恢复预算
+
+扩大累计请求只放宽模型请求方向，不能绕过 Tool 初始输入、单份交换实体和检查点各自的容量。检查点逻辑图仍为 8 MiB，当前 Tool 输入即使未启用 CP 也执行相同输入编码验证；本轮不承诺超大初始输入的可恢复执行。
+
+大于默认 16 Mi UTF-16 文本单位的 Interaction 请求，需要在宿主 `Interactions.register(..., { limits })` 显式配置，并将同一份数据预算传入 `ToolModelSource.recovery.interactionLimits`。Tool 资源 capture 固定 recovery 读函数及限制副本；冷恢复按相同预算重新认证已持久化请求与回复，缺失或改变材料仍拒绝，不重发。字节预算、UTF-16 单位、token 窗口、实体总量以及进程内存不是同一个量。

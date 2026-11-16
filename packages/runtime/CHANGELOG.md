@@ -1,5 +1,11 @@
 # @weiliang0121/capix-runtime
 
+## 0.7.1
+
+### Patch Changes
+
+- Update the exact interaction dependency to 0.8.0 so Runtime registrations use the configurable request/reply data budgets and the same Interaction identity as Tool 0.11.0. Other runtime dependencies remain at 0.7.0. Runner behavior and checkpoint formats are unchanged.
+
 ## 0.7.0
 
 ### Patch Changes
