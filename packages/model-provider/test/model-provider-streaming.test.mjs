@@ -325,7 +325,7 @@ test('an independent stream read failure is not relabelled as simultaneous calle
   );
   await assert.rejects(provider(async () => response(body)).complete({ messages, stream: true }, { signal: caller.signal }), (error) => {
     assert.ok(error instanceof ProviderError);
-    assert.equal(error.code, 'ENVELOPE');
+    assert.equal(error.code, 'NETWORK');
     assert.equal(error.cause, undefined);
     assert.equal(String(error).includes(unrelated.message), false);
     return true;

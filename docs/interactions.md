@@ -29,6 +29,8 @@ const status = await channel.wait(reference, { waitMs: 1000 });
 
 反馈非破坏读取，多个读者不争抢消费槽位。同内容反馈确认不覆盖结果；不同反馈拒绝。业务解释失败不会删除已保存反馈。PersistenceError 保留准确故障身份，不能通过重新执行外部工作来修复未知保存结果。
 
+一次发送指 Interaction 仅调用一次登记的 send，不替任意外部协议承诺一次 HTTP。发送者可显式采用 [Provider 请求重试](../packages/model-provider/README.md#显式请求重试)，全部尝试与等待仍属于同一次 send，最终只返回一份反馈。Interaction 不选择重试策略，不因反馈保存失败重启 send，也不从历史 pending 推断可以重发。
+
 ## 局部等待与宿主关闭
 
 `wait` 的 waitMs 只限制这次等待，signal 只终止当前读者。等待到期得到 pending；取消后发送仍可保存晚到反馈。发送者自身的总超时和停止机制由宿主实现，不能将 Invocation.signal 隐式用作独立发送的所有权。

@@ -1,4 +1,4 @@
-import { isRequestCancellation, ModelEmissionFailure, ProviderError } from './error.js';
+import { deliverModelConsumer, isRequestCancellation, ModelAttemptTransportFailure, ModelEmissionFailure, ProviderError, readModelChunk } from './error.js';
 import type { ModelReply, ModelStreamProgress } from './types.js';
 import { acceptUsage } from './usage.js';
 import { acceptWireReply } from './wire.js';
@@ -12,7 +12,10 @@ export async function readModelStream(response: Response, signal: AbortSignal, l
     throw envelope();
   }
   const reader = response.body.getReader();
-  const abort = () => void reader.cancel(signal.reason).catch(() => undefined);
+  let abortCancellation: Promise<void> | undefined;
+  const abort = () => {
+    abortCancellation = reader.cancel(signal.reason).catch(() => undefined);
+  };
   signal.addEventListener('abort', abort, { once: true });
   try {
     signal.throwIfAborted();
@@ -20,29 +23,30 @@ export async function readModelStream(response: Response, signal: AbortSignal, l
     const events = new ServerSentEvents((data) => completion.receive(data));
     const decoder = new TextDecoder('utf-8', { fatal: true });
     let bytes = 0;
-    let chunk = await reader.read();
+    let chunk = await readModelChunk(reader, signal);
     while (!chunk.done && !completion.done) {
       signal.throwIfAborted();
       bytes += chunk.value.byteLength;
       if (bytes > limit) throw new ProviderError('RESPONSE_LIMIT', 'Model response exceeds the configured byte limit');
       events.write(decoder.decode(chunk.value, { stream: true }));
-      if (!completion.done) chunk = await reader.read();
+      if (!completion.done) chunk = await readModelChunk(reader, signal);
     }
     signal.throwIfAborted();
     if (!completion.done) {
       events.write(decoder.decode());
-      throw envelope();
+      throw new ModelAttemptTransportFailure(envelope(), 'stream');
     }
     return completion.result();
   } catch (error) {
     if (error instanceof ModelEmissionFailure) throw error;
     if (isRequestCancellation(error, signal)) throw signal.reason;
-    if (error instanceof ProviderError) throw error;
+    if (error instanceof ProviderError || error instanceof ModelAttemptTransportFailure) throw error;
     throw envelope();
   } finally {
     signal.removeEventListener('abort', abort);
     // [DONE] ends the protocol without requiring the HTTP producer to close first.
     await reader.cancel().catch(() => undefined);
+    await abortCancellation;
     reader.releaseLock();
   }
 }
@@ -182,7 +186,7 @@ class ChatCompletionStream {
     // Notify only after the entire chunk (including every tool fragment) is validated.
     if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length) {
       this.reportProgress('reasoning');
-      if (this.emitReasoning) deliver(() => this.emitReasoning!(delta.reasoning_content as string), 'Model reasoning preview consumer must be synchronous');
+      if (this.emitReasoning) deliverModelConsumer(() => this.emitReasoning!(delta.reasoning_content as string), 'Model reasoning preview consumer must be synchronous');
       this.signal.throwIfAborted();
     }
     if (hasToolDelta) this.reportProgress('tool-call');
@@ -190,7 +194,7 @@ class ChatCompletionStream {
     if (typeof delta.content === 'string') this.#hasContent = true;
     if (typeof delta.content === 'string' && delta.content.length) {
       this.#fragments.push(delta.content);
-      if (this.emit) deliver(() => this.emit!(delta.content as string), 'Model preview consumer must be synchronous');
+      if (this.emit) deliverModelConsumer(() => this.emit!(delta.content as string), 'Model preview consumer must be synchronous');
       this.signal.throwIfAborted();
     }
     return false;
@@ -199,7 +203,7 @@ class ChatCompletionStream {
   private reportProgress(kind: ModelStreamProgress['kind']): void {
     if (this.#progressKind === kind) return;
     this.#progressKind = kind;
-    if (this.progress) deliver(() => this.progress!(Object.freeze({ kind })), 'Model progress consumer must be synchronous');
+    if (this.progress) deliverModelConsumer(() => this.progress!(Object.freeze({ kind })), 'Model progress consumer must be synchronous');
     this.signal.throwIfAborted();
   }
 
@@ -208,21 +212,6 @@ class ChatCompletionStream {
     const indexes = [...this.#calls.keys()].sort((left, right) => left - right);
     if (indexes.some((index, position) => index !== position)) throw envelope();
     return acceptWireReply({ id: this.#id, model: this.#model, choices: [{ index: 0, message: { role: 'assistant', content: this.#hasContent || !this.#calls.size ? this.#fragments.join('') : null, ...(this.#hasReasoning ? { reasoning_content: this.#reasoning.join('') } : {}), ...(this.#calls.size ? { tool_calls: indexes.map((index) => this.#calls.get(index)) } : {}) }, finish_reason: this.#finishReason }], usage: this.#wireUsage });
-  }
-}
-
-/** Shared provenance and synchronous contract for stream consumers. */
-function deliver(consumer: () => unknown, message: string): void {
-  try {
-    const returned = consumer();
-    if ((typeof returned === 'object' && returned !== null) || typeof returned === 'function') {
-      if ('then' in returned && typeof returned.then === 'function') {
-        void Promise.resolve(returned).catch(() => undefined);
-        throw new TypeError(message);
-      }
-    }
-  } catch (failure) {
-    throw new ModelEmissionFailure(failure);
   }
 }
 

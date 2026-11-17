@@ -76,6 +76,23 @@ export interface ModelRequest {
 export interface ModelStreamProgress {
   readonly kind: 'reasoning' | 'text' | 'tool-call';
 }
+/** Bounded diagnostics from one attempt; neither upstream effects nor billing are inferred. */
+export interface ModelAttemptFailure {
+  readonly code: 'CONFIGURATION' | 'REQUEST' | 'REQUEST_LIMIT' | 'NETWORK' | 'HTTP' | 'TIMEOUT' | 'RESPONSE_LIMIT' | 'ENVELOPE' | 'CONSUMER' | 'CANCELLED';
+  readonly phase: 'connect' | 'http' | 'read' | 'stream' | 'response' | 'consumer' | 'cancelled' | 'timeout';
+  readonly status?: number;
+}
+/** Attempts are numbered within one complete call. Preview consumers must separate attempts. */
+export type ModelAttemptEvent = { readonly kind: 'started'; readonly attempt: number } | { readonly kind: 'failed'; readonly attempt: number; readonly failure: ModelAttemptFailure } | { readonly kind: 'retrying'; readonly attempt: number; readonly nextAttempt: number; readonly delayMs: number } | { readonly kind: 'completed'; readonly attempt: number; readonly usage: ModelUsage | null };
+/** Explicit permission to repeat generation, not permission to repeat external effects. */
+export interface ModelRetryOptions {
+  /** Includes the first request. Omit retry entirely to send only once. */
+  readonly maxAttempts: number;
+  /** Initial backoff in milliseconds; defaults to 1000. */
+  readonly delayMs?: number;
+  /** Backoff ceiling; defaults to 30000. A larger Retry-After prevents retry. */
+  readonly maxDelayMs?: number;
+}
 export interface ModelControls {
   readonly signal?: AbortSignal;
   /** Synchronous answer text preview only; excludes reasoning and tool arguments. */
@@ -84,6 +101,8 @@ export interface ModelControls {
   readonly emitReasoning?: (delta: string) => void;
   /** Synchronous notification on changes between nonempty, validated stream delta kinds. */
   readonly progress?: (progress: ModelStreamProgress) => void;
+  /** Synchronous, per-attempt lifecycle notification. A consumer failure stops all retries. */
+  readonly attempt?: (event: ModelAttemptEvent) => void;
 }
 /** Small injectable capability. Prompts, schemas and result acceptance belong to its consumer. */
 export interface ModelProvider {
@@ -112,5 +131,7 @@ export interface ChatCompletionsConfiguration {
   /** Transport budget may be lower than the fixed 2 MiB public value limit. */
   readonly maxResponseBytes?: number;
   readonly thinking?: 'enabled' | 'disabled';
+  /** Opt-in retries for generation-only endpoints; timeoutMs still bounds the whole call. */
+  readonly retry?: ModelRetryOptions;
   readonly fetch?: typeof fetch;
 }

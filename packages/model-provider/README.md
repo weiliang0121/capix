@@ -110,9 +110,30 @@ const reply = await model.complete({ messages: [{ role: 'user', content: '解释
 
 progress、emitReasoning 与 emit 使用相同的同步消费者失败语义：抛错保留原错误身份，返回 Promise 或 thenable 拒绝为 TypeError，停止后续通知并释放流读取；内部 ModelEmissionFailure 仅用于保留错误来源。消费者触发取消后不再调用当前 chunk 及后续 chunk 的其他消费者。合法增量的预览和进度不代表最终回复或业务接纳已成立；后续协议错误、超限或取消仍会使 complete 失败，已交付的预览不能代替完整回复。流式回调不建立新的实体、协议状态或恢复依据。
 
-SSE 按 `tool_calls[index]` 拼接名称与参数片段，保留 reasoning_content，终态与独立 usage 均支持。缺少 ID、重复 ID、索引缺口、超过 32 个调用、终态后继续 choice、重复 usage、缺少 finish_reason 或 `[DONE]` 均拒绝。`[DONE]` 结束协议后立即释放读取，不要求上游 HTTP 连接先关闭；不重发或退回非流式请求。原有 UTF-8 分片、SSE 换行/注释、多行 data、接收者失败、取消和总超时行为保持。
+SSE 按 `tool_calls[index]` 拼接名称与参数片段，保留 reasoning_content，终态与独立 usage 均支持。缺少 ID、重复 ID、索引缺口、超过 32 个调用、终态后继续 choice、重复 usage、缺少 finish_reason 或 `[DONE]` 均拒绝。`[DONE]` 结束协议后立即释放读取，不要求上游 HTTP 连接先关闭。默认不重发，也不退回非流式请求；显式重试的流中断边界见下节。原有 UTF-8 分片、SSE 换行/注释、多行 data、接收者失败、取消和总超时行为保持。
 
 JSON 与 SSE 共用 `ModelUsage`：`promptTokens / completionTokens / totalTokens`，可选 `promptCacheHitTokens / promptCacheMissTokens` 原样保留。计数必须是非负安全整数，缓存单项不超过 promptTokens，两项都报告时其和须等于 promptTokens。缺失不估算为零；不把其他厂商的缓存字段自动映射成 DeepSeek 计数。
+
+## 显式请求重试
+
+`ChatCompletionsConfiguration.retry` 可显式配置 `{maxAttempts, delayMs?, maxDelayMs?}`。不配置时仍只有一次 HTTP 尝试；`maxAttempts` 包含首次请求，必须是正安全整数。初始间隔 `delayMs` 默认 1000 毫秒，等待上限 `maxDelayMs` 默认 30000 毫秒，两者为 0 到 2147483647 的安全整数，上限不得小于初始间隔。后续间隔指数增加并受上限约束。有效的 `Retry-After` 不会被缩短；超出等待上限时直接返回该次 HTTP 错误。调用方 signal 和原有 `timeoutMs` 覆盖全部尝试及等待，不为每次重试重新计时。
+
+启用前，宿主须确认端点只做模型生成，并接受重复推理及可能的重复计费。断线、超时、5xx 或没有收到字节，都不证明服务端没有处理。服务端工具、有副作用的扩展或有状态接口不能自动套用这个许可，须另有明确的效果确认或去重协议。本能力不恢复连接上的旧生成，而是用同一份已校验和编码的请求重新生成；配置与 HTTP 正文固定一次，调用方后续修改输入不会改变重试内容。
+
+只在当前尝试内部确认来源后重试：fetch 失败、响应读取失败、SSE 在完整终态和 `[DONE]` 之前结束，以及 HTTP 408/429/500/502/503/504。响应读取失败报告 `NETWORK`；提前结束的 SSE 仍报告 `ENVELOPE`，尝试诊断 phase 为 `stream`。完整但非法的 JSON、UTF-8、SSE 或回复协议，配置、容量、消费者失败与取消不重试；总超时也不重试。错误码本身不是重发许可，消费者抛出的同类错误不会获得传输来源资格。
+
+每次重试前已释放前次读取器并等待取消清理。任何有效 `ModelReply` 都结束重试，包括 `incomplete` 和 `refused`；后续反馈持久化、业务接纳或工具执行错误不会重新请求模型。Interaction 仍只启动一次发送者，整个尝试循环属于该次发送者生命周期；历史 pending、失败调用和冷恢复不因此取得重新发送的资格。
+
+`ModelControls.attempt` 同步接收冻结的 `ModelAttemptEvent`，attempt 从 1 开始，仅在本次 complete 内编号：
+
+- `started`：准备开始一次尝试。通知可以取消或拒绝发送，因此它不证明 HTTP 已到达服务端。
+- `failed`：该次传输或回复接纳失败，携带有界的 `failure.code / phase / status?`，不含正文、headers、底层 cause 或密钥。
+- `retrying`：上一尝试已清理，携带 nextAttempt 和 delayMs；仍可能在等待期间取消，不保证下一尝试会启动。
+- `completed`：该次取得有效协议回复，携带该次 usage，仍不代表工具执行、业务接纳或持久化成功。
+
+该通知与 emit 的同步消费者规则一致：抛错保留原错误身份，Promise/thenable 拒绝，立即停止后续通知和重试。因此消费者失败后不补发 failed，completed 通知失败也不会变成另一条 failed。无效请求在尝试开始之前拒绝，不伪造尝试事件。等待期间取消或超时不补造新的尝试。
+
+启用重试并消费预览的宿主必须按逻辑请求与 attempt 分隔内容：started 开始新的正文／思考缓存，failed 的片段只能作为失败尝试的临时观察，不能拼接到后续正文、写入正式历史或执行其中的工具参数。最终回复仅来自成功的完整尝试。逻辑调用数、尝试数与工具执行数分别统计；usage 仅描述该份有效回复，不包含失败尝试的成本。失败尝试的费用与用量未知，不能补零，也不能把最后一次 usage 当作所有尝试的总量。
 
 ## 容量与范围
 
@@ -124,7 +145,7 @@ JSON 与 SSE 共用 `ModelUsage`：`promptTokens / completionTokens / totalToken
 - `ChatCompletionsConfiguration.maxRequestBytes / maxWireRequestBytes` 是独立发送预算，默认各 2 MiB，可显式配置为对应支持范围内的正安全整数。`complete` 使用本次实际计量，在打开传输前执行两个预算；超预算抛出继承 `ProviderError` 的 `ProviderRequestLimitError`，`code` 为 `REQUEST_LIMIT`，`metric` 为 `requestBytes` 或 `wireBytes`，并仅携带数值 `bytes / limit`，不保存正文。共同请求先检查，HTTP 正文随后检查。
 - 公开回复、工具结果、反馈仍各限 2 MiB；`maximumModelExchangeBytes` 为 2 MiB，限制单个闭合交换的完整公共 JSON，请求中嵌套的交换也必须符合该独立上限。较大请求只允许累计多个合法材料，不会扩大单份回复或反馈。合法的单项不代表任意累计历史都能继续装入请求。
 - 默认总超时 60 秒，涵盖发送与完整读取。`maxResponseBytes` 是独立的实际传输预算，默认 2 MiB，SSE 计入事件封装、注释和思考内容；提高传输预算不会放宽公开回复的纯值上限。
-- 一次 complete 只有一次 HTTP 请求，无隐式重试。调用取消保持原 reason，不修改调用者 signal；对独立 Interaction 的生命周期不作推断。
+- 一次 complete 默认只有一次 HTTP 请求；显式 retry 仅允许上述有界传输尝试。调用取消保持原 reason，不修改调用者 signal；对独立 Interaction 的生命周期不作推断。
 - `ProviderError` 含 code/message/可选 HTTP status；请求预算错误另含上述数值诊断，不保存上游正文、请求、headers、密钥或底层错误。宿主可注入 fetch；实现必须遵守 Fetch 取消与重定向语义。
 - `thinking` 是宿主显式配置的 DeepSeek 扩展。当前实现 Chat Completions 函数调用、文本与固定图片输入；不承诺 Responses、Anthropic 原生协议、MCP、音视频或 strict beta。正式 Transcript 的消息角色不因此扩展。
 

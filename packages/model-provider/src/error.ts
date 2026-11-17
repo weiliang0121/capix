@@ -31,3 +31,37 @@ export class ModelEmissionFailure {
 export function isRequestCancellation(error: unknown, signal: AbortSignal): boolean {
   return signal.aborted && (error === signal.reason || (error instanceof DOMException && error.name === 'AbortError'));
 }
+
+/** Internal transport provenance is never inferred from a caller supplied ProviderError. */
+export class ModelAttemptTransportFailure {
+  constructor(
+    readonly failure: ProviderError,
+    readonly phase: 'connect' | 'http' | 'read' | 'stream',
+    readonly retryAfterMs?: number,
+  ) {}
+}
+
+/** Consumer failures retain their exact identity until the final public rejection. */
+export function deliverModelConsumer(consumer: () => unknown, message: string): void {
+  try {
+    const returned = consumer();
+    if ((typeof returned === 'object' && returned !== null) || typeof returned === 'function') {
+      if ('then' in returned && typeof returned.then === 'function') {
+        void Promise.resolve(returned).catch(() => undefined);
+        throw new TypeError(message);
+      }
+    }
+  } catch (failure) {
+    throw new ModelEmissionFailure(failure);
+  }
+}
+
+/** Only the read operation is tagged; decoder and envelope failures remain terminal. */
+export async function readModelChunk(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal): Promise<ReadableStreamReadResult<Uint8Array>> {
+  try {
+    return await reader.read();
+  } catch (error) {
+    if (isRequestCancellation(error, signal)) throw signal.reason;
+    throw new ModelAttemptTransportFailure(new ProviderError('NETWORK', 'Model response transport failed'), 'read');
+  }
+}
