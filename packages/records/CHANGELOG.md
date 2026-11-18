@@ -1,5 +1,18 @@
 # @weiliang0121/capix-records
 
+## 0.7.1
+
+### Patch Changes
+
+- cdca1c9: 更新包 README 中的安装命令、公开入口与用法说明，并在 npm 包中附带该包的 CHANGELOG.md，供离线查阅版本变化。
+- cdca1c9: 修复执行记录子树快照对内容记录校验不足的问题。读取 Transcript 记录时检查来源、修订号、发生时间和变更范围，读取 Memory 记录时检查条目和集合身份、序号与可选操作身份。
+- Updated dependencies [cdca1c9]
+  - @weiliang0121/capix-changes@0.7.1
+  - @weiliang0121/capix-contracts@0.7.1
+  - @weiliang0121/capix-memory@0.7.1
+  - @weiliang0121/capix-resources@0.7.1
+  - @weiliang0121/capix-transcript@0.7.1
+
 ## 0.7.0
 
 ### Patch Changes

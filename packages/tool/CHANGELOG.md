@@ -1,5 +1,20 @@
 # @weiliang0121/capix-tool
 
+## 0.11.1
+
+### Patch Changes
+
+- cdca1c9: 更新包 README 中的安装命令、公开入口与用法说明，并在 npm 包中附带该包的 CHANGELOG.md，供离线查阅版本变化。
+- Updated dependencies [cdca1c9]
+  - @weiliang0121/capix-checkpoint@0.7.1
+  - @weiliang0121/capix-contracts@0.7.1
+  - @weiliang0121/capix-diagnostics@0.7.1
+  - @weiliang0121/capix-interaction@0.8.1
+  - @weiliang0121/capix-model-exchanges@0.7.2
+  - @weiliang0121/capix-model-provider@0.9.1
+  - @weiliang0121/capix-resources@0.7.1
+  - @weiliang0121/capix-structure@0.7.1
+
 ## 0.11.0
 
 ### Minor Changes
