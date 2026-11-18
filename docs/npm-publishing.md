@@ -44,9 +44,9 @@ Changesets 根据实际变更创建 `changeset-release/main` 版本 PR。维护�
 
 ### 中途失败与重跑
 
-多包发布可能部分成功。按原 run 下载清单，先查询每个准确版本与摘要。例如 `npm view @weiliang0121/capix-tool@0.11.0 dist.integrity --registry=https://registry.npmjs.org`。提交结果未知或刚获受理时先等 registry 可见。若仍不能确定是否已提交，保留原产物并与 npm 核实。确认缺项后使用 **Re-run failed jobs**，沿用已通过 prepare 的 artifact。检查完整性冲突、tag 错指或发布正文冲突时，应先调查现有状态。
+首次写入前还须检查实际 tarball 声明的批外内部依赖，确保这些准确版本已可从 registry 安装。多包发布可能部分成功。按原 run 下载清单，先查询每个准确版本与摘要。例如 `npm view @weiliang0121/capix-tool@0.11.0 dist.integrity --registry=https://registry.npmjs.org`。提交结果未知或刚获受理时先等 registry 可见。若仍不能确定是否已提交，保留原产物并与 npm 核实。确认缺项后使用 **Re-run failed jobs**，沿用已通过 prepare 的 artifact。检查完整性冲突、tag 错指或发布正文冲突时，应先调查现有状态。
 
-仅公告失败时重跑失败 job，已提交的 npm 包保持原状。准备产物的保留期为 90 天（受仓库保留策略约束），维护者可在发布前下载保存；部分上传后的恢复需要同一批原始字节。已有包在新的 workspace 里重打可能改变精确内部依赖，不能用同版本重打 tarball 代替。
+仅公告失败时重跑失败 job，已提交的 npm 包保持原状。准备产物的保留期为 90 天（受仓库保留策略约束），维护者可在发布前下载保存；原 run 的失败 job 须在 GitHub 允许的重跑窗口（创建后 30 天）内恢复。重跑全部 job 会再次准备并与已有同名 artifact 冲突。超过重跑窗口或丢失原产物时，应由维护者核实 registry 与原批次后单独处置。已有包在新的 workspace 里重打可能改变精确内部依赖，不能用同版本重打 tarball 代替。
 
 ### 首次源码对齐
 

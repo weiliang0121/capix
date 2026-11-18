@@ -29,23 +29,30 @@ async function readBatch(directory) {
   const selected = new Set(manifest.packages.map(({ name }) => name));
   assert.equal(selected.size, manifest.packages.length, 'Duplicate release package');
   const checked = new Set();
+  const prerequisites = new Map();
   for (const entry of manifest.packages) {
     const local = workspace.get(entry.name);
     assert.ok(local, `Unknown release package: ${entry.name}`);
     assert.match(entry.version, stableVersion);
     assert.equal(entry.version, local.version, `Version differs from checkout: ${entry.name}`);
     assert.equal(entry.file, `${entry.name.slice(1).replace('/', '-')}-${entry.version}.tgz`, 'Unexpected tarball filename');
-    for (const dependency of Object.keys({ ...local.dependencies, ...local.optionalDependencies, ...local.peerDependencies })) {
-      assert.ok(!selected.has(dependency) || checked.has(dependency), `Dependency must publish first: ${dependency}`);
-    }
     const archive = await verifiedArchive(directory, entry);
     const packed = JSON.parse(command('tar', ['-xOzf', archive, 'package/package.json'], { encoding: 'utf8', stdio: 'pipe' }));
     assert.equal(packed.name, entry.name, 'Unexpected packed package name');
     assert.equal(packed.version, entry.version, 'Unexpected packed package version');
     assert.deepEqual(packed.publishConfig, local.publishConfig, 'Unexpected packed publishConfig');
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const [name, version] of Object.entries(packed[field] ?? {})) {
+        const internal = workspace.get(name);
+        if (!internal) continue;
+        assert.equal(version, internal.version, `Incorrect packed dependency: ${packed.name} requires ${name}@${version}`);
+        if (selected.has(name)) assert.ok(checked.has(name), `Dependency must publish first: ${name}`);
+        else prerequisites.set(name, internal);
+      }
+    }
     checked.add(entry.name);
   }
-  return manifest.packages;
+  return { entries: manifest.packages, prerequisites };
 }
 
 async function readMetadata(entry, request) {
@@ -93,7 +100,11 @@ async function waitForVersion(entry, request, sleep) {
 
 export async function publishBatch(mode, directory, { request = fetch, run = command, sleep = delay } = {}) {
   assert.ok(['publish', 'verify'].includes(mode), 'Expected publish or verify');
-  const entries = await readBatch(directory);
+  const { entries, prerequisites } = await readBatch(directory);
+  for (const dependency of prerequisites.values()) {
+    const metadata = await readMetadata(dependency, request);
+    assert.ok(metadata && metadata.versions[dependency.version]?.version === dependency.version, `Unpublished dependency: ${dependency.name}@${dependency.version}`);
+  }
   const confirmed = new Set();
   if (mode === 'publish') {
     for (const entry of entries) {

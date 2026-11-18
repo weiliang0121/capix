@@ -4,17 +4,23 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { command, json, registry, root } from '../../scripts/release/packages.mjs';
+import { command, packages, registry } from '../../scripts/release/packages.mjs';
 import { publishBatch } from '../../scripts/release/publish-batch.mjs';
 
-async function fixture(t) {
+async function fixture(t, selected = ['contracts', 'changes']) {
   const directory = await mkdtemp(join(tmpdir(), 'capix-registry-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await mkdir(join(directory, 'package'));
   const source = command('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: 'pipe' }).trim();
   const manifest = { schemaVersion: 1, source, pullRequest: 12, packages: [] };
-  for (const key of ['contracts', 'structure']) {
-    const packed = await json(join(root, 'packages', key, 'package.json'));
+  const workspace = new Map((await packages()).map(({ manifest }) => [manifest.name, manifest]));
+  for (const key of selected) {
+    const packed = workspace.get(`@weiliang0121/capix-${key}`);
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const name of Object.keys(packed[field] ?? {})) {
+        if (workspace.has(name)) packed[field][name] = workspace.get(name).version;
+      }
+    }
     const { name, version } = packed;
     const file = `${name.slice(1).replace('/', '-')}-${version}.tgz`;
     await writeFile(join(directory, 'package/package.json'), JSON.stringify(packed));
@@ -26,11 +32,11 @@ async function fixture(t) {
   }
   const save = (value) => writeFile(join(directory, 'release-manifest.json'), JSON.stringify(value));
   await save(manifest);
-  return { directory, manifest, save };
+  return { directory, manifest, save, workspace };
 }
 
 function visible(entry, integrity = entry.integrity) {
-  return Response.json({ name: entry.name, 'dist-tags': { latest: entry.version }, versions: { [entry.version]: { dist: { integrity } } } });
+  return Response.json({ name: entry.name, 'dist-tags': { latest: entry.version }, versions: { [entry.version]: { version: entry.version, dist: { integrity } } } });
 }
 
 const missing = () => new Response(null, { status: 404 });
@@ -140,4 +146,24 @@ test('a newer latest observed just before upload stops the previously eligible p
     }),
     /Refusing to move latest/,
   );
+});
+
+test('an exact internal dependency outside the batch must exist before upload or release confirmation', async (t) => {
+  const { directory, manifest, workspace } = await fixture(t, ['contracts', 'structure']);
+  const dependency = workspace.get('@weiliang0121/capix-resources');
+  const url = `${registry}/${encodeURIComponent(dependency.name)}`;
+  for (const mode of ['publish', 'verify']) {
+    for (const dependencyResponse of [missing(), visible({ ...dependency, version: '99.0.0' })]) {
+      const request = (target) => {
+        assert.equal(target, url, 'Check external prerequisites before touching the current batch');
+        return dependencyResponse;
+      };
+      await assert.rejects(publishBatch(mode, directory, { ...offline, request }), { message: `Unpublished dependency: ${dependency.name}@${dependency.version}` });
+    }
+    const request = (target) => {
+      if (target === url) return visible(dependency, 'previously published tarball integrity');
+      return visible(manifest.packages.find(({ name }) => target.endsWith(encodeURIComponent(name))));
+    };
+    await publishBatch(mode, directory, { ...offline, request });
+  }
 });
