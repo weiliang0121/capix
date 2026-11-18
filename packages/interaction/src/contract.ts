@@ -48,7 +48,7 @@ export const DEFAULT_INTERACTION_TEXT_UNITS = 16 * 1024 * 1024;
 export const MAX_INTERACTION_TEXT_UNITS = 64 * 1024 * 1024;
 
 export interface InteractionOptions<Request, Reply> {
-  /** Fixed at construction; cold restore must use the same limits. Structure budgets stay unchanged. */
+  /** Fixed at construction. Restore validates saved data against the supplied limits. */
   readonly limits?: InteractionDataLimits;
   readonly contract: Pick<InteractionContract<Request, Reply>, 'key' | 'request' | 'reply'>;
   readonly persistence?: InteractionPersistence<Request, Reply>;

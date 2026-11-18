@@ -1,22 +1,32 @@
 # @weiliang0121/capix-transcript
 
-Append-only conversation messages and resource contracts for CAPiX.
+按追加顺序保存对话消息，提供固定位置引用、分段与按版本读取。
 
-The public root owns `Message`, `MessageLocator`, `TranscriptRangeLocator`, `TranscriptSnapshot`, and `TranscriptEvent`. Locators identify fixed positions without retaining an entity; snapshots and events describe one source revision, including segment changes. Transport framing and wire acceptance belong to the protocol adapter and are not entity recovery authority.
+## 安装与入口
 
-ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
 
 ```sh
 npm install @weiliang0121/capix-transcript
 ```
 
-## Public entry points
+- `@weiliang0121/capix-transcript` 导出 Transcript 实体、消息及范围引用、资源端点、视图来源和事件类型。
+- `@weiliang0121/capix-transcript/presets` 提供 groupAdjacentPairs，按原始索引将紧邻的用户消息与助手消息配对，保留间隙和独立条目。
 
-- `@weiliang0121/capix-transcript`
-- `@weiliang0121/capix-transcript/presets`
+## 用法
 
-This package is part of CAPiX. The npm distribution contains compiled JavaScript, type declarations, and this package's MIT license. Reference services and client applications are not included in this package or the initial npm release.
+```ts
+import { Transcript } from '@weiliang0121/capix-transcript';
 
-## License
+const transcript = new Transcript();
+transcript.append({ role: 'user', content: '能总结一下吗？' });
+const messages = transcript.snapshot();
+```
 
-MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
+`MessageLocator` 用实体 ID 和索引定位一条消息，`TranscriptRangeLocator` 定位半开区间。两者都只保存位置。`TranscriptSnapshot` 与 `TranscriptEvent` 描述来源的具体修订，修订也计入分段变更。传输帧的编码与接纳由 protocol 负责，实体恢复依赖自己的持久材料。
+
+## 契约与版本记录
+
+- [详细契约](https://github.com/weiliang0121/capix/blob/main/docs/transcript.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/transcript/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

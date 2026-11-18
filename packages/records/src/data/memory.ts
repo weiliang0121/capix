@@ -31,6 +31,16 @@ export interface MemoryRecord extends BaseRecord<MemoryRecordValue> {
   readonly operationId?: string;
 }
 
+/** Check the projected item, collection and revision alongside its display body. */
+export function checkMemoryRecord(value: unknown): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid memory record');
+  const record = value as Partial<MemoryRecord>;
+  if (typeof record.memoryId !== 'string' || !record.memoryId.trim() || typeof record.memoriesId !== 'string' || !record.memoriesId.trim()) throw new Error('Invalid memory record item or collection identity');
+  if (typeof record.sequence !== 'number' || !Number.isSafeInteger(record.sequence) || record.sequence < 1) throw new Error('Invalid memory record sequence');
+  if (record.operationId !== undefined && (typeof record.operationId !== 'string' || !record.operationId.trim())) throw new Error('Invalid memory record operation identity');
+  validateMemoryRecordValue(record.value);
+}
+
 /** Accept only the declared display projection, never a complete domain value or the old DTO. */
 export function validateMemoryRecordValue(value: unknown): asserts value is MemoryRecordValue {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid memory record value');

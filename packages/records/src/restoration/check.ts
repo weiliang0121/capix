@@ -1,4 +1,6 @@
-import { hasOutput, validateInvocationRecordValue, validateMemoryRecordValue, type RecordEntry } from '../data/index.js';
+import { checkMemoryRecord } from '../data/memory.js';
+import { checkTranscriptRecord } from '../data/transcript.js';
+import { hasOutput, validateInvocationRecordValue, type RecordEntry } from '../data/index.js';
 import { isPlainObject } from 'es-toolkit/predicate';
 
 type Fields = Record<string, unknown>;
@@ -93,28 +95,14 @@ export function checkEntry(entry: RecordEntry): void {
       else if (data.interactionId !== undefined) fail();
       break;
     case 'transcript': {
-      text(data.transcriptId);
-      integer(data.revision, 1);
-      time(data.occurredAt);
-      const value = object(data.value);
-      integer(value.start);
-      integer(value.end);
-      if (value.action === 'append') {
-        if (value.end <= value.start) fail();
-      } else if (value.action === 'segment') {
-        integer(value.previousStart);
-        if (value.previousStart >= value.start || value.start >= value.end) fail();
-      } else fail();
+      object(data.value);
+      checkTranscriptRecord(data);
       checkContentSource(data);
       break;
     }
     case 'memory': {
-      text(data.memoryId);
-      text(data.memoriesId);
-      integer(data.sequence, 1);
-      optionalText(data.operationId);
+      checkMemoryRecord(data);
       checkContentSource(data);
-      validateMemoryRecordValue(data.value);
       break;
     }
     case 'custom':

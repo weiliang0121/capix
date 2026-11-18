@@ -33,7 +33,9 @@ CAPiX 是一个 Agent 框架，帮助你组合已有能力，构筑自己的智�
 npm install @weiliang0121/capix-resources @weiliang0121/capix-structure @weiliang0121/capix-runtime
 ```
 
-完整包职责见[架构与包](https://weiliang0121.github.io/capix/organization.html)。目前处于 **0.x** 阶段，文档跟随主分支，可能包含尚未发布的变更；便签助手教程使用仓库中的完整示例。使用 npm 包时，以所装版本的 README 和 CHANGELOG 为准。
+目前处于 **0.x** 阶段，18 个包在 npm 上独立发版。各包职责见[架构与包](docs/organization.md)。安装后可在包目录阅读 README 和随包提供的 CHANGELOG.md。早期 npm 包只附 README，可到[各包目录](packages/) 按包名、版本查阅 CHANGELOG。发布批次的包名、版本与源码见 [GitHub Releases](https://github.com/weiliang0121/capix/releases)。
+
+仓库文档描述当前源码。在线文档站显示最近一次手动部署的内容，发布时间可能与源码和 npm 版本不同。
 
 ## 参与贡献
 

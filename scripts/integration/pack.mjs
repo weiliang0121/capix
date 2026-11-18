@@ -66,6 +66,7 @@ export async function pack() {
         present.add(name);
         assert.ok(isDistributionFile(name), `${file}: unexpected file ${name}`);
       }
+      for (const name of ['README.md', 'CHANGELOG.md', 'LICENSE']) assert.ok(present.has(name), `${file}: missing ${name}`);
       for (const target of Object.values(packed.exports)) {
         for (const kind of ['import', 'types']) assert.ok(present.has(target[kind]?.replace(/^\.\//, '')), `${file}: missing ${kind} export`);
       }

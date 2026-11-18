@@ -30,7 +30,7 @@
     "es-toolkit": "1.52.0",
     "@weiliang0121/capix-resources": "workspace:*"
   },
-  "description": "Optional recording entities and resource contracts for CAPiX.",
+  "description": "Optional observation records, subtree snapshots, and snapshot validation for CAPiX.",
   "license": "MIT",
   "author": "wei.liang (https://github.com/weiliang0121)",
   "repository": {
@@ -47,7 +47,8 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public",

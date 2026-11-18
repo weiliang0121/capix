@@ -18,7 +18,7 @@
     "@weiliang0121/capix-transcript": "workspace:*",
     "@weiliang0121/capix-resources": "workspace:*"
   },
-  "description": "Message usage measurement and resource contracts for CAPiX.",
+  "description": "Message usage counts by object identity and controlled recording for CAPiX.",
   "license": "MIT",
   "author": "wei.liang (https://github.com/weiliang0121)",
   "repository": {
@@ -35,7 +35,8 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public",

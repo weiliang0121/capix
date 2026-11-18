@@ -1,22 +1,24 @@
 # @weiliang0121/capix-invocation
 
-Invocation lifecycle, child relations, reception, output, and checkpoint activity for CAPiX.
+Invocation 管理一次调用的资源窗口、子调用关系、接纳、检查点活动与最终交付。
 
-ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
+## 安装与入口
+
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
 
 ```sh
 npm install @weiliang0121/capix-invocation
 ```
 
-## Public entry points
+- `@weiliang0121/capix-invocation` 提供 `Invocation`、CallableContext、活动窗口及调用事件类型。
+- `@weiliang0121/capix-invocation/events` 提供 `InvocationEvent` 纯数据类型以及阶段、动作和关系状态词汇，可独立于活调用实现和 Node API 使用。
 
-- `@weiliang0121/capix-invocation`
-- `@weiliang0121/capix-invocation/events`
+## 用法
 
-This package is part of CAPiX. The npm distribution contains compiled JavaScript, type declarations, and this package's MIT license. Reference services and client applications are not included in this package or the initial npm release.
+[调用退出示例](https://github.com/weiliang0121/capix/blob/main/examples/invocation-exit.mjs) 组合 CallableContext、Invocation 与检查点存储，验证迟到的资源结果、关闭故障和最终交付。在仓库根目录构建后运行 `node examples/invocation-exit.mjs`。
 
-`/events` owns the pure `InvocationEvent` data contract and its process stage, action, and relation phase vocabulary. It imports no live invocation implementation or Node APIs. The root explicitly exports the same definitions. Shared callable kinds, failure facts and relation identity belong to `contracts`; transport framing belongs to its adapter.
+## 契约与版本记录
 
-## License
-
-MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
+- [调用退出与最终交付契约](https://github.com/weiliang0121/capix/blob/main/docs/invocation-exit-contract.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/invocation/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

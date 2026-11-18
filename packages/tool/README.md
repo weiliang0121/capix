@@ -1,10 +1,24 @@
 # @weiliang0121/capix-tool
 
-`Tool` 是组织原生模型工具调用的普通 Group 预设，与 Sequence、Dynamic 使用同一结构和调用机制。模型选择已登记的 Node / Group，成员使用自己的资源，结果回填同一个交换起点后继续请求模型。
+Tool 将登记的 Node 或 Group 作为模型可选择的工具，串行执行调用并将反馈写回同一个交换起点。
 
-ESM、TypeScript；Node.js ≥ 22.23.2。通过 `npm install @weiliang0121/capix-tool` 安装。
+## 安装与入口
 
-## 定义处理结构
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
+
+```sh
+npm install @weiliang0121/capix-tool
+```
+
+- `@weiliang0121/capix-tool` 提供 `Tool` 预设、模型资源端点、预算及恢复契约。
+
+下文的结构定义与资源登记示例还直接导入 Zod、结构、资源、运行时、交互和两个模型包。在使用这两个示例的项目中一并安装这些依赖。
+
+```sh
+npm install zod@4.6.5 @weiliang0121/capix-structure @weiliang0121/capix-resources @weiliang0121/capix-runtime @weiliang0121/capix-interaction @weiliang0121/capix-model-provider @weiliang0121/capix-model-exchanges
+```
+
+## 用法
 
 ```ts
 import { z } from 'zod';
@@ -61,9 +75,9 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 交换资源管理固定内容；模型资源使用该实体重建请求，经独立 Interaction 发送/等待。两次登记必须使用同一个实体。没有父输入 capture、专用 installer 或隐藏的按次供给对象。每次 Tool 调用创建独立起点，多个调用可共享实体而不混用交换顺序；共享实体的存量上限仍共同计费。
 
-输入 `{ request }` 保留初始消息、toolChoice、maxTokens、responseFormat、temperature、stream；不能替换 `tools` 或 `exchanges`。每次模型子调用仅接收 `{ origin, exchanges }` 引用，发送资源才展开累计请求。`stream` 可供 Provider 读取 SSE，但本预设只交付最终正文，不转交候选模型正文。`stages` 提供内部模型与工具的结构 ID，供宿主按真实观测事件投影进度。
+输入 `{ request }` 保留初始消息、toolChoice、maxTokens、responseFormat、temperature、stream；不能替换 `tools` 或 `exchanges`。每次模型子调用接收固定的 `{ origin, exchanges }` 前缀；启用 `requestContext` 且宿主选出字符串时，子输入还包含本次的 `context` 文本，发送资源才展开累计请求。`stream` 可供 Provider 读取 SSE，但本预设只交付最终正文，不转交候选模型正文。`stages` 提供内部模型与工具的结构 ID，供宿主按真实观测事件投影进度。
 
-离线例子：`pnpm build && node examples/tool.mjs`，输出 `你好`。完整代码见 [examples/tool.mjs](../../examples/tool.mjs)。
+离线例子：`pnpm build && node examples/tool.mjs`，输出 `你好`。完整代码见 [examples/tool.mjs](https://github.com/weiliang0121/capix/blob/main/examples/tool.mjs)。
 
 ## 预算与等待
 
@@ -107,9 +121,9 @@ Tool 先验证每个未执行调用的精确小反馈同时满足成员与全局
 
 `imageContext: { retainLatestToolImages: 1 }` 显式保留每次请求中最新的一张工具图片；支持非负安全整数（`0` 省略全部），省略配置时完整保留。选择按交换、工具调用和内容顺序确定，不按反馈到达时间。配置在构造时固定，写入目录摘要和 ModelExchanges 起点；冷恢复中更改窗口会拒绝，不重发。
 
-被省略的工具图片替为带交换 ID、调用 ID、contentIndex 的文字占位，原有文字及工具调用闭合保持，用户初始参考图继续保留。完整原图仍在交换实体中，业务可以显式读取；框架不自动重读、删除历史或压缩。见 [ModelExchanges](../model-exchanges/README.md)。
+被省略的工具图片替为带交换 ID、调用 ID、contentIndex 的文字占位，原有文字及工具调用闭合保持，用户初始参考图继续保留。完整原图仍在交换实体中，业务可以显式读取；框架不自动重读、删除历史或压缩。见 [ModelExchanges](https://github.com/weiliang0121/capix/blob/main/packages/model-exchanges/README.md)。
 
-图片反馈须显式提高默认 4 KiB 的 `maxFeedbackBytes`，并为成员输出、完整交换集合和请求设置相称预算。可为小文本工具分别声明更小的 `tools[name].maxFeedbackBytes`，使同批小工具按自己的可信上限预留，而图片工具保留较大的全局上限；窗口减少历史图片积累，不保证单张大图或多个待执行工具一定能满足请求限制，文字历史仍然累计。
+图片反馈按含 `toolCallId`、状态和 base64 图片内容的完整 JSON UTF-8 字节数计量。能装入默认 4 KiB 上限的小图可直接接纳；较大反馈需要显式提高 `maxFeedbackBytes`，并为成员输出、闭合交换、集合及请求配置足够容量。可为小文本工具分别声明更小的 `tools[name].maxFeedbackBytes`，使同批小工具按自己的可信上限预留，而图片工具保留较大的全局上限；窗口减少历史图片积累，不保证单张大图或多个待执行工具一定能满足请求限制，文字历史仍然累计。
 
 ## 每次请求的宿主材料
 
@@ -146,10 +160,14 @@ CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完�
 
 `pnpm --filter @weiliang0121/capix-tool test` 独立构建依赖并运行本包测试，覆盖普通/CP 调用、错误分流、预算、取消、共享实体、多步推进、类型负例，以及新 Runner/Store 的恢复和缺失依据拒绝。夹具只使用公开包，验证不依赖外部服务或应用测试。
 
-MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
-
 ## 大请求与恢复预算
 
 扩大累计请求只放宽模型请求方向，不能绕过 Tool 初始输入、单份交换实体和检查点各自的容量。检查点逻辑图仍为 8 MiB，当前 Tool 输入即使未启用 CP 也执行相同输入编码验证；本轮不承诺超大初始输入的可恢复执行。
 
-大于默认 16 Mi UTF-16 文本单位的 Interaction 请求，需要在宿主 `Interactions.register(..., { limits })` 显式配置，并将同一份数据预算传入 `ToolModelSource.recovery.interactionLimits`。Tool 资源 capture 固定 recovery 读函数及限制副本；冷恢复按相同预算重新认证已持久化请求与回复，缺失或改变材料仍拒绝，不重发。字节预算、UTF-16 单位、token 窗口、实体总量以及进程内存不是同一个量。
+大于默认 16 Mi UTF-16 文本单位的 Interaction 请求，需要在宿主 `Interactions.register(..., { limits })` 显式配置。需要冷恢复时，宿主也应在 `ToolModelSource.recovery.interactionLimits` 配置可容纳原材料的预算；可以复用登记配置。Tool 资源 capture 固定 recovery 读函数及限制副本；冷恢复按该预算重新认证已持久化请求与回复，缺失或改变材料仍拒绝，不重发。字节预算、UTF-16 单位、token 窗口、实体总量以及进程内存不是同一个量。
+
+## 契约与版本记录
+
+- [原生工具调用契约](https://github.com/weiliang0121/capix/blob/main/docs/native-tool-integration.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/tool/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

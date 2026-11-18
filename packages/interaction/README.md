@@ -1,34 +1,44 @@
 # @weiliang0121/capix-interaction
 
-Independent external interactions, persisted feedback, and bounded progress streams for CAPiX.
+Interaction 固定一次独立发送的请求与反馈，支持持久化、局部等待和可选的有界过程流。
 
-ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
+## 安装与入口
+
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
 
 ```sh
 npm install @weiliang0121/capix-interaction
 ```
 
-## Public entry points
+- `@weiliang0121/capix-interaction` 提供 `Interaction` 实体、Interactions 登记、持久化与过程反馈契约。
 
-- `@weiliang0121/capix-interaction`
+## 用法
 
-This package is part of CAPiX. The npm distribution contains compiled JavaScript, type declarations, and this package's MIT license. Reference services and client applications are not included in this package or the initial npm release.
+```js
+import { Interactions } from '@weiliang0121/capix-interaction';
 
-## Data limits and restoration
+const contract = { key: 'example.echo.v1', request: String, reply: String };
+const interactions = new Interactions().register(contract, { send: (request) => request });
+const channel = interactions.bind(contract);
+const reference = channel.start('你好');
+const result = await channel.wait(reference, { waitMs: 1000 });
+if (result.kind === 'received') console.log(result.feedback.payload);
+```
 
-`InteractionOptions.limits` and `InteractionRegistration.limits` accept `InteractionDataLimits`:
+等待到期返回 `wait-expired`。signal 中止时，等待的 Promise 以 `signal.reason` 拒绝。两种情况下发送者仍可保存反馈。宿主可用 `await interactions.settled()` 等待已启动的发送收尾。
 
-- `requestTextUnits` bounds each request before and after the request contract runs.
-- `replyTextUnits` bounds each feedback payload before and after the reply contract runs.
+## 数据预算与恢复
 
-Each defaults to `DEFAULT_INTERACTION_TEXT_UNITS` (`16 * 1024 * 1024`). Values must be positive safe integers no greater than `MAX_INTERACTION_TEXT_UNITS` (`64 * 1024 * 1024`). A text unit is one UTF-16 code unit, measured by JavaScript `string.length`; string values and object keys both count. These are not UTF-8 byte or model token limits. The two payload budgets are independent: increasing request capacity leaves reply capacity unchanged. For example, `{ limits: { requestTextUnits: MAX_INTERACTION_TEXT_UNITS } }` admits an assembled request containing 48 Mi text units, including its keys.
+`InteractionOptions.limits` 和 `InteractionRegistration.limits` 独立设置 `requestTextUnits`、`replyTextUnits`。契约转换前后分别检查对应正文。每项默认 `DEFAULT_INTERACTION_TEXT_UNITS`（16 × 1024²），可设为不超过 `MAX_INTERACTION_TEXT_UNITS`（64 × 1024²）的正安全整数。文本按 JavaScript `string.length` 计 UTF-16 代码单元，包含字符串值和对象键。请求与反馈分别计费，因此各含 9 Mi 代码单元的请求与反馈可使用默认预算恢复。
 
-Limits are copied and fixed when an interaction is constructed or a contract is registered. `Interaction.restore(state, { contract, limits })` must receive the same limits as the original construction. Registration persistence reads automatically reuse the registration's fixed limits. Saved requests and feedback are captured again and must remain equivalent after their contracts run. Restoration writes no data and reconstructs no sender; restored interactions cannot resend.
+构造或登记时复制并固定预算。状态不保存原预算。`Interaction.restore(state, { contract, limits })` 按宿主此次提供的预算（省略时取默认值）重新捕获，并核对契约转换后与原材料等价。按登记引用读取时复用该登记固定的预算。恢复只生成只读实体，不写入或重发请求。
 
-Request, feedback payload, state metadata, feedback metadata and failure diagnostics are captured in separate domains. Metadata and failure diagnostics retain the default text bound. Each domain retains the structural limits of depth 64 and 100,000 visited values, regardless of the configured text bound. Consequently a request and reply of 9 Mi text units each can both be read after persistence; restoration does not charge their combined size against one payload limit.
+请求、反馈正文、状态元数据、反馈元数据及失败诊断分别捕获。各域限深度 64、最多访问 100,000 个值；元数据与诊断使用默认文本预算。只接纳被动 JSON 形状的数据，拒绝 Proxy、getter、不可枚举属性、Symbol 属性、稀疏数组、循环及不支持的对象。状态与反馈外壳拒绝额外字段，反馈要求准确的 `id` 与 `payload`。
 
-Only passive JSON-shaped data is accepted. Proxies, getters, non-enumerable or symbol properties, sparse arrays, cycles and unsupported objects are rejected before contracts inspect payloads. State and feedback wrappers also reject extra fields; feedback requires exactly `id` and `payload`. Rejected feedback and restoration leave saved data unchanged and never retry a send.
+直接调用 `receive` 时，反馈校验失败会抛错，保留原已提交状态。`start` 的发送者抛错或返回未通过校验的反馈时，若尚无已接纳反馈，会尝试提交失败诊断；成功提交后读取结果为 `unavailable`。提交本身失败时报告持久化故障，保留最后已确认版本。
 
-## License
+## 契约与版本记录
 
-MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
+- [交互、等待与恢复契约](https://github.com/weiliang0121/capix/blob/main/docs/interactions.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/interaction/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

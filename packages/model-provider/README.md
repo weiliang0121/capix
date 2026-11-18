@@ -1,6 +1,18 @@
-# 模型 Provider
+# @weiliang0121/capix-model-provider
 
-`@weiliang0121/capix-model-provider` 提供 Chat Completions 文本与固定图片输入、原生函数调用、可选 SSE，以及唯一的 `ModelReply` 纯值契约。可以从 `.mjs` 使用，不依赖 Runtime、资源、Interaction 或服务。Provider 负责通信和协议接纳；工具选择、参数业务校验、执行、接纳与恢复由调用方组织。
+本包通过 Chat Completions 发送文本、固定图片和原生函数调用请求，将普通响应与 SSE 响应接纳为同一份 ModelReply。
+
+## 安装与入口
+
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
+
+```sh
+npm install @weiliang0121/capix-model-provider
+```
+
+- `@weiliang0121/capix-model-provider` 提供 `ChatCompletionsProvider`、请求与回复校验、工具协议及传输错误类型。
+
+## 用法
 
 ```js
 import { ChatCompletionsProvider, modelReplyText } from '@weiliang0121/capix-model-provider';
@@ -8,7 +20,7 @@ import { ChatCompletionsProvider, modelReplyText } from '@weiliang0121/capix-mod
 const model = new ChatCompletionsProvider({
   endpoint: 'https://api.deepseek.com/chat/completions',
   apiKey: process.env.DEEPSEEK_API_KEY,
-  model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+  model: process.env.DEEPSEEK_MODEL,
   thinking: 'disabled',
 });
 const reply = await model.complete({
@@ -19,7 +31,7 @@ if (reply.termination.reason !== 'stop') throw new Error('模型未正常完成'
 console.log(modelReplyText(reply));
 ```
 
-通过 `npm install @weiliang0121/capix-model-provider` 安装后可直接运行；仅在本仓库从源码使用时需要先执行 `pnpm build`。配置由宿主传入，包不读取环境文件。只有显式执行真实请求才会访问模型。
+运行示例前设置 `DEEPSEEK_API_KEY` 和账户可用的模型名 `DEEPSEEK_MODEL`。执行 `complete` 时会访问模型服务。
 
 ## 唯一回复材料
 
@@ -149,4 +161,10 @@ JSON 与 SSE 共用 `ModelUsage`：`promptTokens / completionTokens / totalToken
 - `ProviderError` 含 code/message/可选 HTTP status；请求预算错误另含上述数值诊断，不保存上游正文、请求、headers、密钥或底层错误。宿主可注入 fetch；实现必须遵守 Fetch 取消与重定向语义。
 - `thinking` 是宿主显式配置的 DeepSeek 扩展。当前实现 Chat Completions 函数调用、文本与固定图片输入；不承诺 Responses、Anthropic 原生协议、MCP、音视频或 strict beta。正式 Transcript 的消息角色不因此扩展。
 
-当前架构与限制见[原生工具调用](../../docs/native-tool-integration.md)。完整协议参考 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) 与 [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
+完整协议参考 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) 与 [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
+
+## 契约与版本记录
+
+- [原生工具调用契约](https://github.com/weiliang0121/capix/blob/main/docs/native-tool-integration.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/model-provider/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

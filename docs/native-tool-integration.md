@@ -14,7 +14,7 @@ CAPiX 使用三个独立包组合工具调用：Provider 负责模型协议，Mo
 
 ```text
 Tool Group → 模型子调用 → ToolModelResource
-                            ↓ 展开 { origin, exchanges }
+                            ↓ 展开交换前缀及可选宿主文本
                        独立 Interaction → Provider
                             ↓ 完整回复
                    ModelExchanges.intake
@@ -34,13 +34,13 @@ Provider 的 ModelReply v1 保存 id、model、有序 output、termination、usa
 
 `stop` 和 `tool_calls` 是 completed，content_filter 是 refused；其他及未知终止原因保留原文并归 incomplete。协议完成不等于工具业务成功。`modelReplyText` 拒绝含工具调用的回复，也不替代非空正文、结束状态等业务检查。
 
-`ToolResult` 为 `{status:'ok'|'error',content:[{kind:'text',text}]}`；ToolFeedback 另含 toolCallId。Provider 要求每个模型调用都有准确、完整反馈，按原模型调用顺序编码关联。不能用措辞暗示错误，也不把工具结果提升为 system 指令。提示策略、结果可信度和资源授权由宿主决定。
+`ToolResult` 为 `{status:'ok'|'error',content:readonly ModelInputContent[]}`，content 接受 1–32 个文本或固定图片块；ToolFeedback 另含 toolCallId。Provider 要求每个模型调用都有准确、完整反馈，按原模型调用顺序编码关联。不能用措辞暗示错误，也不把工具结果提升为 system 指令。提示策略、结果可信度和资源授权由宿主决定。
 
 公开 requireModelRequest / requireModelReply / requireToolResult / requireToolFeedback / requireModelExchange 在接纳边界完整核验，返回原对象、不冻结或缓存对可变对象的信任；Provider 生成的回复已深冻结。未知字段／版本、重复调用 ID、不完整反馈、getter、Proxy、循环和非 JSON 值拒绝，错误不含传入正文。
 
 ## 工具登记与业务失败
 
-`new Tool({tools,policyVersion})` 中每个键同时是模型名称与结构成员选择名。登记包含 node、description、input Schema 和 result.succeeded，可选 result.failed、maxOutputBytes。构造固定配置，一棵树内成员实例唯一；不需要额外工厂、重复 add 或专用 installer。
+`new Tool({tools,policyVersion})` 中每个键同时是模型名称与结构成员选择名。登记包含 node、description、input Schema 和 result.succeeded，可选 `result.failed`、`maxOutputBytes` 和 `maxFeedbackBytes`。构造固定配置，一棵树内成员实例唯一；不需要额外工厂、重复 add 或专用 installer。
 
 Schema 只校验，不填默认值、不转换或剔除字段。非法 JSON、未知名称和 Schema 不匹配产生明确错误反馈，不创建工具子调用；Schema 自身故障或改变参数的解析结果终止推进。目录和成员同源，避免模型可见目录与真实可调用成员分叉。
 
@@ -50,9 +50,9 @@ policyVersion 覆盖 Schema 之外的细化和映射语义。目录摘要还包�
 
 ## 固定起点与交换实体
 
-ModelExchanges 的起点保存初始消息、请求选项和模型可见目录。每次 Tool 调用创建独立起点，可共享同一实体；普通资源直接登记实体，不要求父输入 capture。目录不包含 Node、回调、执行映射或端点。origin 引用是内容身份，不能自行授权重发或扩大资源范围。
+ModelExchanges 的起点保存初始消息、请求选项、工具定义、目录摘要、策略版本及可选图片策略。只有工具定义作为目录发送给模型，图片策略用于投影历史反馈。每次 Tool 调用创建独立起点，可共享同一实体；普通资源直接登记实体，不要求父输入 capture。目录不包含 Node、回调、执行映射或端点。origin 引用是内容身份，不能自行授权重发或扩大资源范围。
 
-模型子输入仅传 `{origin,exchanges}` 引用；ToolModelResource 在发送边界重建完整请求。`closed` 核对引用归属于同一起点且为顺序前缀、反馈完整；`request` 再检查协议续接资格与整体请求限额。查询旧前缀不等于取得执行恢复许可，模型发送历史与调用关系仍须准确核验。
+模型子输入包含 `{origin,exchanges}` 引用；启用 requestContext 且宿主选出字符串时还包含固定的 `context` 文本；ToolModelResource 在发送边界重建完整请求。`closed` 核对引用归属于同一起点且为顺序前缀、反馈完整；`request` 再检查协议续接资格与整体请求限额。查询旧前缀不等于取得执行恢复许可，模型发送历史与调用关系仍须准确核验。
 
 `requestContext: { maxBytes }` 可在固定初始消息之后、原生交换之前传递一条可替换的 user-role 数据消息。完整标签明确它是低优先级宿主参考数据，不是新的用户指令、授权或模型回复；不伪造 assistant、reasoning、prefix 或工具交换。容量按含标签与消息封套的完整 JSON UTF-8 字节计量，工具执行前还预留下一片段上限；固定起点与真实原生续接材料不变。选材、预算与冷恢复规则见 [Tool 每次请求的宿主材料](../packages/tool/README.md#每次请求的宿主材料)。
 
@@ -66,7 +66,7 @@ ModelExchanges 的起点保存初始消息、请求选项和模型可见目录�
 
 工具串行执行，登记 1–32 个成员；maxModelCalls 默认 1000，接受正安全整数，作为异常循环的兜底，也可由作者显式设置。它统计单次 Tool 调用中的模型请求，包含最终回答，显式恢复不重置；耗尽时抛出带 calls/limit 的 ToolModelCallLimitError，不再启动下一次模型调用，已有工具效果保留。次数属于固定目录配置，改变它会拒绝原 CP。waitMs 默认 30000。
 
-调用次数与 token、上下文及数据容量分别管理。Tool 默认单回复 64 KiB、包含 callId 的反馈 4 KiB、展开请求 2 MiB、集合 8 MiB；成员可另限输出。工具派发前保守预留反馈与下一请求，避免已经产生效果后才发现明显无法反馈。提高次数不会扩大这些容量，也不自动压缩历史；实际检查位置与配置见 [预算表](../packages/tool/README.md#预算与等待)。
+调用次数与 token、上下文及数据容量分别管理。Tool 默认单回复 64 KiB、包含 toolCallId 的完整反馈 4 KiB（图片按含 base64 的实际 JSON UTF-8 字节计量）、展开请求 2 MiB、集合 8 MiB；成员可另限输出。工具派发前保守预留反馈与下一请求，避免已经产生效果后才发现明显无法反馈。提高次数不会扩大这些容量，也不自动压缩历史；实际检查位置与配置见 [预算表](../packages/tool/README.md#预算与等待)。
 
 maxWireRequestBytes 显式设置时要求同步 inspection，可用 Provider.inspectRequest；预检不发请求、不返回正文或密钥、不预留额度。修改输入后发送仍重新核验。集合、预设和 Provider 各有独立上限；共享调用不形成跨实体预留事务。
 
@@ -91,7 +91,7 @@ checkpoint:true 声明 Tool 与内部模型节点恢复点，要求每个工具�
 | tools         | 当前交换、游标、派发前保存的准确工具引用、成员 CP 或固定交付 | 不猜效果、不重做失败子调用 |
 | completed     | 最终回复、完整接纳与原交互依据                               | 不再次执行模型或工具       |
 
-Tool 与内部 completion 的 CP 契约现为 v3；v2 及更早版本明确拒绝，不改写旧请求或持久数据，升级后使用新调用。恢复重新核对输入、目录、交换前缀、原模型回复、工具返回／接纳及效果凭据。父层已接纳后仍确认原模型交互；目录变化、未知反馈、缺首份子 CP、失败终态或不准确来源明确拒绝。外部工具自身效果是否可确认仍由其资源契约保证。
+Tool 的 CP 契约为 v5，内部 completion 为 v3；恢复要求相应契约版本准确匹配，不改写旧请求或持久数据，升级后使用新调用。恢复重新核对输入、目录、交换前缀、原模型回复、工具返回／接纳及效果凭据。父层已接纳后仍确认原模型交互；目录变化、未知反馈、缺首份子 CP、失败终态或不准确来源明确拒绝。外部工具自身效果是否可确认仍由其资源契约保证。
 
 ToolModelPending 携带原交互引用。局部等待到期或调用取消不取消／重发原发送，失败调用也不因引用仍在就变成可恢复。宿主关闭先停止本地入口，再等待自己的独立发送 settled；不能提前关闭反馈存储。过程流只作临时反馈，不能用其 sealed 或游标代替最终持久回复。见 [交互](interactions.md) 与 [Checkpoint](checkpoints.md)。
 

@@ -12,7 +12,7 @@ export const banner = '/*! MIT License | Copyright (c) 2026 wei.liang | See LICE
 /** The same production-only allowlist applies to public and private tarballs. */
 export function isDistributionFile(path) {
   if (typeof path !== 'string' || path.includes('\\') || path.split('/').some((part) => !part || part === '.' || part === '..')) return false;
-  if (['package.json', 'LICENSE', 'README.md'].includes(path)) return true;
+  if (['package.json', 'LICENSE', 'README.md', 'CHANGELOG.md'].includes(path)) return true;
   if (!/^dist\/.+\.(?:js|d\.ts)$/.test(path)) return false;
   const parts = path.slice('dist/'.length).split('/');
   if (parts.some((part) => /^(?:__tests__|tests?|fixtures?|benchmarks?)(?:\.(?:js|d\.ts))?$/.test(part))) return false;
@@ -40,7 +40,7 @@ export async function packages(workspaceRoot = root) {
     assert.equal(await readFile(join(path, 'LICENSE'), 'utf8'), license, `${manifest.name}: inconsistent license`);
     assert.equal(manifest.publishConfig?.registry, registry);
     assert.equal(manifest.publishConfig?.access, 'public');
-    assert.deepEqual(manifest.files, ['dist/**/*.js', 'dist/**/*.d.ts', 'LICENSE', 'README.md']);
+    assert.deepEqual(manifest.files, ['dist/**/*.js', 'dist/**/*.d.ts', 'LICENSE', 'README.md', 'CHANGELOG.md']);
     for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
       for (const [name, version] of Object.entries(manifest[field] ?? {})) {
         if (version.startsWith('workspace:')) assert.ok(byName.has(name), `${manifest.name}: unpublished dependency ${name}`);

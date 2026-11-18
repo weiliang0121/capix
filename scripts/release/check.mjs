@@ -33,7 +33,9 @@ export async function check() {
       assert.equal(packed.private, false);
       assert.equal(packed.license, 'MIT');
       assert.equal(await readFile(join(directory, 'LICENSE'), 'utf8'), await readFile(join(root, 'LICENSE'), 'utf8'));
-      await readFile(join(directory, 'README.md'), 'utf8');
+      for (const name of ['README.md', 'CHANGELOG.md']) {
+        assert.equal(await readFile(join(directory, name), 'utf8'), await readFile(join(entry.path, name), 'utf8'), `${packed.name}: packed ${name} differs from source`);
+      }
       const present = new Set();
       for (const file of await files(directory)) {
         const path = relative(directory, file).split('\\').join('/');

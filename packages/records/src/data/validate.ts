@@ -1,4 +1,5 @@
-import { validateMemoryRecordValue } from './memory.js';
+import { checkTranscriptRecord } from './transcript.js';
+import { checkMemoryRecord } from './memory.js';
 import { validateRecordingArchiveOrigin } from './archive.js';
 import { hasOutput, outputProcess, readOutput } from './invocation.js';
 import type { ExecutionRecordSnapshot, CallableRecord, LegacyExecutionRecordSnapshot, OperationRecord, InvocationValue, RelationChangeRecord, InvocationBoundaryRecord } from './types.js';
@@ -115,10 +116,11 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
       interactions.delete(resource.interactionId);
     } else fail();
   }
-  for (const memory of snapshot.memories) validateMemoryRecordValue(memory?.value);
+  for (const transcript of snapshot.transcripts) checkTranscriptRecord(transcript);
+  for (const memory of snapshot.memories) checkMemoryRecord(memory);
   for (const content of [...snapshot.transcripts, ...snapshot.memories]) {
     const call = content.callId ? records.get(content.callId) : undefined;
-    if (!content || typeof content.id !== 'string' || !content.id || seen.has(content.id) || !call || content.parentId !== call.id || content.contextId !== call.contextId || !Object.hasOwn(content, 'value')) fail();
+    if (!content || typeof content.id !== 'string' || !content.id.trim() || (content.executionId !== undefined && (typeof content.executionId !== 'string' || !content.executionId.trim())) || seen.has(content.id) || !call || content.parentId !== call.id || content.contextId !== call.contextId || !Object.hasOwn(content, 'value')) fail();
     seen.add(content.id);
   }
 }
