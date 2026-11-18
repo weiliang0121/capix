@@ -81,6 +81,6 @@ pnpm docs:build
 
 修改需要发布的行为、公开契约或分发物时运行 `pnpm changeset`，选择实际修改的公开包和 bump 类型，说明用户可观察到的变化。18 个公开包各自独立发版，不使用 fixed 或 linked 版本组；Changesets 按实际变更与必要依赖更新生成本次版本计划，不要求所有包共同升号。各包 CHANGELOG 维护依赖兼容性、破坏性契约变化与迁移要求；package.json 和打包后的准确依赖版本仍须与这些说明一致。文档站、示例和外部装配不属于公开包发布清单。仅贡献说明、历史材料或不影响发布产物的仓库整理通常无需 changeset，PR 中说明判断即可。
 
-GitHub 只执行 CI 与版本 PR。版本 PR 更新版本、CHANGELOG 与锁文件，不自动发布 npm。贡献任务不包含推送、部署或发布；维护者在审阅和产物验收后明确执行本地发布。详见 [npm 发布](docs/npm-publishing.md)。
+版本 PR 合入 main 后，Publish release 在准确提交上准备本批产物。维护者在 GitHub 的 npm Environment 明确批准上传，registry 核验完成后创建批次 tag 和 GitHub Release。见 [npm 发布](docs/npm-publishing.md)。
 
 版本 PR 由内置 `GITHUB_TOKEN` 创建或更新时，其 CI 可能需要维护者在 GitHub 使用 **Approve workflows to run** 批准。核对准确分支与最新提交，检查通过后再合并。版本 PR 只更新版本、CHANGELOG 与锁文件；npm 发布需要独立明确授权，Pages 也仅手动部署。

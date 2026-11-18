@@ -26,46 +26,31 @@ pnpm release:check
 
 `release:build` 为公开包清理并重建发布产物，移除内部注释并压缩 JavaScript；不进行跨包 bundle，不混合依赖实体身份。`release:check` 构建并检查实际 tarball，验证包白名单、入口、内部依赖和仓库外消费者安装。原始 `.ts`、实现 source map、声明 map、测试、服务和内部文档不应进入 tarball。公开 `.d.ts` 本身会暴露必要类型结构。
 
-`release:publish` 先要求干净工作区及已处理完的 changesets，再执行同样的产物验收。随后用 Changesets 3 的 `publish-plan` 查询官方 registry，取得尚未发布版本和依赖顺序，将计划严格匹配到已验收包的名称、版本与 tarball。上传器按依赖顺序逐包重新核对 SHA-256，然后直接执行 `npm publish <tarball> --auth-type=web` 并继承终端，支持浏览器二次认证；不经过 Changesets 的非交互发布探测。上传阶段不重新打包、不执行生命周期脚本；首次失败立即停止，不自动重试未知结果。`.capix/release/verified.json` 记录本次验收包及其摘要，属于本地验证产物，不进入 npm 包。
+## GitHub 版本 PR 与正式发布
 
-检查或打包不会发布 npm。发布前审阅实际打包列表，确认未包含密钥、私有路径或不应公开的文本。
+Changesets 根据实际变更创建 `changeset-release/main` 版本 PR。维护者审阅各包版本、CHANGELOG、内部依赖和锁文件，确认 CI 通过后 squash 合并。GitHub Actions 创建版本 PR 所需的权限是 `contents: write` 与 `pull-requests: write`。机器人创建或更新版本 PR 后，维护者按需要批准该 PR 的 CI。
 
-## 本地发布
+[Publish release](https://github.com/weiliang0121/capix/actions/workflows/publish.yml) 在 main push 时读取该提交关联的 PR。只有来自本仓版本分支、以该 SHA 合入 main 的版本 PR 才进入准备。手动运行时选择 main 并输入版本 PR 编号，所选 main 的 SHA 必须仍是该合并提交。原运行保留其触发 SHA，main 继续前进也能在原运行中完成批准和交付。
 
-发布由维护者在本地终端完成。GitHub 只保留 CI 与自动版本 PR，不需要配置 npm GitHub token、trusted publisher 或发布 Environment。
+1. **准备。** GitHub-hosted runner 在合并 SHA 依次执行 `pnpm check`、`pnpm release:check`、`pnpm integration:check`。从该提交和第一父提交找出升号包，从发布验收目录读取这批包的 tarball，核对 SHA-256 后计算 npm 使用的 SHA-512 integrity。产物包括本批 tarball、`release-manifest.json` 和按包摘取的 `release-notes.md`。在 Actions 的 prepare 摘要和 artifact 中审阅这些内容。
+2. **批准上传。** 在该运行的 **Review deployments** 中批准 `npm` Environment。publish job 凭 OIDC 使用固定的 npm CLI 11.11.1，按依赖顺序上传原 tarball，并请求 npm provenance。已有同版本须匹配原摘要。上传时检查 `latest`，拒绝将它移回旧版本。批准范围为整个批次。
+3. **核验并公告。** 逐个核对 npm 中本批准确版本的 `dist.integrity` 后，建立指向该 SHA 的 tag `release/pr-<编号>`。一批对应一条 GitHub Release，正文包含各包准确版本、npm 链接和 CHANGELOG，附件为经过核对的批次清单。同名 tag 或 Release 存在时核验其内容，遇冲突停止。
 
-原 17 包从 `0.1.0` 开始发布；[版本 PR #1](https://github.com/weiliang0121/capix/pull/1) 将包含 Tool 的 18 包版本统一为 `0.2.0`。该版本包含 ModelExchanges 固定起点、新 Tool、类型化领域事实、独立 Memory、领域／协议出口归位及 View 来源适配；其中有破坏性公开契约修订，消费方应阅读各包 CHANGELOG，不能只替换版本号。
+### npm 与 GitHub 一次性设置
 
-版本 PR 与 npm registry 是两份不同的状态。确认包已发布时，查询 registry 中的准确版本，例如 `npm view @weiliang0121/capix-tool@0.2.0 version --registry=https://registry.npmjs.org`，不以 Git 中的版本号作为上传成功的依据。
+- 在 GitHub 仓库的 **Settings → Environments → npm** 登记维护者为 required reviewer，部署分支限定为 `main`。单维护者仓库需要允许维护者批准自己触发的部署。设置完成后，版本 PR 合并负责准备，环境批准负责授权写入 npm。
+- 包维护者在 npm 上为每个待发布的公开包配置 GitHub Actions **Trusted Publisher**。Organization or user 选 `weiliang0121`，Repository 为 `capix`，Workflow filename 为 `publish.yml`，Environment 为 `npm`，授权该 workflow 直接 publish。包可在各自下次发布前完成配置。现有 18 包已在 registry 注册；新增包需先确认包名、归属及 npm 对首次发布的要求。详见 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)。
+- 普通 CI 与准备阶段只读取仓库。上传 job 使用 `id-token: write`，公告 job 使用 `contents: write`，Actions 工作流固定到完整提交 SHA。本流程使用 GitHub-hosted runner，公开包的 provenance 关联到此次工作流和发布提交。
 
-1. 使用持有 `@weiliang0121` scope 的 npm 账户，确认本次计划中的准确包名、版本及其发布权限。本地验证不能证明远端名称占用或发布权限。
-2. 确认待发布版本 PR 已按下节流程审阅并合并；如手动准备版本，则执行 `pnpm release:version`，审阅并提交版本、CHANGELOG 与锁文件。已经合并的版本不重复升号。在干净的已审阅提交上核对本次准确包名、版本和依赖兼容说明，并完成完整清单验证。不要重发 registry 中已有的准确版本；`release:publish` 会拒绝尚未处理的 changesets。
-3. 在自己的终端执行 `npm login --registry=https://registry.npmjs.org`，按 npm 要求完成浏览器登录和 2FA。不要把登录信息、OTP 或 token 写入仓库或聊天；发布时按终端提示完成认证。
-4. 执行 `pnpm release:publish`，上传当前尚未存在的版本。此命令会写入 npm，只有决定正式发布时才执行。
+### 中途失败与重跑
 
-多包发布不是原子事务。失败后先核对 registry 中每个准确版本，再从同一已审阅提交补齐未发布包。npm 可能先确认受理，再延迟开放公开查询；已收到成功回执时应等待生效，不能因短暂 404 认定未上传并立即补发。npm 每个准确版本只能发布一次；脚本只上传尚未发布且通过本次产物验收的版本。当前流程不创建或推送版本 tag，也不创建 GitHub Release。
+首次写入前还须检查实际 tarball 声明的批外内部依赖，确保这些准确版本已可从 registry 安装。多包发布可能部分成功。按原 run 下载清单，先查询每个准确版本与摘要。例如 `npm view @weiliang0121/capix-tool@0.11.0 dist.integrity --registry=https://registry.npmjs.org`。提交结果未知或刚获受理时先等 registry 可见。若仍不能确定是否已提交，保留原产物并与 npm 核实。确认缺项后使用 **Re-run failed jobs**，沿用已通过 prepare 的 artifact。检查完整性冲突、tag 错指或发布正文冲突时，应先调查现有状态。
 
-登录成功不等于完成发布认证。发布时需保持交互终端，并在 npm 打开的网页完成验证；网页若提供短期免重复验证选项，可按需启用。Changesets 3.0.3 仅把 `EOTP` 识别为交互重试条件，非交互请求返回 `E403` 时不会进入浏览器流程；因此本仓库只用它生成发布计划，上传直接交给 npm。不要把验证码或 token 传入聊天或写进仓库。
+仅公告失败时重跑失败 job，已提交的 npm 包保持原状。准备产物的保留期为 90 天（受仓库保留策略约束），维护者可在发布前下载保存；原 run 的失败 job 须在 GitHub 允许的重跑窗口（创建后 30 天）内恢复。重跑全部 job 会再次准备并与已有同名 artifact 冲突。超过重跑窗口或丢失原产物时，应由维护者核实 registry 与原批次后单独处置。已有包在新的 workspace 里重打可能改变精确内部依赖，不能用同版本重打 tarball 代替。
 
-## GitHub 设置与后续发布
+### 首次源码对齐
 
-- 在仓库 Actions 设置中允许 GitHub Actions 创建 PR。`version.yml` 使用仓库内置的 `GITHUB_TOKEN`，只授予 `contents: write` 和 `pull-requests: write`，无需长期 PAT。
-- CI 对 main 的 push、PR 及手动运行执行全仓检查和发布包验证，不具有发布权限。Actions 以完整提交 SHA 固定版本；升级需单独审阅。
-- 修改需要发布的行为或公开契约后，作者运行 `pnpm changeset`，选择实际修改的包和 bump 类型，说明用户可观察到的变化。Changeset 随代码合并到 main 后，`Version packages` 自动创建或更新版本 PR，执行 `pnpm release:version`，更新版本、CHANGELOG 与锁文件。当前使用 `changesets/action/version` v2.1.2 配合 CLI v3.0.3。
-- 内置 `GITHUB_TOKEN` 创建或更新版本 PR 时，`opened`、`synchronize`、`reopened` 对应的 PR CI 运行需要批准。维护者可使用 **Approve workflows to run** 批准，或在 Actions 手动运行 `CI` 并选择版本 PR 分支，核对该分支当前提交的结果。参见 [GitHub 工作流触发规则](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)。
-- 人工审阅并合并版本 PR 后，在本地拉取 main 的已审阅提交并发布。合并本身不会发布 npm。
-- 工作流会将 Changesets 默认 PR 文案中的“自动发布 npm”改为本仓的手动发布说明，保留生成的版本说明；这一步不执行发布。
-
-```sh
-git switch main
-git pull --ff-only
-pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
-pnpm check
-pnpm release:check
-pnpm release:publish
-```
-
-执行前确认工作区干净，拉取后核对准备发布的提交。`release:publish` 会再次执行产物验收；npm 登录和 2FA 仍由维护者在终端完成。
+[对齐 PR #6](https://github.com/weiliang0121/capix/pull/6) 将公开源码同步至已分发的版本。对齐时 npm 上的 Tool 为 0.11.0、Model Provider 为 0.9.0、Interaction 为 0.8.0、Runtime 和 Model Exchanges 为 0.7.1，其他 13 包为 0.7.0。历史版本以 registry 中的 tarball 及其依赖为准；新流程从后续版本 PR 开始记录批次。
 
 ## 候选分发
 
