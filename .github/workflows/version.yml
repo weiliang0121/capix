@@ -44,7 +44,7 @@ jobs:
           script: pnpm release:version
           commit-message: 'chore: version packages'
           pr-title: 'chore: version packages'
-      - name: Describe manual npm publishing
+      - name: Describe the release approval
         if: steps.version.outputs.pr-number != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -57,7 +57,7 @@ jobs:
           const args = [process.env.PR_NUMBER, '--repo', process.env.GITHUB_REPOSITORY];
           const body = execFileSync('gh', ['pr', 'view', ...args, '--json', 'body', '--jq', '.body'], { encoding: 'utf8' });
           const original = "When you're ready to do a release, you can merge this and the packages will be published to npm automatically.";
-          const replacement = 'Merging this PR updates package versions and changelogs only. npm publishing is performed explicitly by a maintainer from a validated local checkout.';
+          const replacement = 'Merging prepares the reviewed batch at the exact main commit. A maintainer approves the npm environment before publishing the verified packages and their GitHub Release.';
           if (body.includes(original)) {
             const path = join(process.env.RUNNER_TEMP, 'capix-version-pr-body.md');
             writeFileSync(path, body.replace(original, replacement));

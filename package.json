@@ -19,7 +19,6 @@
     "release:version": "changeset version && pnpm install --lockfile-only --registry=https://registry.npmjs.org",
     "release:build": "node scripts/release/build.mjs",
     "release:check": "node scripts/release/check.mjs",
-    "release:publish": "node scripts/release/publish.mjs",
     "integration:pack": "node scripts/integration/pack.mjs",
     "test:packages": "node scripts/test/run.mjs --packages",
     "test:repository": "node scripts/test/run.mjs --repository",

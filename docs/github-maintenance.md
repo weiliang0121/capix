@@ -58,7 +58,7 @@ changeset 随功能或修复 PR 合并后，`Version packages` 读取发布计�
 
 内置 `GITHUB_TOKEN` 创建或更新版本 PR 时，相关 PR CI 可能处于待批准状态。维护者核对版本 PR 最新提交后，在 GitHub 使用 **Approve workflows to run**；若选择手动运行 `CI`，必须选择版本 PR 的分支，并确认结果属于要合并的准确提交。未触发、待批准或旧提交的绿色结果都不等于最新 PR 已满足保护。参见 [GitHub 工作流触发规则](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)。
 
-npm 发布需要维护者另行明确授权，在干净、已审阅的本地提交上完成身份认证和产物验收，再执行发布命令；版本 PR 的创建或合并不包含这项授权。准确命令、部分发布与未知结果处理见 [npm 发布](npm-publishing.md)。不自动建立 GitHub Release 或推送版本 tag。
+版本 PR 合入 main 后，[发布工作流](https://github.com/weiliang0121/capix/blob/main/.github/workflows/publish.yml)从准确提交准备产物。在 GitHub 的 npm Environment 批准本批次后才会写入 registry。全部准确版本和摘要核验成功后，创建批次 tag 与 GitHub Release。配置、部分发布和重跑方式见 [npm 发布](npm-publishing.md)。
 
 ## Pages 与设置核验
 
