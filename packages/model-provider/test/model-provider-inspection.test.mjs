@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
-import { ProviderError, requireModelRequest } from '@weiliang0121/capix-model-provider';
+import { ProviderError, ProviderRequestLimitError, maximumModelExchangeBytes, maximumModelRequestBytes, maximumModelWireRequestBytes, requireModelRequest } from '@weiliang0121/capix-model-provider';
 
 const limit = 2 * 1024 * 1024;
 
@@ -25,7 +25,7 @@ test('request inspection is synchronous, frozen and transport-free with exact UT
     const request = { messages: [{ role: 'user', content }] };
     const before = calls;
     const inspected = provider.inspectRequest(request);
-    assert.deepEqual(Object.keys(inspected), ['requestBytes', 'wireBytes']);
+    assert.deepEqual(Object.keys(inspected), ['requestBytes', 'wireBytes', 'limits']);
     assert.ok(Object.isFrozen(inspected));
     assert.equal(inspected.requestBytes, Buffer.byteLength(JSON.stringify(request)));
     assert.equal(calls, before);
@@ -101,13 +101,14 @@ test('inspection includes stream and usage transport fields without performing a
   );
   const request = { messages: [{ role: 'user', content: 'Hello' }], stream: true };
   assert.deepEqual(provider.inspectRequest(request), {
+    limits: { maxRequestBytes: limit, maxWireRequestBytes: limit },
     requestBytes: Buffer.byteLength(JSON.stringify(request)),
     wireBytes: Buffer.byteLength(JSON.stringify({ model: 'fixture', messages: request.messages, stream: true, stream_options: { include_usage: true } })),
   });
   assert.equal(calls, 0);
 });
 
-test('the exact 2 MiB wire boundary is accepted and one additional byte is rejected by both paths', async () => {
+test('the exact default wire budget is sent and inspection measures one byte beyond it', async () => {
   let calls = 0;
   let actual;
   const provider = new ChatCompletionsProvider(
@@ -124,8 +125,8 @@ test('the exact 2 MiB wire boundary is accepted and one additional byte is rejec
   assert.equal(actual, limit);
   request.messages[0].content += 'x';
   assert.equal(requireModelRequest(request), request); // The common request still fits; wire overhead does not.
-  assert.throws(() => provider.inspectRequest(request), requestError);
-  await assert.rejects(provider.complete(request), requestError);
+  assert.equal(provider.inspectRequest(request).wireBytes, limit + 1);
+  await assert.rejects(provider.complete(request), (error) => error instanceof ProviderRequestLimitError && error.metric === 'wireBytes' && error.bytes === limit + 1 && error.limit === limit);
   assert.equal(calls, 1);
 });
 
@@ -148,8 +149,8 @@ test('tool feedback escaping is measured after both JSON encodings and may excee
   };
   const request = { messages: [{ role: 'user', content: 'Read' }], exchanges: [{ reply, feedback: [{ toolCallId: 'call', status: 'ok', content: [{ kind: 'text', text: '"'.repeat(600_000) }] }] }] };
   assert.equal(requireModelRequest(request), request);
-  assert.throws(() => provider.inspectRequest(request), requestError);
-  await assert.rejects(provider.complete(request), requestError);
+  assert.ok(provider.inspectRequest(request).wireBytes > limit);
+  await assert.rejects(provider.complete(request), (error) => error instanceof ProviderRequestLimitError && error.metric === 'wireBytes');
   assert.equal(calls, 0);
 });
 
@@ -179,7 +180,7 @@ test('inspection rejects hostile or excessive values without getters, transport 
         },
       },
     ),
-    { messages: [{ role: 'user', content: 'x'.repeat(limit) }] },
+    { messages: [{ role: 'user', content: 'x'.repeat(maximumModelRequestBytes) }] },
     { messages: [{ role: 'user', content: 'ok' }], extra: 'secret-content' },
   ];
   for (const request of invalid) {
@@ -210,4 +211,123 @@ test('inspection does not grant future send permission or modify the request', a
   await assert.rejects(provider.complete(request), requestError);
   assert.equal(calls, 0);
   assert.equal(inspected.requestBytes, Buffer.byteLength(JSON.stringify(original)));
+});
+
+test('request budgets are fixed, positive supported integers and inspection always reports both limits', () => {
+  for (const field of ['maxRequestBytes', 'maxWireRequestBytes']) {
+    for (const value of [0, -1, 1.5, NaN, Infinity, '1024', null, maximumModelRequestBytes + 1]) {
+      assert.throws(
+        () => new ChatCompletionsProvider(configuration(async () => completed(), { [field]: value })),
+        (error) => error.code === 'CONFIGURATION',
+      );
+    }
+  }
+  const config = configuration(async () => completed(), { maxRequestBytes: 100, maxWireRequestBytes: 200 });
+  const provider = new ChatCompletionsProvider(config);
+  config.maxRequestBytes = 1;
+  config.maxWireRequestBytes = 1;
+  const inspection = provider.inspectRequest({ messages: [{ role: 'user', content: '你好' }] });
+  assert.deepEqual(inspection.limits, { maxRequestBytes: 100, maxWireRequestBytes: 200 });
+  assert.ok(Object.isFrozen(inspection.limits));
+});
+
+test('common request budget is enforced independently and never exposes request content', async () => {
+  let sends = 0;
+  const provider = new ChatCompletionsProvider(
+    configuration(
+      async () => {
+        sends++;
+        return completed();
+      },
+      { maxRequestBytes: 100, maxWireRequestBytes: maximumModelWireRequestBytes },
+    ),
+  );
+  const request = { messages: [{ role: 'user', content: 'private-content 你好\\\n"'.repeat(10) }] };
+  const inspection = provider.inspectRequest(request);
+  assert.ok(inspection.requestBytes > 100);
+  await assert.rejects(provider.complete(request), (error) => {
+    assert.ok(error instanceof ProviderRequestLimitError && error instanceof ProviderError);
+    assert.equal(error.code, 'REQUEST_LIMIT');
+    assert.equal(error.metric, 'requestBytes');
+    assert.equal(error.bytes, inspection.requestBytes);
+    assert.equal(error.limit, 100);
+    assert.equal(JSON.stringify(error).includes('private-content'), false);
+    assert.equal(String(error).includes('private-content'), false);
+    return true;
+  });
+  assert.equal(sends, 0);
+});
+
+test('hosts can raise both budgets for Chinese and escaped text above the default budget', async () => {
+  let sent;
+  const provider = new ChatCompletionsProvider(
+    configuration(
+      async (_url, init) => {
+        sent = init.body;
+        return completed();
+      },
+      { maxRequestBytes: 4 * limit, maxWireRequestBytes: 4 * limit },
+    ),
+  );
+  const request = { messages: [{ role: 'user', content: '你好"\\\n'.repeat(300_000) }] };
+  const inspection = provider.inspectRequest(request);
+  assert.ok(inspection.requestBytes > limit);
+  await provider.complete(request);
+  assert.equal(inspection.requestBytes, Buffer.byteLength(JSON.stringify(request)));
+  assert.equal(inspection.wireBytes, Buffer.byteLength(sent));
+});
+
+test('common request support ends at exactly 64 MiB independently of the send budgets', () => {
+  assert.equal(maximumModelRequestBytes, 64 * 1024 * 1024);
+  const request = { messages: [{ role: 'user', content: '' }] };
+  request.messages[0].content = 'x'.repeat(maximumModelRequestBytes - Buffer.byteLength(JSON.stringify(request)));
+  assert.equal(requireModelRequest(request), request);
+  request.messages[0].content += 'x';
+  assert.throws(() => requireModelRequest(request), TypeError);
+});
+
+test('wire support ends at exactly 64 MiB and oversized wire bodies never reach transport', async () => {
+  assert.equal(maximumModelWireRequestBytes, 64 * 1024 * 1024);
+  let sentBytes;
+  let sends = 0;
+  const provider = new ChatCompletionsProvider(
+    configuration(
+      async (_url, init) => {
+        sends++;
+        sentBytes = Buffer.byteLength(init.body);
+        return completed();
+      },
+      { maxRequestBytes: maximumModelRequestBytes, maxWireRequestBytes: maximumModelWireRequestBytes },
+    ),
+  );
+  const request = { messages: [{ role: 'user', content: '' }] };
+  request.messages[0].content = 'x'.repeat(maximumModelWireRequestBytes - provider.inspectRequest(request).wireBytes);
+  assert.equal(provider.inspectRequest(request).wireBytes, maximumModelWireRequestBytes);
+  await provider.complete(request);
+  assert.equal(sentBytes, maximumModelWireRequestBytes);
+  request.messages[0].content += 'x';
+  assert.equal(requireModelRequest(request), request);
+  assert.throws(() => provider.inspectRequest(request), requestError);
+  await assert.rejects(provider.complete(request), requestError);
+  assert.equal(sends, 1);
+});
+
+test('larger requests retain the independent 2 MiB reply, feedback and exchange support bounds', () => {
+  assert.equal(maximumModelExchangeBytes, 2 * 1024 * 1024);
+  const provider = new ChatCompletionsProvider(configuration(async () => completed(), { maxRequestBytes: maximumModelRequestBytes, maxWireRequestBytes: maximumModelWireRequestBytes }));
+  const reply = { formatVersion: 1, id: 'previous', model: 'fixture', output: [{ kind: 'tool-call', id: 'call', name: 'read', arguments: { encoding: 'json-text', text: '{}' } }], termination: { kind: 'completed', reason: 'tool_calls' }, usage: null, native: { format: 'chat-completions', version: 1 } };
+  const feedback = { toolCallId: 'call', status: 'ok', content: [{ kind: 'text', text: '' }] };
+  const request = { messages: [{ role: 'user', content: 'Read' }], exchanges: [{ reply, feedback: [feedback] }] };
+  for (const kind of ['reply', 'feedback', 'exchange']) {
+    reply.native.reasoningContent = kind === 'reply' ? 'x'.repeat(limit) : kind === 'exchange' ? 'x'.repeat(limit / 2) : '';
+    feedback.content[0].text = kind === 'feedback' ? 'x'.repeat(limit) : kind === 'exchange' ? 'x'.repeat(limit / 2) : '';
+    assert.throws(() => requireModelRequest(request), TypeError);
+    assert.throws(() => provider.inspectRequest(request), requestError);
+  }
+  // Multiple individually bounded exchanges may jointly exceed 2 MiB.
+  reply.native.reasoningContent = '';
+  feedback.content[0].text = 'x'.repeat(limit / 2);
+  request.exchanges = [request.exchanges[0], request.exchanges[0], request.exchanges[0]];
+  assert.equal(requireModelRequest(request), request);
+  assert.ok(provider.inspectRequest(request).requestBytes > limit);
 });

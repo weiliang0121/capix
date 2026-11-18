@@ -3,8 +3,8 @@ import { types } from 'node:util';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
-import { modelReplyText, requireModelRequest, type ModelToolCall } from '@weiliang0121/capix-model-provider';
-import { ModelExchangeResource, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference, type ExchangeOriginReference } from '@weiliang0121/capix-model-exchanges';
+import { maximumModelExchangeBytes, maximumModelWireRequestBytes, modelReplyText, requireModelRequest, type ModelToolCall } from '@weiliang0121/capix-model-provider';
+import { ModelExchangeResource, requireModelImageContext, feedbackDigest, requireExchangeIntakeReceipt, requireExchangeFeedbackReceipt, type ExchangeReference, type ExchangeOriginReference } from '@weiliang0121/capix-model-exchanges';
 import type { ResourcesOf } from '@weiliang0121/capix-resources';
 import { Group, checkpointPoint, childReferences, reception, type ChildCallable, type ChildReference, type ChildCall, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildReferenceSlot, type CheckpointSelection } from '@weiliang0121/capix-structure';
 import { codec, stringCodec } from './codec.js';
@@ -12,6 +12,7 @@ import { createToolCompletion, ToolModelResource, type ToolCompletion } from './
 import { createToolCatalog, selectTool, toolEntries, type ToolCatalog, type ToolSelection } from './catalog.js';
 import type { ToolConfiguration, ToolInput, ToolMembers } from './types.js';
 import { assertToolFeedbackBytes, assertToolReplyBytes, assertToolOutputBytes, resolveToolBudgets, ToolBudgetError, type ToolByteBudgets } from './budget.js';
+import { assertToolContextText, requireToolRequestContext, type ToolCapacityBoundary } from './context.js';
 
 const refSchema = z.strictObject({ collection: z.string().min(1), id: z.string().min(1), revision: z.number().int().nonnegative() }).readonly();
 function inputCodecFor(catalog: ToolCatalog) {
@@ -41,13 +42,18 @@ type Refs = Readonly<Record<string, readonly ChildReference<ChildCallable>[] | C
 type RestoredRefs = Readonly<Record<string, readonly ChildReference<ChildCallable>[]>>;
 type Slots = Readonly<Record<string, ChildReferenceSlot<ChildCallable, true>>>;
 interface State extends Prepared {
+  readonly deferred: readonly ToolCapacityBoundary[];
   readonly origin: ExchangeOriginReference;
   readonly exchanges: readonly ExchangeReference[];
   readonly current: ExchangeReference | null;
   readonly cursor: number;
   readonly active: { readonly name: string; readonly index: number; readonly callId: string } | null;
 }
-const stateCodec = codec<State>(z.strictObject({ id: z.string().min(1), catalog: z.string().min(1), origin: originSchema, exchanges: z.array(refSchema).readonly(), current: refSchema.nullable(), cursor: z.number().int().nonnegative(), active: z.strictObject({ name: z.string(), index: z.number().int().nonnegative(), callId: z.string() }).readonly().nullable() }).readonly());
+const boundarySchema = z.strictObject({ reason: z.strictObject({ code: z.enum(['TOOL_REQUEST_LIMIT', 'TOOL_WIRE_REQUEST_LIMIT', 'TOOL_EXCHANGE_LIMIT']), bytes: z.number().int().positive(), limit: z.number().int().positive(), phase: z.literal('reserved') }).readonly(), origin: originSchema, exchange: refSchema, callIds: z.array(z.string().min(1)).nonempty().readonly() }).readonly();
+function capacityFeedback(boundary: ToolCapacityBoundary) {
+  return { status: 'error' as const, content: [{ kind: 'text' as const, text: JSON.stringify({ code: 'TOOL_CAPACITY_DEFERRED', message: 'Tool was not executed because the pending batch exceeds request capacity. Request fewer or smaller tool results.', stage: 'preflight', executed: false, reason: boundary.reason }) }] };
+}
+const stateCodec = codec<State>(z.strictObject({ id: z.string().min(1), catalog: z.string().min(1), origin: originSchema, deferred: z.array(boundarySchema).readonly(), exchanges: z.array(refSchema).readonly(), current: refSchema.nullable(), cursor: z.number().int().nonnegative(), active: z.strictObject({ name: z.string(), index: z.number().int().nonnegative(), callId: z.string() }).readonly().nullable() }).readonly());
 const intakeCodec = { check: requireExchangeIntakeReceipt, encode: (value: ReturnType<typeof requireExchangeIntakeReceipt>) => cloneCheckpointValue(requireExchangeIntakeReceipt(value)), decode: requireExchangeIntakeReceipt };
 const feedbackCodec = { check: requireExchangeFeedbackReceipt, encode: (value: ReturnType<typeof requireExchangeFeedbackReceipt>) => cloneCheckpointValue(requireExchangeFeedbackReceipt(value)), decode: requireExchangeFeedbackReceipt };
 function refsAt(refs: Refs, name: string) {
@@ -104,16 +110,18 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
     this.budgets = resolveToolBudgets(options.budgets);
     if (!Number.isSafeInteger(this.maxModelCalls) || this.maxModelCalls < 1) throw new RangeError('Tool model call limit must be a positive safe integer');
     if (!Number.isSafeInteger(this.waitMs) || this.waitMs < 0 || this.waitMs > 2147483647) throw new RangeError('Tool wait must be a nonnegative timer duration');
-    const entries = toolEntries(options.tools, this.recoverable);
+    const entries = toolEntries(options.tools, this.recoverable, this.budgets.maxFeedbackBytes);
     this.tools = Object.freeze(Object.fromEntries(entries.map((entry) => [entry.name, entry.registration]))) as ToolMembers<Definitions>;
     Object.defineProperty(this, 'tools', { value: this.tools, enumerable: true, writable: false, configurable: false });
-    const catalog = (this.catalog = createToolCatalog(entries, options.policyVersion, { maxModelCalls: this.maxModelCalls, waitMs: this.waitMs, budgets: this.budgets }));
+    const requestContext = options.requestContext;
+    const capacityPolicy = options.capacityPolicy ?? 'fail';
+    const catalog = (this.catalog = createToolCatalog(entries, options.policyVersion, { capacityPolicy, maxModelCalls: this.maxModelCalls, waitMs: this.waitMs, budgets: this.budgets, ...(options.imageContext === undefined ? {} : { imageContext: options.imageContext }), ...(requestContext ? { requestContext } : {}) }));
     this.checkToolCall = (call) => selectTool(entries, catalog, call);
     Object.defineProperty(this, 'checkToolCall', { value: this.checkToolCall, enumerable: false, writable: false, configurable: false });
     const inputCodec = inputCodecFor(catalog);
     for (const name of ['catalog', 'maxModelCalls', 'waitMs', 'recoverable', 'budgets'] as const) Object.defineProperty(this, name, { value: this[name], enumerable: true, writable: false, configurable: false });
     const budgets = this.budgets;
-    const completion = createToolCompletion(this.recoverable, catalog, budgets, this.waitMs);
+    const completion = createToolCompletion(this.recoverable, catalog, budgets, this.waitMs, requestContext);
     this.stages = Object.freeze({ model: completion.id, tools: Object.freeze(entries.map((entry) => Object.freeze({ structureId: entry.registration.node.id, name: entry.name }))) });
     Object.defineProperty(this, 'stages', { value: this.stages, enumerable: true, writable: false, configurable: false });
     const tools = new Map(entries.map((entry) => [entry.name, entry]));
@@ -149,7 +157,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         },
       },
     });
-    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 1, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
+    if (recoverable) this.checkpoint = { key: 'capix.tool', version: 5, input: inputCodec, output: stringCodec, receptions: [modelReception, ...toolReceptions.values()], points: [prepared, waiting, processing, completed] };
     const save = (work: Work, name: 'waiting' | 'processing' | 'completed', state: State, refs: Refs) => work.checkpoint?.({ point: name === 'waiting' ? waiting : name === 'processing' ? processing : completed, state, refs });
     // Selection ownership is the current invocation. Both points explicitly use
     // the same choices; normal calls without checkpoints keep ordinary arrays.
@@ -175,13 +183,46 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       if (models.length !== state.exchanges.length + 1 || models.length > maxModelCalls) throw new Error('Tool model prefix changed');
       models.forEach((fact, index) => {
         const child = modelFact(facts.children, fact.ref);
-        if (!equal(child.input, { origin: state.origin, exchanges: state.exchanges.slice(0, index) })) throw new Error('Model input differs from fixed exchange prefix');
+        const { context, ...prefix } = child.input;
+        assertToolContextText(context, requestContext);
+        if (!equal(prefix, { origin: state.origin, exchanges: state.exchanges.slice(0, index) })) throw new Error('Model input differs from fixed exchange prefix');
         const expected = state.exchanges[index];
         if (expected) {
           const receipt = facts.children.accepted(child.ref, modelReception);
           if (receipt.reference.collection !== expected.collection || receipt.reference.id !== expected.id) throw new Error('Model reception differs from exchange prefix');
         }
       });
+      const deferredIds = new Set<string>();
+      for (const boundary of state.deferred) {
+        const upperLimit = boundary.reason.code === 'TOOL_REQUEST_LIMIT' ? budgets.maxRequestBytes : boundary.reason.code === 'TOOL_WIRE_REQUEST_LIMIT' ? (budgets.maxWireRequestBytes ?? maximumModelWireRequestBytes) : maximumModelExchangeBytes;
+        // The current provider's exact lower limit is checked against durable
+        // model material during confirmExchanges, outside this facts-only window.
+        if (capacityPolicy !== 'defer' || !equal(boundary.origin, state.origin) || boundary.reason.limit > upperLimit || boundary.reason.bytes <= boundary.reason.limit || new Set(boundary.callIds).size !== boundary.callIds.length || deferredIds.has(boundary.exchange.id)) throw new Error('Invalid saved capacity decision');
+        deferredIds.add(boundary.exchange.id);
+        const index = models.findIndex((model) => {
+          const fact = modelFact(facts.children, model.ref);
+          return fact.reception.status === 'accepted' && facts.children.accepted(fact.ref, modelReception).reference.id === boundary.exchange.id;
+        });
+        const model = models[index];
+        if (!model) throw new Error('Deferred exchange has no model');
+        const fact = modelFact(facts.children, model.ref);
+        const receipt = facts.children.accepted(fact.ref, modelReception);
+        if (boundary.exchange.collection !== receipt.reference.collection || boundary.exchange.revision < receipt.reference.revision || fact.returned?.status !== 'succeeded') throw new Error('Deferred exchange identity changed');
+        const calls = fact.returned.output.reply.output.filter((item) => item.kind === 'tool-call');
+        const pending = calls.slice(calls.length - boundary.callIds.length);
+        if (
+          !equal(
+            pending.map((call) => call.id),
+            boundary.callIds,
+          )
+        )
+          throw new Error('Deferred calls are not an exact pending suffix');
+        const end = models[index + 1]?.order ?? Infinity;
+        for (const callId of boundary.callIds) {
+          if (facts.children.values().some((child) => child.order > fact.order && child.order < end && child.key === callId)) throw new Error('Deferred call has a tool child');
+        }
+        if (state.current?.id === boundary.exchange.id && (state.active || state.cursor < calls.length - boundary.callIds.length)) throw new Error('Deferred cursor precedes decision');
+      }
       if (!state.current) {
         if (state.active || state.cursor !== 0) throw new Error('Waiting model has tool progress');
         return;
@@ -195,6 +236,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       if (state.cursor > calls.length) throw new Error('Tool cursor exceeds model requests');
       for (let index = 0; index < state.cursor; index++) {
         const call = calls[index]!;
+        if (state.deferred.some((boundary) => boundary.exchange.id === state.current!.id && boundary.callIds.includes(call.id))) continue;
         const selected = selectTool(entries, catalog, call);
         if (selected.kind === 'rejected') continue;
         const found = facts.references[selected.entry.name]?.find((fact) => fact.order > child.order && fact.key === call.id && equal(fact.input, selected.input));
@@ -216,11 +258,15 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       save(work, 'processing', next, refs);
       return processTools(work, next, refs);
     }
-    function startModel(work: Work, state: State, refs: Refs): Promise<string> {
+    async function startModel(work: Work, state: State, refs: Refs): Promise<string> {
       const models = refsAt(refs, 'models');
       if (models.length >= maxModelCalls) throw new ToolModelCallLimitError(models.length, maxModelCalls);
       verifyOrigin(work, state);
-      const child = work.children.create(completion, { origin: state.origin, exchanges: state.exchanges }, { key: `model:${models.length}` });
+      const prefix = { origin: state.origin, exchanges: state.exchanges };
+      const deferred = state.deferred.find((boundary) => boundary.exchange.id === state.exchanges.at(-1)?.id);
+      const boundary = deferred ? { ...deferred, exchange: state.exchanges.at(-1)! } : undefined;
+      const context = requestContext ? await work.resources.model.prepare({ prefix, context: requestContext, ...(boundary ? { boundary } : {}) }) : undefined;
+      const child = work.children.create(completion, { ...prefix, ...(context === undefined ? {} : { context }) }, { key: `model:${models.length}` });
       const nextRefs = append(refs, 'models', child.ref);
       save(work, 'waiting', state, nextRefs);
       return receiveModel(work, state, nextRefs, child);
@@ -244,7 +290,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       const result = {
         succeeded: async (value: unknown) => {
           if (entry.registration.maxOutputBytes !== undefined) assertToolOutputBytes(value, entry.registration.maxOutputBytes);
-          const mapped = assertToolFeedbackBytes(active.callId, await entry.registration.result.succeeded(value), budgets);
+          const mapped = assertToolFeedbackBytes(active.callId, await entry.registration.result.succeeded(value), { maxFeedbackBytes: entry.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes });
           return work.resources.exchanges.receive(state.origin, reference, active.callId, mapped);
         },
         ...(entry.registration.result.failed
@@ -253,7 +299,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
                 // This preset stops on its own budget failures. This is not a new
                 // kernel error category and a matching business code is not enough.
                 if (failure instanceof ToolBudgetError) throw failure;
-                return work.resources.exchanges.receive(state.origin, reference, active.callId, assertToolFeedbackBytes(active.callId, await entry.registration.result.failed!(failure), budgets));
+                return work.resources.exchanges.receive(state.origin, reference, active.callId, assertToolFeedbackBytes(active.callId, await entry.registration.result.failed!(failure), { maxFeedbackBytes: entry.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }));
               },
             }
           : {}),
@@ -285,14 +331,29 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         const entry = work.resources.exchanges.read(state.origin, receipt.reference, false);
         assertToolReplyBytes(entry.reply, budgets);
         if (fact.returned?.status !== 'succeeded' || !equal(entry.reply, fact.returned.output.reply) || !equal(entry.operation, receipt.operation)) throw new Error('Exchange differs from original model return or reception');
-        await work.resources.model.confirm({ reference: fact.returned.output.reference, basis: fact.input, reply: fact.returned.output.reply, budgets });
+        const deferred = state.deferred.find((boundary) => boundary.exchange.id === entry.id);
+        await work.resources.model.confirm({ reference: fact.returned.output.reference, basis: fact.input, reply: fact.returned.output.reply, budgets, ...(requestContext ? { context: requestContext } : {}), ...(deferred ? { capacity: deferred.reason } : {}) });
         const next = modelRefs[index + 1];
         const end = next ? work.children.facts.get(next).order : Infinity;
+        if (deferred) {
+          const calls = entry.reply.output.filter((item) => item.kind === 'tool-call');
+          for (const callId of deferred.callIds) {
+            const position = calls.findIndex((call) => call.id === callId);
+            if ((state.current?.id !== entry.id || position < state.cursor) && !entry.feedback.some((feedback) => feedback.toolCallId === callId)) throw new Error('Saved deferred progress has no feedback');
+          }
+        }
         for (const feedback of entry.feedback) {
           assertToolFeedbackBytes(feedback.toolCallId, { status: feedback.status, content: feedback.content }, budgets);
           const call = entry.reply.output.find((item) => item.kind === 'tool-call' && item.id === feedback.toolCallId);
           if (!call || call.kind !== 'tool-call') throw new Error('Feedback has no original model call');
+          const boundary = state.deferred.find((boundary) => boundary.exchange.id === entry.id && boundary.callIds.includes(call.id));
+          if (boundary) {
+            if (!equal(feedback, { toolCallId: call.id, ...capacityFeedback(boundary) }) || entry.receptions.some((receipt) => receipt.callId === call.id) || work.children.facts.values().some((child) => child.order > fact.order && child.order < end && child.key === call.id)) throw new Error('Deferred feedback differs from fixed capacity decision');
+            assertToolFeedbackBytes(call.id, capacityFeedback(boundary), { maxFeedbackBytes: tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes });
+            continue;
+          }
           const selected = selectTool(entries, catalog, call);
+          assertToolFeedbackBytes(feedback.toolCallId, { status: feedback.status, content: feedback.content }, { maxFeedbackBytes: tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes });
           if (selected.kind === 'rejected') {
             if (!equal(feedback, { toolCallId: call.id, ...selected.result }) || entry.receptions.some((receipt) => receipt.callId === call.id)) throw new Error('Precheck feedback differs from fixed policy');
             continue;
@@ -341,12 +402,41 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         save(work, 'completed', state, refs);
         return value;
       }
-      await work.resources.model.preflight({ origin: state.origin, exchanges: state.exchanges, current: state.current, budgets });
+      const selectedCalls = calls.map((call) => selectTool(entries, catalog, call));
+      const feedbackReservations = calls.map((call, index) => {
+        const selected = selectedCalls[index]!;
+        const maxBytes = tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes;
+        if (selected.kind === 'accepted') return { toolCallId: call.id, maxBytes };
+        assertToolFeedbackBytes(call.id, selected.result, { maxFeedbackBytes: maxBytes });
+        return { toolCallId: call.id, maxBytes: Buffer.byteLength(JSON.stringify({ toolCallId: call.id, ...selected.result }), 'utf8') };
+      });
+      const savedBoundary = state.deferred.find((boundary) => boundary.exchange.id === entry.id);
+      let boundary = savedBoundary;
+      if (state.cursor < calls.length && !boundary) {
+        const reason = await work.resources.model.preflight({ feedbackReservations, origin: state.origin, exchanges: state.exchanges, current: state.current, budgets, defer: capacityPolicy === 'defer', ...(requestContext ? { context: requestContext } : {}) });
+        if (reason) {
+          const pending = calls.slice(state.cursor);
+          if (pending.some((call) => entry.feedback.some((feedback) => feedback.toolCallId === call.id))) throw new Error('Pending capacity calls already have feedback');
+          boundary = { reason, origin: state.origin, exchange: state.current, callIds: pending.map((call) => call.id) };
+          const feedback = pending.map((call) => ({ toolCallId: call.id, result: assertToolFeedbackBytes(call.id, capacityFeedback(boundary!), { maxFeedbackBytes: tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }) }));
+          await work.resources.model.closure({ origin: state.origin, exchanges: state.exchanges, current: state.current, feedback, budgets });
+          state = { ...state, deferred: [...state.deferred, boundary] };
+          save(work, 'processing', state, refs);
+        }
+      }
+      if (savedBoundary && state.cursor < calls.length) {
+        const feedback = calls
+          .slice(state.cursor)
+          .filter((call) => !entry.feedback.some((feedback) => feedback.toolCallId === call.id))
+          .map((call) => ({ toolCallId: call.id, result: assertToolFeedbackBytes(call.id, capacityFeedback(boundary!), { maxFeedbackBytes: tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }) }));
+        await work.resources.model.closure({ origin: state.origin, exchanges: state.exchanges, current: state.current!, feedback, budgets });
+      }
       while (state.cursor < calls.length) {
         const call = calls[state.cursor]!;
-        const selected = selectTool(entries, catalog, call);
-        if (selected.kind === 'rejected') {
-          const current = work.resources.exchanges.complete(state.origin, state.current!, call.id, assertToolFeedbackBytes(call.id, selected.result, budgets));
+        const selected = selectedCalls[state.cursor]!;
+        if (boundary?.callIds.includes(call.id) || selected.kind === 'rejected') {
+          const result = boundary?.callIds.includes(call.id) ? capacityFeedback(boundary) : (selected as Extract<ToolSelection, { kind: 'rejected' }>).result;
+          const current = work.resources.exchanges.complete(state.origin, state.current!, call.id, assertToolFeedbackBytes(call.id, result, { maxFeedbackBytes: tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }));
           state = { ...state, current, cursor: state.cursor + 1 };
           save(work, 'processing', state, refs);
           continue;
@@ -367,7 +457,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
     function prepare(work: Work, state: Prepared, refs: Refs): Promise<string> {
       if (state.catalog !== catalog.digest) throw new Error('Tool fixed catalog or policy changed');
       const origin = work.resources.exchanges.begin(state.id, { request: work.input.request, catalog });
-      return startModel(work, { ...state, origin, exchanges: [], current: null, cursor: 0, active: null }, refs);
+      return startModel(work, { ...state, origin, deferred: [], exchanges: [], current: null, cursor: 0, active: null }, refs);
     }
     function verifyOrigin(work: Work, state: State) {
       const origin = work.resources.exchanges.origin(state.origin);
@@ -390,15 +480,18 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
 function snapshotConfiguration<Definitions extends Readonly<Record<string, ChildCallable>>>(value: ToolConfiguration<Definitions>): ToolConfiguration<Definitions> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value)) throw new TypeError('Tool configuration must be a data object');
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some((key) => !['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets'].includes(key))) throw new TypeError('Unknown Tool configuration field');
+  if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some((key) => !['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext', 'requestContext', 'capacityPolicy'].includes(key))) throw new TypeError('Unknown Tool configuration field');
   const result: Record<string, unknown> = {};
-  for (const key of ['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets']) {
+  for (const key of ['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext', 'requestContext', 'capacityPolicy']) {
     const field = Object.getOwnPropertyDescriptor(value, key);
     if ((!field && key in value) || (field && !('value' in field))) throw new TypeError('Tool configuration must use own data properties');
     if (field && !field.enumerable) throw new TypeError('Tool configuration fields must be enumerable');
     if (field) result[key] = field.value;
   }
+  if (result.capacityPolicy !== undefined && result.capacityPolicy !== 'fail' && result.capacityPolicy !== 'defer') throw new TypeError('Invalid Tool capacity policy');
   if (result.checkpoint !== undefined && typeof result.checkpoint !== 'boolean') throw new TypeError('Tool checkpoint must be boolean');
+  if (result.imageContext !== undefined) result.imageContext = requireModelImageContext(result.imageContext);
+  if (result.requestContext !== undefined) result.requestContext = requireToolRequestContext(result.requestContext);
   if (result.budgets !== undefined) {
     const budgets = result.budgets;
     if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets) || types.isProxy(budgets) || Object.getOwnPropertySymbols(budgets).length) throw new TypeError('Tool budgets must be a data object');

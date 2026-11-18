@@ -1,5 +1,53 @@
 # @weiliang0121/capix-model-exchanges
 
+## 0.7.1
+
+### Patch Changes
+
+- Update the exact model-provider dependency to 0.8.0. Accumulated histories above 2 MiB can be reconstructed within its aggregate request support range; actual sending still enforces host/provider budgets. Origin and entry storage ceilings remain 8 MiB, and individual closed exchanges remain 2 MiB. Other runtime dependencies remain at 0.7.0.
+
+## 0.7.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @weiliang0121/capix-model-provider@0.7.0
+  - @weiliang0121/capix-changes@0.7.0
+  - @weiliang0121/capix-contracts@0.7.0
+  - @weiliang0121/capix-diagnostics@0.7.0
+  - @weiliang0121/capix-resources@0.7.0
+  - @weiliang0121/capix-view@0.7.0
+
+## 0.6.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @weiliang0121/capix-model-provider@0.6.0
+  - @weiliang0121/capix-changes@0.6.0
+  - @weiliang0121/capix-contracts@0.6.0
+  - @weiliang0121/capix-diagnostics@0.6.0
+  - @weiliang0121/capix-resources@0.6.0
+  - @weiliang0121/capix-view@0.6.0
+
+## 0.5.0
+
+### Minor Changes
+
+- Add fixed PNG, JPEG, and WebP image input to user messages and tool results, with canonical base64 validation and bounded request encoding. Portable Chat Completions transport keeps tool feedback textual and projects associated images into a user attachment message after every tool slot is closed.
+
+  Add an explicit, fixed latest-tool-image context window that preserves original exchange images and deterministically reconstructs requests after restore. Reserve portable image attachment metadata before dispatching tools; reject checkpoints using the earlier precheck policy without rewriting saved data.
+
+### Patch Changes
+
+- Updated dependencies
+  - @weiliang0121/capix-model-provider@0.5.0
+  - @weiliang0121/capix-changes@0.5.0
+  - @weiliang0121/capix-contracts@0.5.0
+  - @weiliang0121/capix-diagnostics@0.5.0
+  - @weiliang0121/capix-resources@0.5.0
+  - @weiliang0121/capix-view@0.5.0
+
 ## 0.4.0
 
 ### Patch Changes

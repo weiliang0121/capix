@@ -282,7 +282,7 @@ test('begin advances View stamps without adding members; an origin-filtered View
   assert.throws(() => new ModelExchangeViewSource(entity, { ...origin, digest: 'wrong' }));
 });
 
-test('assembled requests enforce the provider aggregate limit after each retained part has passed validation', () => {
+test('assembled requests allow history above 2 MiB after each retained part has passed validation', () => {
   const entity = new ModelExchanges();
   const input = basis();
   input.request.messages[0].content = 'p'.repeat(1100 * 1024);
@@ -292,7 +292,9 @@ test('assembled requests enforce the provider aggregate limit after each retaine
   const ref = entity.intake(origin, operation('large'), incoming);
   assert.equal(entity.closed(origin, [ref]).length, 1);
   assert.doesNotThrow(() => entity.request({ origin, exchanges: [] }));
-  assert.throws(() => entity.request({ origin, exchanges: [ref] }), /limit|large|size/i);
+  const assembled = entity.request({ origin, exchanges: [ref] });
+  assert.ok(Buffer.byteLength(JSON.stringify(assembled)) > 2 * 1024 * 1024);
+  assert.equal(assembled.exchanges[0].reply.output[0].text, incoming.output[0].text);
   assert.equal(entity.sequence, 2);
 });
 
@@ -309,7 +311,7 @@ test('closed reference lists reject proxies without evaluating traps', () => {
   assert.equal(evaluated, 0);
 });
 
-test('origin capture enforces its outer byte limit and the inner provider request limit before persistence', () => {
+test('origin capture accepts requests above 2 MiB and preserves its 8 MiB outer limit before persistence', () => {
   let writes = 0;
   const entity = new ModelExchanges({
     persistence: {
@@ -318,14 +320,15 @@ test('origin capture enforces its outer byte limit and the inner provider reques
       },
     },
   });
-  const oversizedRequest = basis();
-  oversizedRequest.request.messages[0].content = 'x'.repeat(2 * 1024 * 1024);
-  assert.throws(() => entity.begin('request', oversizedRequest), /limit|large|size/i);
+  const largerRequest = basis();
+  largerRequest.request.messages[0].content = 'x'.repeat(2 * 1024 * 1024);
+  const origin = entity.begin('request', largerRequest);
+  assert.equal(entity.origin(origin).request.messages[0].content, largerRequest.request.messages[0].content);
   const oversizedOrigin = basis();
   oversizedOrigin.catalog.tools[0].description = 'x'.repeat(8 * 1024 * 1024);
   assert.throws(() => entity.begin('origin', oversizedOrigin), /limit|large|size/i);
-  assert.equal(writes, 0);
-  assert.equal(entity.sequence, 0);
+  assert.equal(writes, 1);
+  assert.equal(entity.sequence, 1);
 });
 
 test('text-only origins retain empty catalogs and assemble requests without an explicit tools field', () => {

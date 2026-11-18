@@ -1,16 +1,21 @@
 import { isProxy } from 'node:util/types';
 
 export const valueLimit = 2 * 1024 * 1024;
+/** Support bound for one complete closed exchange, independent of request aggregation. */
+export const maximumModelExchangeBytes = 2 * 1024 * 1024;
+/** Framework-tested support bounds, not universal model vendor limits. */
+export const maximumModelRequestBytes = 64 * 1024 * 1024;
+export const maximumModelWireRequestBytes = 64 * 1024 * 1024;
 export const toolLimit = 32;
 
 /** Validate and count encoded JSON bytes without cloning or evaluating accessors. */
-export function requireJson(value: unknown): number {
+export function requireJson(value: unknown, limit = valueLimit): number {
   let nodes = 0;
   let bytes = 0;
   const ancestors = new Set<object>();
   const add = (size: number) => {
     bytes += size;
-    if (bytes > valueLimit) throw new TypeError('Model value exceeds byte limit');
+    if (bytes > limit) throw new TypeError('Model value exceeds byte limit');
   };
   const visit = (item: unknown, depth: number): void => {
     if (++nodes > 100_000 || depth > 64) throw new TypeError('Model value exceeds structural limits');
@@ -19,7 +24,7 @@ export function requireJson(value: unknown): number {
       return;
     }
     if (typeof item === 'string') {
-      if (Buffer.byteLength(item) > valueLimit) throw new TypeError('Model value exceeds byte limit');
+      if (Buffer.byteLength(item) > limit) throw new TypeError('Model value exceeds byte limit');
       add(Buffer.byteLength(JSON.stringify(item)));
       return;
     }

@@ -1,6 +1,6 @@
 import { requireModelReply, terminationKind } from './contract.js';
 import { ProviderError } from './error.js';
-import type { ModelExchange, ModelOutput, ModelReply, ModelRequest } from './types.js';
+import type { ModelExchange, ModelInputContent, ModelOutput, ModelReply, ModelRequest } from './types.js';
 import { acceptUsage } from './usage.js';
 import { freezeJson, record, toolLimit } from './value.js';
 
@@ -32,19 +32,33 @@ export function acceptWireReply(value: unknown): ModelReply {
 }
 
 export function encodeMessages(request: ModelRequest): unknown[] {
-  return [...request.messages.map((message) => ({ role: message.role, content: message.content })), ...(request.exchanges ?? []).flatMap(encodeExchange)];
+  return [...request.messages.map((message) => ({ role: message.role, content: typeof message.content === 'string' ? message.content : message.content.map(encodeContent) })), ...(request.exchanges ?? []).flatMap(encodeExchange)];
 }
 function encodeExchange({ reply, feedback }: ModelExchange): unknown[] {
   const calls = reply.output.filter((item) => item.kind === 'tool-call');
   const byId = new Map(feedback.map((item) => [item.toolCallId, item]));
+  const attachments: unknown[] = [];
+  const results = calls.map((call) => {
+    const result = byId.get(call.id)!;
+    if (result.content.some((item) => item.kind === 'image')) attachments.push({ type: 'text', text: JSON.stringify({ kind: 'tool-images', toolCallId: call.id }) });
+    const content = result.content.map((item, contentIndex) => {
+      if (item.kind === 'text') return item;
+      // Portable Chat Completions tool messages accept text only. Preserve the
+      // source association in both the tool result and the following user attachment.
+      attachments.push({ type: 'text', text: JSON.stringify({ contentIndex }) }, encodeContent(item));
+      return { kind: 'image-reference', contentIndex };
+    });
+    return { role: 'tool', tool_call_id: call.id, content: JSON.stringify({ status: result.status, content }) };
+  });
   return [
     { role: 'assistant', content: reply.output.find((item) => item.kind === 'text')?.text ?? null, ...(reply.native.reasoningContent === undefined ? {} : { reasoning_content: reply.native.reasoningContent }), ...(calls.length ? { tool_calls: calls.map((call) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments.text } })) } : {}) },
-    ...calls.map((call) => {
-      const result = byId.get(call.id)!;
-      // Both success and failure are explicit data. No tool body becomes a system instruction.
-      return { role: 'tool', tool_call_id: call.id, content: JSON.stringify({ status: result.status, content: result.content }) };
-    }),
+    ...results,
+    // Close every tool slot before introducing another user message.
+    ...(attachments.length ? [{ role: 'user', content: attachments }] : []),
   ];
+}
+function encodeContent(item: ModelInputContent): unknown {
+  return item.kind === 'text' ? { type: 'text', text: item.text } : { type: 'image_url', image_url: { url: `data:${item.mimeType};base64,${item.data}` } };
 }
 function envelope(): ProviderError {
   return new ProviderError('ENVELOPE', 'Model response is not a supported Chat Completions reply');

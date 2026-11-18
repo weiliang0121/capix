@@ -276,3 +276,34 @@ test('cold recovery preserves bounded preflight feedback and rejects changed dia
     }
   }
 });
+
+test('image context policy is fixed in the catalog and cold resume rejects a changed window', async () => {
+  const image = { kind: 'image', mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC' };
+  function configuration(retain, onRun = () => {}) {
+    const value = config(onRun, { imageContext: { retainLatestToolImages: retain } });
+    value.tools.lookup.result.succeeded = () => ({ status: 'ok', content: [image] });
+    return value;
+  }
+  const originalHost = host((request) => (request.exchanges.length < 3 ? reply(`r${request.exchanges.length}`, [call(`c${request.exchanges.length}`, 'lookup', { key: 'fixed' })]) : final));
+  const saves = journal();
+  const original = assembly(configuration(1), originalHost, { store: saves.store });
+  assert.equal(await original.runner.run(input), 'finished');
+  await originalHost.interactions.settled();
+  originalHost.interactions.close();
+  const sent = originalHost.sent[3];
+  assert.equal(sent.exchanges.flatMap((exchange) => exchange.feedback.flatMap((feedback) => feedback.content)).filter((part) => part.kind === 'image').length, 1);
+  const snapshot = structuredClone(original.entity.snapshot());
+  for (const retain of [1, 0, 2]) {
+    const modelHost = model(new Map(structuredClone([...originalHost.states])));
+    const restored = assembly(
+      configuration(retain, () => assert.fail('tool reran')),
+      modelHost,
+      { entity: ModelExchanges.restore(snapshot), store: saves.replay() },
+    );
+    if (retain === 1) assert.equal(await restored.runner.resume(saves.contextId), 'finished');
+    else await assert.rejects(restored.runner.resume(saves.contextId));
+    assert.deepEqual(modelHost.sent, []);
+    assert.deepEqual(restored.entity.snapshot(), snapshot);
+    modelHost.interactions.close();
+  }
+});

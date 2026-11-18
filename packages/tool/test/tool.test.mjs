@@ -510,3 +510,14 @@ test('missing fields, enum and union failures expose only static reasons and saf
     model.interactions.close();
   }
 });
+
+test('Tool fixes image context before claiming members and validates data-only counts', () => {
+  const imageContext = { retainLatestToolImages: 1 };
+  const tool = new Tool({ tools: { lookup: member('lookup', () => ({ text: 'fixed' })) }, policyVersion: 'v1', imageContext });
+  imageContext.retainLatestToolImages = 2;
+  assert.equal(tool.catalog.imageContext.retainLatestToolImages, 1);
+  assert.ok(Object.isFrozen(tool.catalog.imageContext));
+  const other = new Tool({ tools: { lookup: member('lookup', () => ({ text: 'fixed' })) }, policyVersion: 'v1', imageContext });
+  assert.notEqual(tool.catalog.digest, other.catalog.digest);
+  for (const invalid of [-1, 1.5, NaN, '1']) assert.throws(() => new Tool({ tools: { lookup: member('lookup', () => ({ text: 'fixed' })) }, policyVersion: 'v1', imageContext: { retainLatestToolImages: invalid } }));
+});

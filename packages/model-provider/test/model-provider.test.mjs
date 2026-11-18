@@ -179,7 +179,7 @@ test('a concurrent abort does not relabel an independently thrown transport fail
     });
     await assert.rejects(model.complete({ messages }, { signal: caller.signal }), (error) => {
       assert.ok(isProviderError(error));
-      assert.equal(error.code, stage === 'fetch' ? 'NETWORK' : 'ENVELOPE');
+      assert.equal(error.code, 'NETWORK');
       assert.equal(String(error).includes(unrelated.message), false);
       assert.equal(error.cause, undefined);
       return true;

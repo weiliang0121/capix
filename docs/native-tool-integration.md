@@ -4,13 +4,13 @@ CAPiX 使用三个独立包组合工具调用：Provider 负责模型协议，Mo
 
 ## 责任与调用关系
 
-| 包                                                       | 保证                                                                 | 不承担                                 |
-| -------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------- |
-| [model-provider](../packages/model-provider/README.md)   | Chat Completions 文本／函数调用、完整 ModelReply、SSE 接纳、请求预检 | 工具执行、业务参数判断、重试、CP       |
-| [model-exchanges](../packages/model-exchanges/README.md) | 固定起点、完整回复、按 toolCallId 的反馈槽位、准确接纳凭据、请求重建 | 执行节点、资源授权、重发判断           |
-| [tool](../packages/tool/README.md)                       | 同源目录与成员、Schema 校验、串行模型／工具推进、预算、可选 CP       | 任意外部效果幂等、跨实体事务、自动恢复 |
-| interaction                                              | 固定请求、独立一次发送、持久反馈与局部等待                           | 因调用取消终止发送、未知反馈自动重发   |
-| runtime / invocation                                     | 结构绑定、本次 Work、父子接纳、窗口关闭、真实交付                    | 模型协议和宿主业务策略                 |
+| 包                                                       | 保证                                                                               | 不承担                                 |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------- |
+| [model-provider](../packages/model-provider/README.md)   | Chat Completions 文本／函数调用、完整 ModelReply、SSE 接纳、请求预检、显式请求重试 | 工具执行、业务参数判断、任务重做、CP   |
+| [model-exchanges](../packages/model-exchanges/README.md) | 固定起点、完整回复、按 toolCallId 的反馈槽位、准确接纳凭据、请求重建               | 执行节点、资源授权、重发判断           |
+| [tool](../packages/tool/README.md)                       | 同源目录与成员、Schema 校验、串行模型／工具推进、预算、可选 CP                     | 任意外部效果幂等、跨实体事务、自动恢复 |
+| interaction                                              | 固定请求、独立一次发送、持久反馈与局部等待                                         | 因调用取消终止发送、未知反馈自动重发   |
+| runtime / invocation                                     | 结构绑定、本次 Work、父子接纳、窗口关闭、真实交付                                  | 模型协议和宿主业务策略                 |
 
 ```text
 Tool Group → 模型子调用 → ToolModelResource
@@ -54,6 +54,8 @@ ModelExchanges 的起点保存初始消息、请求选项和模型可见目录�
 
 模型子输入仅传 `{origin,exchanges}` 引用；ToolModelResource 在发送边界重建完整请求。`closed` 核对引用归属于同一起点且为顺序前缀、反馈完整；`request` 再检查协议续接资格与整体请求限额。查询旧前缀不等于取得执行恢复许可，模型发送历史与调用关系仍须准确核验。
 
+`requestContext: { maxBytes }` 可在固定初始消息之后、原生交换之前传递一条可替换的 user-role 数据消息。完整标签明确它是低优先级宿主参考数据，不是新的用户指令、授权或模型回复；不伪造 assistant、reasoning、prefix 或工具交换。容量按含标签与消息封套的完整 JSON UTF-8 字节计量，工具执行前还预留下一片段上限；固定起点与真实原生续接材料不变。选材、预算与冷恢复规则见 [Tool 每次请求的宿主材料](../packages/tool/README.md#每次请求的宿主材料)。
+
 模型回复 intake、工具结果 receive 使用真实父子 reception；预检错误 complete 不伪造子调用。准确同内容确认不重复提交；不同来源或正文冲突拒绝。实体可将反馈与凭据同次提交，但不构成工具效果、父接纳与 CP 的统一事务。
 
 快照 v2 包含 origins、entries 和共同 sequence。restore 核对完整起点摘要、前缀归属、顺序、唯一效果来源及反馈槽，不发布变化或重新发送。缺失起点不能从回复补造初始消息或目录。普通 JSON 会把 -0 改为 0，持久适配必须保真，不能将变化后的材料当作同一摘要依据。
@@ -68,9 +70,11 @@ ModelExchanges 的起点保存初始消息、请求选项和模型可见目录�
 
 maxWireRequestBytes 显式设置时要求同步 inspection，可用 Provider.inspectRequest；预检不发请求、不返回正文或密钥、不预留额度。修改输入后发送仍重新核验。集合、预设和 Provider 各有独立上限；共享调用不形成跨实体预留事务。
 
-Provider 共同请求／回复／反馈为至多 2 MiB JSON、深度 64、100000 值；HTTP 编码请求另受 2 MiB 限制。默认总超时 60 秒、传输响应预算 2 MiB。合法单项不保证累计历史仍能装入下一请求，限制也不是堆内存或 token 上界。ModelExchanges 默认最多 10000 起点、10000 交换、累计 64 MiB，单起点／交换最多 8 MiB；较大实体容量不会放宽 Provider 限额。
+Provider 公共组装请求与 HTTP 编码请求分别支持到 64 MiB，默认发送预算各为 2 MiB，宿主通过 `maxRequestBytes` / `maxWireRequestBytes` 显式配置；回复、单份反馈、单个闭合 exchange 仍各受 2 MiB JSON 限制，深度 64、100000 值不变。`inspectRequest` 返回实际计量及配置 `limits`，合法但超过配置预算时仍可测量，`complete` 在发送前再次拒绝超限。Tool 使用自身预算与 Provider 上限的较小值，并在工具执行前独立预留 exchange 容量。默认总超时 60 秒、传输响应预算 2 MiB。合法单项不保证累计历史仍能装入下一请求，限制也不是堆内存或 token 上界。ModelExchanges 默认最多 10000 起点、10000 交换、累计 64 MiB，单起点／交换实体最多 8 MiB；集合容量、传输预算和 CP 的 8 MiB 逻辑图分别验证。
 
-Provider 一次 complete 仅发送一次 HTTP，无隐式重试。SSE 固定回复身份，检查索引、完整终态、usage 与 DONE；缺失或冲突明确拒绝，不回退非流式或重发。DONE 后释放读取，不要求 HTTP 连接先关闭。只发布正文预览，不把工具参数或思考文本作为正文。
+Provider 一次 complete 默认仅发送一次 HTTP，无隐式重试。显式 retry 只在一次发送者内部对固定编码请求作有限尝试；来源确认、取消、等待、计数与预览隔离见 [Provider 重试契约](../packages/model-provider/README.md#显式请求重试)。它不重启 Interaction、Tool 或已失败调用，不重做已执行工具，也不保证服务端推理只计费一次。Tool 的 maxModelCalls 仍统计逻辑模型调用，宿主需要实际尝试额度时通过 attempt 通知另行核验。
+
+SSE 固定回复身份，检查索引、完整终态、usage 与 DONE；缺失或冲突明确拒绝，不回退非流式。只有显式许可下的传输读取失败与提前结束可重试，完整非法协议不重试。DONE 后释放读取，不要求 HTTP 连接先关闭。emit 只发布正文预览，不把工具参数或思考文本作为正文。可选同步 emitReasoning 独立交付供应商公开返回的 reasoning_content 非空增量，宿主决定展示或保存；不改变最终回复与 exchanges 的原始思考材料。可选同步 progress 以 `ModelStreamProgress` 的 `{ kind: 'reasoning' | 'text' | 'tool-call' }` 报告已校验非空流式增量的类别变化，同类连续增量去重；不含思考或工具内容，不表示执行或完成。三个通道均在当前 chunk 完整校验后交付，类别去重不抑制文本增量；空字段和非流式回复不合成预览或进度。消费者失败、取消与流读取清理沿用 emit 规则，已展示的预览不能代替最终回复接纳。准确回调顺序与失败语义见 [Provider 流式契约](../packages/model-provider/README.md#流式与用量)。
 
 Tool 的 stream 可让 Provider 消费 SSE，但预设只交付最终正文，不转交中间候选。stages 仅提供内部结构 ID 供宿主投影真实进度。候选正文、完整模型回复、最终 Transcript 消息、父接纳和 Runner settled 分别表达不同事实。
 
@@ -87,7 +91,7 @@ checkpoint:true 声明 Tool 与内部模型节点恢复点，要求每个工具�
 | tools         | 当前交换、游标、派发前保存的准确工具引用、成员 CP 或固定交付 | 不猜效果、不重做失败子调用 |
 | completed     | 最终回复、完整接纳与原交互依据                               | 不再次执行模型或工具       |
 
-恢复重新核对输入、目录、交换前缀、原模型回复、工具返回／接纳及效果凭据。父层已接纳后仍确认原模型交互；目录变化、未知反馈、缺首份子 CP、失败终态或不准确来源明确拒绝。外部工具自身效果是否可确认仍由其资源契约保证。
+Tool 与内部 completion 的 CP 契约现为 v3；v2 及更早版本明确拒绝，不改写旧请求或持久数据，升级后使用新调用。恢复重新核对输入、目录、交换前缀、原模型回复、工具返回／接纳及效果凭据。父层已接纳后仍确认原模型交互；目录变化、未知反馈、缺首份子 CP、失败终态或不准确来源明确拒绝。外部工具自身效果是否可确认仍由其资源契约保证。
 
 ToolModelPending 携带原交互引用。局部等待到期或调用取消不取消／重发原发送，失败调用也不因引用仍在就变成可恢复。宿主关闭先停止本地入口，再等待自己的独立发送 settled；不能提前关闭反馈存储。过程流只作临时反馈，不能用其 sealed 或游标代替最终持久回复。见 [交互](interactions.md) 与 [Checkpoint](checkpoints.md)。
 

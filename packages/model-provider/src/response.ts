@@ -1,4 +1,4 @@
-import { isRequestCancellation, ProviderError } from './error.js';
+import { isRequestCancellation, ModelAttemptTransportFailure, ProviderError, readModelChunk } from './error.js';
 import type { ModelReply } from './types.js';
 import { acceptWireReply } from './wire.js';
 
@@ -6,7 +6,10 @@ import { acceptWireReply } from './wire.js';
 export async function readModelReply(response: Response, signal: AbortSignal, limit: number): Promise<ModelReply> {
   if (!response.body) throw envelope();
   const reader = response.body.getReader();
-  const abort = () => void reader.cancel(signal.reason).catch(() => undefined);
+  let abortCancellation: Promise<void> | undefined;
+  const abort = () => {
+    abortCancellation = reader.cancel(signal.reason).catch(() => undefined);
+  };
   signal.addEventListener('abort', abort, { once: true });
   let complete = false;
   try {
@@ -14,13 +17,13 @@ export async function readModelReply(response: Response, signal: AbortSignal, li
     const decoder = new TextDecoder('utf-8', { fatal: true });
     let bytes = 0;
     let text = '';
-    let chunk = await reader.read();
+    let chunk = await readModelChunk(reader, signal);
     while (!chunk.done) {
       signal.throwIfAborted();
       bytes += chunk.value.byteLength;
       if (bytes > limit) throw new ProviderError('RESPONSE_LIMIT', 'Model response exceeds the configured byte limit');
       text += decoder.decode(chunk.value, { stream: true });
-      chunk = await reader.read();
+      chunk = await readModelChunk(reader, signal);
     }
     signal.throwIfAborted();
     text += decoder.decode();
@@ -28,11 +31,12 @@ export async function readModelReply(response: Response, signal: AbortSignal, li
     return acceptWireReply(JSON.parse(text));
   } catch (error) {
     if (isRequestCancellation(error, signal)) throw signal.reason;
-    if (error instanceof ProviderError) throw error;
+    if (error instanceof ProviderError || error instanceof ModelAttemptTransportFailure) throw error;
     throw envelope();
   } finally {
     signal.removeEventListener('abort', abort);
     if (!complete) await reader.cancel().catch(() => undefined);
+    await abortCancellation;
     reader.releaseLock();
   }
 }

@@ -2,7 +2,9 @@ import type { CallableInput, CallableOutput, Stable } from '@weiliang0121/capix-
 import type { ChildCallable } from '@weiliang0121/capix-structure';
 import type { ModelRequest, ToolResult } from '@weiliang0121/capix-model-provider';
 import type { z } from 'zod';
+import type { ModelImageContext } from '@weiliang0121/capix-model-exchanges';
 import type { ToolByteBudgets } from './budget.js';
+import type { ToolRequestContext } from './context.js';
 
 /** Member policy, not another callable or a registration lifetime. */
 export interface ToolMember<Member extends ChildCallable> {
@@ -11,6 +13,8 @@ export interface ToolMember<Member extends ChildCallable> {
   readonly input: z.ZodType<CallableInput<NoInfer<Member>>>;
   /** Enforce this inside the member before its own checkpoint; Tool checks the return too. */
   readonly maxOutputBytes?: number;
+  /** Complete feedback JSON, including call ID; defaults to budgets.maxFeedbackBytes. */
+  readonly maxFeedbackBytes?: number;
   readonly result: {
     /** Pure mapping: recovery may recompute it before the parent acceptance is saved. */
     readonly succeeded: (value: Stable<CallableOutput<NoInfer<Member>>>) => ToolResult | Promise<ToolResult>;
@@ -27,6 +31,12 @@ export interface ToolConfiguration<Definitions extends Readonly<Record<string, C
   readonly tools: ToolMembers<Definitions>;
   /** Versions refinements, result mappings and the author's execution policy. */
   readonly policyVersion: string;
+  /** Fixed projection of tool images in each model request; base user images are retained. */
+  readonly imageContext?: ModelImageContext;
+  /** Enable one bounded host-selected text fragment, replaced for each request. */
+  readonly requestContext?: ToolRequestContext;
+  /** Defer pending calls only when a framework request reservation exceeds capacity. */
+  readonly capacityPolicy?: 'fail' | 'defer';
   readonly checkpoint?: boolean;
   /** Per-invocation model call fuse. Defaults to 1000; must be a positive safe integer. */
   readonly maxModelCalls?: number;

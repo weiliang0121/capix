@@ -52,7 +52,7 @@ Actions 的默认 workflow 权限保持只读；[版本工作流](https://github
 
 ## Changesets 版本 PR
 
-changeset 随功能或修复 PR 合并后，`Version packages` 读取发布计划，必要时创建或更新专用版本 PR。该 PR 更新 18 包 fixed 组的版本、CHANGELOG 与锁文件；维护者核对实际包清单、bump 与变更说明，再走相同审阅和 squash 合并流程。
+changeset 随功能或修复 PR 合并后，`Version packages` 读取发布计划，必要时创建或更新专用版本 PR。公开包独立发版；该 PR 仅更新本次计划涉及的包版本、CHANGELOG 与必要锁文件，不要求 18 包共同升号。维护者核对准确包名、bump、依赖兼容性与迁移说明，再走相同审阅和 squash 合并流程。
 
 版本 PR 只进行版本整理；合并不会发布 npm。待发布 API 的实际内容以该 PR、公开契约和验证结果为准，不从版本号推导兼容性。版本 PR 消耗已有 changesets，自身不再为相同版本变更加一个 changeset。
 

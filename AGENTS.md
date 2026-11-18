@@ -49,6 +49,7 @@ CAPiX 是可组合、可观测的 Agent 框架。仓库维护框架包、可复�
 ## 编码与验证
 
 - 使用 Node22.23.2、pnpm10.7.1、TypeScript6.0.3；外部依赖精确版本，内部 workspace:*。Prettier printWidth1000，每条变量声明一个变量。循环直接表达退出条件，流提前结束或异常也释放资源。
+- 公开包独立发版，不使用 fixed 或 linked 版本组。各包 CHANGELOG 维护自身变更、依赖兼容性与迁移要求；package.json 和实际 tarball 仍准确声明机器可用的依赖版本。完整分发清单的验证不表示全部包都需升号或上传。
 - 优先使用 es-toolkit@1.52.0 的通用操作；对象身份、严格值域、getter 隔离、循环和预算遵循专用语义，不用通用克隆替代正式接纳。类自行生成自身身份，不造空壳 Builder 或同义旧 API。
 - 测试跟随契约所有者，跨包组合归实际协调者。公共工具在 testing/support，不隐式装配上层框架；仓库组织与分发检查在 testing/repository。不能导入别包测试夹具，不能以空范围、缺产物或未声明依赖静默通过。
 - 修改包后先跑对应测试；最终使用 `pnpm check` 完成构建、类型、包内与仓库检查、可执行示例、文档站与格式验证。分发变更另按顺序运行 `pnpm release:check`、`pnpm integration:check`，不能并发重建同一 dist。

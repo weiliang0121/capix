@@ -54,3 +54,11 @@ void invalid;
 
 // @ts-expect-error historical requests cannot override fixed messages
 port.request({ origin, exchanges: [], messages: [{ role: 'user', content: 'override' }] });
+
+const imageBasis: ModelExchangeBasis = { request: { messages: [{ role: 'user', content: [{ kind: 'image', mimeType: 'image/png', data: 'fixed-base64' }] }] }, catalog: { tools: [], digest: 'catalog', policyVersion: 'v1', imageContext: { retainLatestToolImages: 1 } } };
+expectType<number | undefined>(imageBasis.catalog.imageContext?.retainLatestToolImages);
+// @ts-expect-error the context policy is readonly fixed data
+imageBasis.catalog.imageContext!.retainLatestToolImages = 2;
+// @ts-expect-error policies use numeric counts, not callbacks
+const invalidImageBasis: ModelExchangeBasis = { ...imageBasis, catalog: { ...imageBasis.catalog, imageContext: { retainLatestToolImages: () => 1 } } };
+void invalidImageBasis;

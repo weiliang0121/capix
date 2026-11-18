@@ -144,7 +144,7 @@ test('strict JSON boundaries refuse hostile or excessive material before HTTP an
       },
     },
   );
-  for (const request of [accessor, cyclic, proxy, { messages, stream: undefined }, { messages, tools: [{ ...tool, parameters: { fn() {} } }] }, { messages: [{ role: 'user', content: 'x'.repeat(2 * 1024 * 1024) }] }, { messages, toolChoice: { name: 'not-registered' }, tools: [tool] }, { messages, tools: [tool, tool] }]) {
+  for (const request of [accessor, cyclic, proxy, { messages, stream: undefined }, { messages, tools: [{ ...tool, parameters: { fn() {} } }] }, { messages: [{ role: 'user', content: 'x'.repeat(64 * 1024 * 1024) }] }, { messages, toolChoice: { name: 'not-registered' }, tools: [tool] }, { messages, tools: [tool, tool] }]) {
     await assert.rejects(model.complete(request), (error) => error instanceof ProviderError && error.code === 'REQUEST' && !String(error).includes('not-registered'));
   }
   assert.equal(sends, 0);
@@ -155,15 +155,15 @@ test('strict JSON boundaries refuse hostile or excessive material before HTTP an
   assert.throws(() => requireModelReply(tooLarge), /byte limit/);
 });
 
-test('public JSON byte accounting includes escapes and keeps arrays within the exact encoded limit', () => {
+test('public feedback JSON byte accounting includes escapes and the exact encoded limit', () => {
   const limit = 2 * 1024 * 1024;
-  const base = { messages: [{ role: 'user', content: '' }] };
+  const base = { status: 'ok', content: [{ kind: 'text', text: '' }] };
   const overhead = Buffer.byteLength(JSON.stringify(base));
-  const request = { messages: [{ role: 'user', content: 'x'.repeat(limit - overhead) }] };
-  assert.equal(Buffer.byteLength(JSON.stringify(request)), limit);
-  assert.equal(requireModelRequest(request), request);
-  assert.throws(() => requireModelRequest({ messages: [{ role: 'user', content: request.messages[0].content + 'x' }] }), /byte limit/);
-  assert.throws(() => requireModelRequest({ messages: [{ role: 'user', content: '\u0000'.repeat(Math.ceil(limit / 6)) }] }), /byte limit/);
+  const result = { status: 'ok', content: [{ kind: 'text', text: 'x'.repeat(limit - overhead) }] };
+  assert.equal(Buffer.byteLength(JSON.stringify(result)), limit);
+  assert.equal(requireToolResult(result), result);
+  assert.throws(() => requireToolResult({ ...result, content: [{ kind: 'text', text: result.content[0].text + 'x' }] }), /byte limit/);
+  assert.throws(() => requireToolResult({ status: 'ok', content: [{ kind: 'text', text: '\u0000'.repeat(Math.ceil(limit / 6)) }] }), /byte limit/);
 });
 
 test('32 tool calls are accepted consistently and a 33rd cannot enter restored replies', async () => {

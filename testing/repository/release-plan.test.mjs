@@ -30,3 +30,27 @@ test('publication uses the exact verified artifact and preserves dependency grou
   await writeFile(join(directory, archive.file), 'different package bytes');
   await assert.rejects(verifiedPlan(plan, [archive], directory), /changed after verification/);
 });
+
+test('an independent Tool release selects only its 0.8.0 artifact from an inventory containing published 0.7.0 dependencies', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'release-plan-independent-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const archives = [];
+  for (const [name, version] of [
+    ['contracts', '0.7.0'],
+    ['structure', '0.7.0'],
+    ['tool', '0.8.0'],
+  ]) {
+    const content = `${name}@${version}`;
+    const file = `${name}-${version}.tgz`;
+    await writeFile(join(directory, file), content);
+    archives.push({ name: `@weiliang0121/capix-${name}`, version, file, sha256: createHash('sha256').update(content).digest('hex') });
+  }
+  const release = { kind: 'publish', name: '@weiliang0121/capix-tool', version: '0.8.0', access: 'public', tag: 'latest' };
+  const selected = await verifiedPlan({ version: 1, plan: [[release]] }, archives, directory);
+  assert.deepEqual(
+    selected.plan.map((group) => group.map(({ name, version }) => ({ name, version }))),
+    [[{ name: release.name, version: '0.8.0' }]],
+  );
+  assert.equal(selected.plan[0][0].tarball.path, 'tool-0.8.0.tgz');
+  await assert.rejects(verifiedPlan({ version: 1, plan: [[{ ...release, version: '0.7.0' }]] }, archives, directory), /version differs/);
+});

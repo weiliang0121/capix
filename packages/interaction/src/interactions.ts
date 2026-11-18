@@ -1,7 +1,7 @@
 import { isPromise } from 'node:util/types';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
-import { isNonBlankString } from './value.js';
+import { interactionDataLimits, isNonBlankString } from './value.js';
 import type { InteractionContract, InteractionOptions, InteractionPersistence, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { Interaction } from './interaction.js';
 import { InteractionProgress, unavailableProgressReader, validateProgressLimits } from './progress/buffer.js';
@@ -26,6 +26,7 @@ export interface InteractionChannel<Request, Reply, Delta = never> {
 
 export interface InteractionRegistration<Request, Reply, Delta = never> {
   readonly send: (request: Readonly<Request>, progress: InteractionPublisher<Delta>) => Reply | Promise<Reply>;
+  readonly limits?: InteractionOptions<Request, Reply>['limits'];
   readonly progress?: InteractionProgressLimits;
   readonly progressObservation?: ProgressReceiver<InteractionProgressFact>;
   readonly persistence?: InteractionPersistence<Request, Reply> & {
@@ -150,6 +151,7 @@ class RegisteredInteractions<Request, Reply, Delta> {
     this.#read = persistence?.read?.bind(persistence);
     const observation = registration.observation;
     this.#options = Object.freeze({
+      limits: interactionDataLimits(registration.limits),
       contract: Object.freeze({ key: contract.key, request: contract.request.bind(contract), reply: contract.reply.bind(contract) }),
       ...(persistence ? { persistence: Object.freeze({ create: persistence.create.bind(persistence), commit: persistence.commit.bind(persistence) }) } : {}),
       ...(observation ? { observation: Object.freeze({ receive: observation.receive.bind(observation), ...(observation.failed ? { failed: observation.failed.bind(observation) } : {}) }) } : {}),
