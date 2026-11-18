@@ -35,7 +35,8 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public",

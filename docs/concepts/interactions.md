@@ -20,7 +20,7 @@ sequenceDiagram
   C->>I: 启动固定请求
   I->>P: 发送一次
   C->>I: 局部等待
-  I-->>C: 等待到期，仍为 pending
+  I-->>C: 等待到期，返回 wait-expired
   P-->>I: 晚到反馈
   I->>I: 校验并保存反馈
   Note over C,I: 后续可按准确引用读取；旧调用不会复活

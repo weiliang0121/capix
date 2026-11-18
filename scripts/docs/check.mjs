@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, extname, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isDistributionFile, packages } from '../release/packages.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const docs = resolve(root, 'docs');
@@ -51,13 +52,15 @@ function checkSnippet(source, region, label) {
   assert.fail(`${label}: unclosed region ${region}`);
 }
 
-export function checkReference(file, href, { snippet = false, repositoryRoot = root, docsRoot = docs } = {}) {
-  if (!href || /^(?:[a-z][a-z\d+.-]*:|#|\/\/)/i.test(href)) return;
-  const target = decodeURIComponent(href.split(/[?#]/)[0]);
-  const path = target.startsWith('/') ? resolve(docsRoot, `.${target}`) : resolve(dirname(file), target);
+export function checkReference(file, href, { snippet = false, packageReadme = false, repositoryRoot = root, docsRoot = docs } = {}) {
+  const repositoryLink = /^https:\/\/github\.com\/weiliang0121\/capix\/(?:blob|tree)\/main\/(.*)$/.exec(href);
+  if (!href || (!repositoryLink && /^(?:[a-z][a-z\d+.-]*:|#|\/\/)/i.test(href))) return;
+  const target = decodeURIComponent((repositoryLink?.[1] ?? href).split(/[?#]/)[0]);
+  const path = repositoryLink ? resolve(repositoryRoot, target) : target.startsWith('/') ? resolve(docsRoot, `.${target}`) : resolve(dirname(file), target);
   const fromRoot = relative(repositoryRoot, path);
   assert.ok(fromRoot !== '..' && !fromRoot.startsWith('../'), `${file}: reference leaves public repository: ${href}`);
-  const candidates = snippet ? [path] : extname(path) ? [path] : [path, `${path}.md`, resolve(path, 'index.md')];
+  if (packageReadme && !repositoryLink) assert.ok(!target.startsWith('/') && isDistributionFile(relative(dirname(file), path)), `${file}: link is unavailable in the installed package: ${href}`);
+  const candidates = repositoryLink || packageReadme || snippet || extname(path) ? [path] : [path, `${path}.md`, resolve(path, 'index.md')];
   assert.ok(
     candidates.some((candidate) => existsSync(candidate)),
     `${relative(repositoryRoot, file)}: missing ${snippet ? 'snippet' : 'link'} ${href}`,
@@ -68,8 +71,25 @@ export function checkReference(file, href, { snippet = false, repositoryRoot = r
   }
 }
 
+export function checkPackageReadme(source, manifest) {
+  const { name } = manifest;
+  assert.equal(source.split('\n', 1)[0], `# ${name}`, `${name}: README title must match the package name`);
+  assert.ok(source.includes('Node.js `' + manifest.engines.node + '`'), `${name}: documented Node.js requirement must match package.json engines`);
+  assert.ok(
+    source.split('\n').some((line) => line.startsWith('npm install ') && line.split(/\s+/).includes(name)),
+    `${name}: missing npm install command`,
+  );
+  const entries = new Set(Object.keys(manifest.exports).map((subpath) => name + subpath.slice(1)));
+  const references = new Set();
+  for (const [, entry] of source.matchAll(/[`'"](@[\w-]+\/[\w./-]+)[`'"]/g)) {
+    if (entry === name || entry.startsWith(`${name}/`)) references.add(entry);
+  }
+  assert.deepEqual(references, entries, `${name}: documented entry points must match package.json exports`);
+}
+
 export async function checkDocs() {
-  const files = [...(await markdownFiles(docs)), resolve(root, 'README.md'), resolve(root, 'examples/README.md')];
+  const packageReadmes = new Map((await packages()).map(({ path, manifest }) => [resolve(path, 'README.md'), manifest]));
+  const files = [...(await markdownFiles(docs)), resolve(root, 'README.md'), resolve(root, 'examples/README.md'), ...packageReadmes.keys()];
   const snippets = new Set();
   const failures = [];
   const check = (file, href, options) => {
@@ -81,9 +101,11 @@ export async function checkDocs() {
   };
   for (const file of files) {
     const source = await readFile(file, 'utf8');
+    const manifest = packageReadmes.get(file);
+    if (manifest) checkPackageReadme(source, manifest);
     if (/(?:\.\.\/)+(?:capix-lab|capix-notes|capix-explorations)(?:\/|[\s`'"])/.test(source)) failures.push(`${relative(root, file)}: contains a private sibling repository path`);
     const prose = source.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
-    for (const match of prose.matchAll(/\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)) check(file, match[1]);
+    for (const match of prose.matchAll(/\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)) check(file, match[1], { packageReadme: Boolean(manifest) });
     for (const match of prose.matchAll(/^<<<\s+([^\s#{]+)(#[^\s{]+)?(?:\{[^}]*\})?(?:[ \t]*\[[^\]\n]+\])?\s*$/gm)) {
       check(file, `${match[1]}${match[2] ?? ''}`, { snippet: true });
       snippets.add(resolve(dirname(file), match[1]));

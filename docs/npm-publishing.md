@@ -1,6 +1,6 @@
 # npm 发布
 
-CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、README 和 LICENSE；源码仓库仍可保持私有。MIT 允许接收者使用、修改和再分发，保留相应版权及许可声明。压缩与去注释用于减少分发体积，不能保护 JavaScript 实现不被阅读。
+CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、README、该包的 CHANGELOG 和 LICENSE；源码仓库仍可保持私有。MIT 允许接收者使用、修改和再分发，保留相应版权及许可声明。压缩与去注释用于减少分发体积，不能保护 JavaScript 实现不被阅读。
 
 ## 范围与版本
 
@@ -12,7 +12,7 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 后续包名仍按可复用职责确定，必要限定词放在主体之前；不把 `server`、`services`、`apps` 等源码目录自动映射成发布名称。预设、集成与 UI 只有在职责和公开边界确定后才单独命名，参考装配不直接变成产品包。
 
-新增公开包需要明确职责、公开出口、独立测试与许可，再加入分发清单和版本组；源码目录或文档示例不自动成为发布包。
+新增公开包需要明确职责、公开出口、独立测试与许可，再加入公开包分发清单。
 
 ## 本地验证
 
@@ -54,7 +54,7 @@ Changesets 根据实际变更创建 `changeset-release/main` 版本 PR。维护�
 
 ## 候选分发
 
-`pnpm integration:pack` 干净构建 18 个公开包，生成 `.capix/integration` tarball 批次，不发布 npm。manifest 记录源码提交、dirty 状态、源文件摘要和每个产物的 SHA256；文件白名单仅含编译产物、声明、README 与许可。
+`pnpm integration:pack` 干净构建 18 个公开包，生成 `.capix/integration` tarball 批次，不发布 npm。manifest 记录源码提交、dirty 状态、源文件摘要和每个产物的 SHA256；文件白名单包含包清单、编译产物、声明、README、CHANGELOG 与许可。
 
 `pnpm integration:check` 在仓库外临时消费者中安装这批包，核对依赖、公开出口、运行结果和类型。消费方若要接入候选，须按准确 manifest 校验完整批次并维护自己的锁文件，不能混用不同源码批次的同版本包，也不能绕过公开出口读取私有 src/dist。
 

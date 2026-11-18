@@ -1,21 +1,34 @@
 # @weiliang0121/capix-measurement
 
-Message usage measurement and resource contracts for CAPiX.
+按消息对象身份统计材料使用次数，并提供受调用窗口控制的计数写入端点。
 
-`MessageUsage` consumes the public Transcript `Message` type. Counts use object identity: each selected message is counted once per `add` call, equal text in distinct objects counts separately, and each instance owns its independent counts. Measurement does not depend on transport DTOs.
+## 安装与入口
 
-ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
 
 ```sh
 npm install @weiliang0121/capix-measurement
 ```
 
-## Public entry points
+- `@weiliang0121/capix-measurement` 导出 MessageUsage 和 MessageUsageResource.record。
 
-- `@weiliang0121/capix-measurement`
+## 用法
 
-This package is part of CAPiX. The npm distribution contains compiled JavaScript, type declarations, and this package's MIT license. Reference services and client applications are not included in this package or the initial npm release.
+```ts
+import { MessageUsage } from '@weiliang0121/capix-measurement';
 
-## License
+const usage = new MessageUsage();
+const message = { role: 'user', content: '你好' } as const;
+usage.add([message, message]);
+usage.get(message); // 1
+usage.add([message]);
+usage.get(message); // 2
+```
 
-MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
+`add` 接受 Transcript 包公开的 Message 类型。每次调用内按对象身份去重，正文相同的不同对象分别计数。每个 MessageUsage 实例维护自己的计数。
+
+## 契约与版本记录
+
+- [详细契约](https://github.com/weiliang0121/capix/blob/main/docs/content-entities-packages.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/measurement/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

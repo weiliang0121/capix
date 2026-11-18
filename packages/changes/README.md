@@ -1,25 +1,38 @@
 # @weiliang0121/capix-changes
 
-Change capture and delivery for CAPiX entities.
+为 CAPiX 实体提供类型化领域事实、变更捕获与转交。
 
-ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
+## 安装与入口
+
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
 
 ```sh
 npm install @weiliang0121/capix-changes
 ```
 
-## Public entry points
+`@weiliang0121/capix-changes` 是唯一公共入口，提供 `FactType`、`Fact`、`ChangeBuffer`、`captureChange`、`publishFact` 和 `ProgressChannel` 等捕获与消费工具。
 
-- `@weiliang0121/capix-changes`
+## 用法
 
-This package is part of CAPiX. The npm distribution contains compiled JavaScript, type declarations, and this package's MIT license. Reference services and client applications are not included in this package or the initial npm release.
+```ts
+import { FactType } from '@weiliang0121/capix-changes';
 
-## Typed facts
+const changed = new FactType<{ revision: number }>('note.changed');
+const other = new FactType<{ revision: number }>('note.changed');
+const fact = changed.create({ revision: 1 });
 
-`FactType<Event>` creates an opaque, frozen `Fact` for local forwarding. Only the exact token's `match(fact, consume)` reads its deeply fixed `Stable<Event>` body; names describe tokens and do not establish identity.
+const matched = changed.match(fact, (event) => console.log(event.revision)); // 输出 1
+const unmatched = other.match(fact, () => console.log('未执行'));
+console.log(matched, unmatched); // true false
+```
 
-`Fact` is an in-process carrier with a private symbol marker and WeakMap evidence. It is not a formal delivery value or checkpoint payload: `stableValue(fact)` rejects it rather than cloning away its identity. Read the body through `match` and explicitly encode that stable data when saving it. Copying the marker does not grant access to a fact's body.
+`FactType.create` 固定正文并返回不可变的进程内载体。创建该事实的 `FactType` 实例同步调用消费者并返回 `true`；其他实例即使同名，也直接返回 `false`，跳过消费者。消费者抛错会传播，返回 thenable 会触发 `TypeError`。载体的正文依据由私有 `WeakMap` 保存，复制其 symbol 标记无法读取正文。需要持久化或传输时，先通过 `match` 读取 `Stable<Event>` 正文，再显式编码；对载体调用 `stableValue` 会被拒绝。
 
-## License
+`ChangeBuffer` 暂存待转交事实，`take()` 取出当前批次并开始下一批。生产者可以在变更落实后用 `publishFact` 分别尝试必要捕获与可选消费。
 
-MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
+## 契约与版本记录
+
+- [领域事实与准确操作](https://github.com/weiliang0121/capix/blob/main/docs/resources-package.md#领域事实与准确操作)
+- [内容实体与独立包](https://github.com/weiliang0121/capix/blob/main/docs/content-entities-packages.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/changes/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

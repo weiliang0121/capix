@@ -1,10 +1,23 @@
-# ModelExchanges
+# @weiliang0121/capix-model-exchanges
 
-`@weiliang0121/capix-model-exchanges` 保存一次模型对话的固定起点，以及从该起点累积的完整回复和工具反馈。起点包括初始消息、请求选项和模型可见的工具目录；Node、执行函数及资源权限仍留在结构与资源中。
+ModelExchanges 保存固定的模型请求起点、完整回复及按调用 ID 接纳的工具反馈，可按指定交换前缀重建请求。
+
+## 安装与入口
+
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
+
+```sh
+npm install @weiliang0121/capix-model-exchanges
+```
+
+- `@weiliang0121/capix-model-exchanges` 提供 `ModelExchanges` 实体、资源端点、View 来源、持久化契约与引用校验。
+
+## 用法
 
 ```ts
-const exchanges = new ModelExchanges({ persistence });
-const resources = new Resources().register(new Resource(exchanges), ModelExchangeResource);
+import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
+
+const exchanges = new ModelExchanges();
 
 // ID 由宿主或业务固定。需要恢复时，先在 prepared CP 保存 ID，再 begin。
 const origin = exchanges.begin('prepared-origin-id', {
@@ -19,7 +32,7 @@ const origin = exchanges.begin('prepared-origin-id', {
   },
 });
 
-// 模型子调用只传引用；发送资源在自己的访问窗口内展开请求。
+// 按起点与有序交换引用重建请求。
 const input = { origin, exchanges: [] };
 const request = exchanges.request(input);
 // request 包含固定初始消息、选项、工具目录及所选交换前缀。
@@ -31,7 +44,7 @@ const request = exchanges.request(input);
 
 ```text
 ModelExchanges
-  ├─ origin A：初始请求 + 模型可见目录（固定）
+  ├─ origin A：初始请求 + 工具定义、目录摘要、策略版本及可选图片策略
   │    ├─ exchange 1：完整模型回复 + 按 toolCallId 固定的反馈
   │    └─ exchange 2：完整模型回复 + 按 toolCallId 固定的反馈
   └─ origin B：另一份固定起点及其交换
@@ -44,7 +57,7 @@ ModelExchangeResource             ModelExchangeViewSource
 
 - `begin(id, basis)` 固定整个纯数据输入。同 ID、同内容只确认，不新增提交或变化；不同内容明确拒绝。没有回复的空起点也进入持久序列。`origin(ref)` 核对集合、ID 和完整起点摘要后返回固定内容。
 - `basis.request` 支持 ModelRequest 的消息与选项，不接受 `tools` 或 `exchanges`；目录统一放在 `basis.catalog`，历史由实体组织。选项保持原样，不隐含默认覆盖。空 `catalog.tools` 表达无工具模型调用，重建请求省略 `tools` 字段。
-- `catalog.digest` 和 `policyVersion` 由执行结构提供兼容依据；实体另外计算 `origin.digest`，覆盖完整初始请求和目录。目录只包含模型可见的协议数据，不能放入 Node、映射回调或端点。恢复时，执行方仍须核对当前结构与保存目录是否兼容，实体不会从函数推导执行语义。
+- `catalog.digest` 和 `policyVersion` 由执行结构提供兼容依据；实体另外计算 `origin.digest`，覆盖完整初始请求和目录。构造模型请求时只将 `catalog.tools` 作为工具定义发送。摘要、策略版本及可选的 `imageContext` 留在起点中，图片策略用于投影工具反馈。目录仅接受纯数据。恢复时，执行方仍须核对当前结构与保存目录是否兼容，实体不会从函数推导执行语义。
 - `closed(origin, refs)` 要求引用属于同一起点、revision 准确、顺序为该起点最前面的 K 个交换，且每个工具反馈槽完整。允许选择较短的历史前缀以重建原请求；不能重排、跳过中间项或重复同一交换。它只确认反馈完整性，不判断当前业务能否继续。
 - `request({ origin, exchanges })` 组合起点与明确前缀，执行 Provider 的完整请求校验，包括终止原因的续接资格和整体请求限额。它不发送请求，也不授权重试；查询旧前缀不等于恢复资格成立。实体只保存接纳顺序，模型子输入与实际发送历史的因果一致性仍由调用和宿主核验。
 
@@ -93,4 +106,10 @@ commit(change) {
 
 `new ModelExchangeViewSource(exchanges, origin?)` 可读取全体或一个准确起点的交换。起点本身不是自动加入 View 的材料，内容选择仍由策略决定。版本覆盖起点建立、成员与反馈变化；`inspect/read` 只读取请求的 keys，旧快照保持原值，来源版本变化后读取拒绝。退出视图不删除事实。
 
-包内测试覆盖起点固定、请求重建、预算、持久未知、格式拒绝和 View；Runtime 包的集成测试使用真实 Scene/Node/Group、资源、Interaction 与 CP，验证普通登记和新 Runner 恢复，核对缺失或变化的依据不会触发重发。[Tool](../tool/README.md) 提供公开 Group 预设；不把离线恢复验证当作外部工具效果的恢复承诺。
+包内测试覆盖起点固定、请求重建、预算、持久未知、格式拒绝和 View；Runtime 包的集成测试使用真实 Scene/Node/Group、资源、Interaction 与 CP，验证普通登记和新 Runner 恢复，核对缺失或变化的依据不会触发重发。[Tool](https://github.com/weiliang0121/capix/blob/main/packages/tool/README.md) 提供公开 Group 预设；不把离线恢复验证当作外部工具效果的恢复承诺。
+
+## 契约与版本记录
+
+- [原生工具调用契约](https://github.com/weiliang0121/capix/blob/main/docs/native-tool-integration.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/model-exchanges/CHANGELOG.md)
+- [MIT 许可证](LICENSE)

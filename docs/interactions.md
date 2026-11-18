@@ -20,20 +20,20 @@ const interactions = new Interactions().register(contract, {
 const channel = interactions.bind(contract);
 const reference = channel.start('hello');
 const status = await channel.wait(reference, { waitMs: 1000 });
-// status 为 received 或 pending；pending 不表示发送失败。
+// status.kind 为 received、wait-expired 或 unavailable。
 ```
 
 注册按准确契约对象匹配，key 也必须唯一。bind 不创建请求；同 key 的另一个对象不能替代已登记契约。参考值含 id 和 contract，用于准确读取，不自动授权某次业务恢复。
 
 请求与反馈正文在契约转换前后分别捕获为有界 JSON 数据（每域深度 64、100000 值，默认文本与键合计 16 Mi UTF-16 代码单元），复制冻结。options / registration 的 `limits.requestTextUnits`、`limits.replyTextUnits` 可分别配置至 `MAX_INTERACTION_TEXT_UNITS`（64 Mi），构造和登记时固定配置。冷恢复按相同分域规则重新检查请求、反馈正文、外壳与失败诊断，不把合法独立正文重新塞入共享文本预算。拒绝 getter、Proxy、函数、活实体、循环和非 JSON 数据。固定请求经同步 persistence.create 成功后实体才可用；start 保存发送登记后仅调用一次发送者。发送返回后固定并检查反馈，持久提交成功才通知等待者。started 只表达本地意图，不能证明远端执行完成。
 
-反馈非破坏读取，多个读者不争抢消费槽位。同内容反馈确认不覆盖结果；不同反馈拒绝。业务解释失败不会删除已保存反馈。PersistenceError 保留准确故障身份，不能通过重新执行外部工作来修复未知保存结果。
+反馈非破坏读取，多个读者不争抢消费槽位。同 ID、同正文的反馈确认不覆盖结果；不同反馈拒绝。直接调用 receive 时，反馈校验失败在提交前抛错，原状态保持不变。start 的发送者抛错或返回非法反馈时，若尚无已接纳反馈，会尝试提交失败诊断。成功提交后可读到 unavailable；提交本身失败则报告持久化故障。业务解释失败不会删除已保存反馈。PersistenceError 保留准确故障身份，不能通过重新执行外部工作来修复未知保存结果。
 
 一次发送指 Interaction 仅调用一次登记的 send，不替任意外部协议承诺一次 HTTP。发送者可显式采用 [Provider 请求重试](../packages/model-provider/README.md#显式请求重试)，全部尝试与等待仍属于同一次 send，最终只返回一份反馈。Interaction 不选择重试策略，不因反馈保存失败重启 send，也不从历史 pending 推断可以重发。
 
 ## 局部等待与宿主关闭
 
-`wait` 的 waitMs 只限制这次等待，signal 只终止当前读者。等待到期得到 pending；取消后发送仍可保存晚到反馈。发送者自身的总超时和停止机制由宿主实现，不能将 Invocation.signal 隐式用作独立发送的所有权。
+`wait` 的 waitMs 只限制这次等待，signal 只终止当前读者。等待到期返回 `wait-expired`。signal 中止时，等待的 Promise 以 `signal.reason` 拒绝，发送者仍可保存晚到反馈。活动交互的 `read()` 在反馈提交前可返回 `pending`。发送者自身的总超时和停止机制由宿主实现，不能将 Invocation.signal 隐式用作独立发送的所有权。
 
 Interactions.active 表达准备或发送仍在进行；pendingCount 统计已经安装且未 settled 的交互，包含反馈校验与持久化，不含只读恢复。它们不构成并发限额或队列。默认保留每个注册最近 128 个已结束交互，活动交互不淘汰；可配置 retained。内存淘汰后的 unknown 不证明从未发送。
 
@@ -41,9 +41,9 @@ Interactions.active 表达准备或发送仍在进行；pendingCount 统计已�
 
 ## 保存与恢复
 
-同步持久端口负责固定请求、contract、revision 和反馈状态；提交使用 expectedRevision，不能改变原请求或已收反馈。注册可以提供 `persistence.read(id)` 按准确引用静默载入，不重新调用发送者。
+同步持久端口负责固定请求、contract、revision 和反馈状态；提交使用 expectedRevision，不能改变原请求或已收反馈。状态不保存原数据预算；直接调用 `Interaction.restore(state, { contract, limits })` 按本次宿主提供的预算（省略时取默认值）重新捕获和校验。注册读取复用其登记时固定的预算。注册可以提供 `persistence.read(id)` 按准确引用静默载入，不重新调用发送者。
 
-已保存反馈可交给新调用读取解释；旧调用的失败或取消仍保留。只有 prepared/started 而没有反馈的历史交互明确报告 restored-pending，不无限等待已经不存在的发送者，也不重新发送。保存失败诊断不等于获得活 Error 或远端回查能力。
+已保存反馈可交给新调用读取解释；旧调用的失败或取消仍保留。恢复出的 prepared/started 状态如果缺少反馈和失败诊断，`read()` 和 `wait()` 都会返回 `unavailable`，错误码为 `INTERACTION_RESTORED_PENDING`。保存失败诊断不等于获得活 Error 或远端回查能力。
 
 单次启动检查和版本条件写入分别保护本地不变量，不承诺跨进程租约、接管或远端恰好一次。响应已到达但尚未保存时退出可能丢失反馈；发送登记成立而父 CP 尚未保存引用时也可能缺少关联。缺失引用、反馈或无法确认外部效果都不能猜测补造。
 

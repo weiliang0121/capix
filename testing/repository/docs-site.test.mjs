@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { checkReference } from '../../scripts/docs/check.mjs';
+import { checkPackageReadme, checkReference } from '../../scripts/docs/check.mjs';
 
 test('public site references reject private repository paths and missing example imports', async () => {
   const root = await mkdtemp(join(tmpdir(), 'capix-docs-'));
@@ -18,9 +18,25 @@ test('public site references reject private repository paths and missing example
     assert.throws(() => checkReference(file, '../../private/README.md', options), /leaves public repository/);
     assert.throws(() => checkReference(file, '../examples/missing.mjs', { ...options, snippet: true }), /missing snippet/);
     assert.throws(() => checkReference(file, './missing.md', options), /missing link/);
+    const readme = join(root, 'packages', 'example', 'README.md');
+    const packageOptions = { ...options, packageReadme: true };
+    const exampleUrl = 'https://github.com/weiliang0121/capix/blob/main/examples/';
+    checkReference(readme, exampleUrl + 'hello.mjs', packageOptions);
+    assert.throws(() => checkReference(readme, exampleUrl + 'removed.mjs', packageOptions), /missing link/);
+    assert.throws(() => checkReference(readme, '../../examples/hello.mjs', packageOptions), /unavailable in the installed package/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('package README names its npm package and its current public entry points', () => {
+  const name = '@weiliang0121/capix-example';
+  const manifest = { name, engines: { node: '>=22.23.2' }, exports: { '.': {}, './data': {} } };
+  const readme = [`# ${name}`, 'Node.js `>=22.23.2`', `npm install ${name}`, '`@weiliang0121/capix-example` and `@weiliang0121/capix-example/data`'].join('\n');
+  checkPackageReadme(readme, manifest);
+  assert.throws(() => checkPackageReadme(readme.replace('22.23.2', '18'), manifest), /Node.js requirement/);
+  assert.throws(() => checkPackageReadme(readme.replace('npm install', 'install'), manifest), /missing npm install/);
+  assert.throws(() => checkPackageReadme(readme.replace('/data', '/old'), manifest), /documented entry points/);
 });
 
 test('public snippet regions must exist once, close correctly and contain rendered content', async () => {

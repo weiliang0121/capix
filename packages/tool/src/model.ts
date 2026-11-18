@@ -24,7 +24,7 @@ export interface ToolModelSource {
 }
 export interface ToolInteractionRecovery {
   read(id: string): InteractionState<ModelRequest, ModelReply> | undefined;
-  /** Same fixed data budgets as the host Interaction registration; rechecked on cold reads. */
+  /** Limits used to validate persisted requests and replies during cold reads. */
   readonly interactionLimits?: InteractionDataLimits;
 }
 

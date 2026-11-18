@@ -79,11 +79,32 @@ test('deep subtree projections require the complete ancestor path and its live b
   assert.throws(() => validateExecutionRecordSnapshot(missingRootBoundary));
 });
 
+test('transcript projections validate source identity, revision, time and the recorded half-open range', () => {
+  const value = snapshot();
+  const owner = value.execution;
+  const append = { action: 'append', start: 4, end: 6 };
+  const segment = { action: 'segment', previousStart: 1, start: 4, end: 6 };
+  const record = { id: 'transcript-record', callId: owner.id, parentId: owner.id, contextId: owner.contextId, transcriptId: 'conversation', occurredAt, revision: 7, value: append };
+  for (const body of [append, segment]) validateExecutionRecordSnapshot({ ...value, transcripts: [{ ...record, value: body }] });
+  for (const patch of [{ id: ' ' }, { executionId: '' }, { value: { action: 'append', start: 0, messages: [] } }, { transcriptId: ' ' }, { revision: 0 }, { revision: 1.5 }, { revision: Number.MAX_SAFE_INTEGER + 1 }, { occurredAt: 'invalid' }, { value: null }, { value: { ...append, action: 'unknown' } }, { value: { ...append, start: -1 } }, { value: { ...append, end: 4 } }, { value: { ...append, end: Infinity } }, { value: { ...segment, previousStart: 4 } }, { value: { ...segment, previousStart: -1 } }, { value: { ...segment, previousStart: undefined } }, { value: { ...segment, start: 6 } }]) {
+    assert.throws(() => validateExecutionRecordSnapshot({ ...value, transcripts: [{ ...record, ...patch }] }));
+  }
+});
+
 test('callable snapshots accept narrow memory display records and reject old or metadata-bearing bodies', () => {
   const value = snapshot();
   const memory = { id: 'memory-record', kind: 'memory', memoryId: 'memory', memoriesId: 'collection', sequence: 1, parentId: value.execution.id, callId: value.execution.id, contextId: value.execution.contextId, value: { action: 'create', result: { content: 'current' } } };
   value.memories.push(memory);
   validateExecutionRecordSnapshot(value);
+  validateExecutionRecordSnapshot({ ...value, archive: { sourceId: 'archived-source', revision: 1, state: 'sealed' }, memories: [{ ...memory, sequence: 7, operationId: value.execution.id }] });
+  for (const field of ['memoryId', 'memoriesId', 'sequence']) {
+    const incomplete = { ...memory };
+    delete incomplete[field];
+    assert.throws(() => validateExecutionRecordSnapshot({ ...value, memories: [incomplete] }), /memory/);
+  }
+  for (const patch of [{ memoryId: '  ' }, { memoriesId: 1 }, { sequence: 0 }, { sequence: 1.5 }, { sequence: '1' }, { sequence: Number.MAX_SAFE_INTEGER + 1 }, { operationId: null }, { operationId: ' ' }]) {
+    assert.throws(() => validateExecutionRecordSnapshot({ ...value, memories: [{ ...memory, ...patch }] }), /memory/);
+  }
   for (const body of [
     { action: 'create', change: 'old', sourceIndexes: [0], result: { topic: 'old', content: 'current', sourceIndexes: [0] } },
     { action: 'create', result: { content: 'current', metadata: {} } },

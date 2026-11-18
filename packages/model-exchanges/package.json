@@ -22,7 +22,7 @@
     "@weiliang0121/capix-resources": "workspace:*",
     "@weiliang0121/capix-view": "workspace:*"
   },
-  "description": "Model reply and tool feedback entities for CAPiX.",
+  "description": "Fixed request origins, model exchanges, and tool feedback for CAPiX.",
   "license": "MIT",
   "author": "wei.liang (https://github.com/weiliang0121)",
   "repository": {
@@ -39,7 +39,8 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public",

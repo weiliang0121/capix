@@ -1,19 +1,30 @@
 # @weiliang0121/capix-diagnostics
 
-Bounded diagnostics and persistence failures for CAPiX.
+将异常转换为有界诊断值，并标识必要持久化端口的失败。
 
-ES modules and TypeScript declarations. Requires Node.js 22.23.2 or newer.
+## 安装与入口
+
+运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
 
 ```sh
 npm install @weiliang0121/capix-diagnostics
 ```
 
-## Public entry points
+- `@weiliang0121/capix-diagnostics` 导出 RuntimeErrorHelper、PersistenceError，以及 contracts 的 RuntimeError 和诊断值类型。
 
-- `@weiliang0121/capix-diagnostics`
+## 用法
 
-This package is part of CAPiX. The npm distribution contains compiled JavaScript, type declarations, and this package's MIT license. Reference services and client applications are not included in this package or the initial npm release.
+```ts
+import { PersistenceError, RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 
-## License
+const failure = new PersistenceError('notes.commit', new Error('存储连接中断'));
+const diagnostic = RuntimeErrorHelper.format(failure);
+```
 
-MIT. Copyright (c) 2026 wei.liang. See [LICENSE](LICENSE).
+`failure.operation` 标识失败的端口操作，原始异常保留在 `failure.cause`。记录或展示层可以读取有界的诊断值。
+
+## 契约与版本记录
+
+- [详细契约](https://github.com/weiliang0121/capix/blob/main/docs/exceptions.md)
+- [按版本查阅 CHANGELOG](https://github.com/weiliang0121/capix/blob/main/packages/diagnostics/CHANGELOG.md)
+- [MIT 许可证](LICENSE)
