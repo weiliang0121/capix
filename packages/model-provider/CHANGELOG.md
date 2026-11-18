@@ -1,5 +1,11 @@
 # @weiliang0121/capix-model-provider
 
+## 0.9.1
+
+### Patch Changes
+
+- cdca1c9: 更新包 README 中的安装命令、公开入口与用法说明，并在 npm 包中附带该包的 CHANGELOG.md，供离线查阅版本变化。
+
 ## 0.9.0
 
 ### Minor Changes
