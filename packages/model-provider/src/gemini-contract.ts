@@ -45,7 +45,7 @@ export function checkGeminiReply(native: Record<string, unknown>, { id, model, o
   if (!Array.isArray(native.parts)) throw new TypeError('Invalid Gemini parts');
   if (native.promptBlocked !== undefined && (native.promptBlocked !== true || native.parts.length || termination.reason === 'BLOCK_REASON_UNSPECIFIED')) throw new TypeError('Invalid Gemini prompt block');
   if (termination.kind !== geminiTerminationKind(termination.reason, native.promptBlocked === true) || termination.reason === 'FINISH_REASON_UNSPECIFIED') throw new TypeError('Invalid Gemini termination');
-  if (usage && (usage.totalTokens !== usage.promptTokens + usage.completionTokens || usage.promptCacheMissTokens !== undefined)) throw new TypeError('Invalid Gemini usage counts');
+  if (usage && (usage.totalTokens !== usage.promptTokens + usage.completionTokens || usage.promptCacheMissTokens !== undefined || usage.promptCacheWriteTokens !== undefined)) throw new TypeError('Invalid Gemini usage counts');
   let next = 0;
   let signed = false;
   const wireIds = new Set<string>();

@@ -6,7 +6,7 @@ const request = { messages: [{ role: 'user', content: 'Lookup' }] };
 const reasoning = { id: 'rs_1', type: 'reasoning', summary: [{ type: 'summary_text', text: 'plan' }], content: [{ type: 'reasoning_text', text: 'detail' }], encrypted_content: 'opaque' };
 const message = { id: 'msg_1', type: 'message', role: 'assistant', status: 'completed', phase: 'commentary', content: [{ type: 'output_text', text: '查询', annotations: [] }] };
 const call = { id: 'fc_1', type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: ' {bad JSON', status: 'completed' };
-const response = { object: 'response', id: 'resp_1', model: 'served-model', status: 'completed', error: null, store: false, previous_response_id: null, incomplete_details: null, output: [reasoning, message, call], usage: { input_tokens: 7, output_tokens: 5, total_tokens: 12, input_tokens_details: { cached_tokens: 4 }, output_tokens_details: { reasoning_tokens: 3 } } };
+const response = { object: 'response', id: 'resp_1', model: 'served-model', status: 'completed', error: null, store: false, previous_response_id: null, incomplete_details: null, output: [reasoning, message, call], usage: { input_tokens: 7, output_tokens: 5, total_tokens: 12, input_tokens_details: { cached_tokens: 4, cache_write_tokens: 2 }, output_tokens_details: { reasoning_tokens: 3 } } };
 
 function provider(fetch, options) {
   return new OpenAIResponsesProvider({ endpoint: 'https://offline.invalid/v1/responses', apiKey: 'key', model: 'model-alias', bindingId: 'fixture', fetch, ...options });
@@ -76,7 +76,7 @@ test('Responses JSON and fragmented SSE preserve ordered reasoning, phase, item 
     { kind: 'message', id: 'msg_1', status: 'completed', phase: 'commentary', content: [{ kind: 'output_text', index: 0 }] },
     { kind: 'function_call', id: 'fc_1', status: 'completed', index: 1 },
   ]);
-  assert.deepEqual(json.usage, { promptTokens: 7, completionTokens: 5, totalTokens: 12, promptCacheHitTokens: 4 });
+  assert.deepEqual(json.usage, { promptTokens: 7, completionTokens: 5, totalTokens: 12, promptCacheHitTokens: 4, promptCacheWriteTokens: 2 });
   assert.ok(Object.isFrozen(json.native.items[0].summary));
 });
 

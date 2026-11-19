@@ -68,9 +68,9 @@ function checkReply(value: unknown): asserts value is ModelReply {
     }
   }
   if (value.usage !== null) {
-    shape(value.usage, ['promptTokens', 'completionTokens', 'totalTokens'], ['promptCacheHitTokens', 'promptCacheMissTokens']);
-    const { promptTokens, completionTokens, totalTokens, promptCacheHitTokens: hit, promptCacheMissTokens: miss } = value.usage;
-    if (!count(promptTokens) || !count(completionTokens) || !count(totalTokens) || (hit !== undefined && (!count(hit) || hit > promptTokens)) || (miss !== undefined && (!count(miss) || miss > promptTokens)) || (typeof hit === 'number' && typeof miss === 'number' && hit !== promptTokens - miss)) throw new TypeError('Invalid model usage counts');
+    shape(value.usage, ['promptTokens', 'completionTokens', 'totalTokens'], ['promptCacheHitTokens', 'promptCacheMissTokens', 'promptCacheWriteTokens']);
+    const { promptTokens, completionTokens, totalTokens, promptCacheHitTokens: hit, promptCacheMissTokens: miss, promptCacheWriteTokens: write } = value.usage;
+    if (!count(promptTokens) || !count(completionTokens) || !count(totalTokens) || (hit !== undefined && (!count(hit) || hit > promptTokens)) || (miss !== undefined && (!count(miss) || miss > promptTokens)) || (write !== undefined && (!count(write) || write > promptTokens)) || (typeof hit === 'number' && typeof miss === 'number' && hit !== promptTokens - miss)) throw new TypeError('Invalid model usage counts');
   }
   protocol.check(value.native, { id: value.id, model: value.model, output: value.output as ModelOutput[], termination: { kind, reason: value.termination.reason }, usage: value.usage as ModelUsage | null }, calls.size);
 }

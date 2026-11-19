@@ -28,7 +28,7 @@ async function complete(transport, usage) {
 }
 
 for (const transport of ['json', 'sse-attached', 'sse-separate']) {
-  test(`${transport} preserves optional reported DeepSeek cache usage without inventing missing counts`, async () => {
+  test(`${transport} preserves optional reported cache usage without inventing missing counts`, async () => {
     for (const [fields, normalized] of [
       [{}, {}],
       [{ prompt_cache_hit_tokens: 0 }, { promptCacheHitTokens: 0 }],
@@ -45,8 +45,15 @@ for (const transport of ['json', 'sse-attached', 'sse-separate']) {
         { prompt_cache_hit_tokens: 12, prompt_cache_miss_tokens: 8 },
         { promptCacheHitTokens: 12, promptCacheMissTokens: 8 },
       ],
-      // Other providers' fields do not implicitly become DeepSeek cache counts.
-      [{ prompt_tokens_details: { cached_tokens: 10 } }, {}],
+      [{ prompt_tokens_details: { cached_tokens: 10 } }, { promptCacheHitTokens: 10 }],
+      [{ prompt_tokens_details: { cached_tokens: 0 } }, { promptCacheHitTokens: 0 }],
+      [{ prompt_tokens_details: { cached_tokens: null } }, {}],
+      [{ prompt_tokens_details: null }, {}],
+      [{ prompt_cache_hit_tokens: 0, prompt_tokens_details: { cached_tokens: 4 } }, { promptCacheHitTokens: 0 }],
+      [
+        { prompt_cache_miss_tokens: 8, prompt_tokens_details: { cached_tokens: 12 } },
+        { promptCacheMissTokens: 8, promptCacheHitTokens: 12 },
+      ],
     ]) {
       const reply = await complete(transport, { ...baseUsage, ...fields });
       assert.deepEqual(reply.usage, { ...expectedUsage, ...normalized });
@@ -64,6 +71,8 @@ for (const transport of ['json', 'sse-attached', 'sse-separate']) {
     for (const field of ['prompt_cache_hit_tokens', 'prompt_cache_miss_tokens']) {
       for (const value of [-1, 1.5, '2', null, Number.MAX_SAFE_INTEGER + 1, 21]) invalid.push({ [field]: value });
     }
+    for (const value of [-1, 1.5, '2', Number.MAX_SAFE_INTEGER + 1, 21]) invalid.push({ prompt_tokens_details: { cached_tokens: value } });
+    invalid.push({ prompt_tokens_details: [] }, { prompt_tokens_details: { cached_tokens: 10 }, prompt_cache_miss_tokens: 11 });
     invalid.push({ prompt_cache_hit_tokens: 10, prompt_cache_miss_tokens: 9 }, { prompt_cache_hit_tokens: 10, prompt_cache_miss_tokens: 11 });
     for (const fields of invalid) await assert.rejects(complete(transport, { ...baseUsage, ...fields }), (error) => error instanceof ProviderError && error.code === 'ENVELOPE');
   });

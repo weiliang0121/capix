@@ -38,6 +38,17 @@ test('offline validation enforces a bijection between the native layout and orde
   }
 });
 
+test('stored Messages cache writes stay within the logical prompt and missing counts remain absent', () => {
+  const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10, promptCacheHitTokens: 3 };
+  for (const fields of [{}, { promptCacheWriteTokens: 0 }, { promptCacheWriteTokens: 5 }]) {
+    const stored = { ...reply, usage: { ...usage, ...fields } };
+    assert.deepEqual(requireModelReply(JSON.parse(JSON.stringify(stored))), stored);
+  }
+  for (const count of [6, -1, 0.5, '1', null, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => requireModelReply({ ...reply, usage: { ...usage, promptCacheWriteTokens: count } }), TypeError);
+  }
+});
+
 test('Messages object inputs and layout are passive JSON before any protocol access', () => {
   let calls = 0;
   class ActiveArray extends Array {
