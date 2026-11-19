@@ -88,6 +88,35 @@ test('Gemini replays whole signed parts and closes same-name parallel calls by t
   assert.throws(() => new GeminiGenerateContentProvider({ ...config, bindingId: 'another' }).inspectRequest(next), { code: 'REQUEST' });
 });
 
+test('Gemini reserves native message envelopes for a new or replaced context message', () => {
+  const { provider } = fixture();
+  const user = { role: 'user', content: 'question' };
+  const system = { role: 'system', content: '' };
+  const escaped = '"\\雪\n'.repeat(12);
+  const bound = (before, after, mutableContext) => {
+    const base = provider.inspectRequest({ messages: before });
+    const actual = provider.inspectRequest({ messages: after });
+    const contextGrowthBytes = Math.max(0, actual.requestBytes - base.requestBytes);
+    const reserved = provider.reserveWireBytes({ messages: before }, { feedback: [], contextGrowthBytes, ...(mutableContext ? { mutableContext } : {}) });
+    assert.ok(reserved >= actual.wireBytes, `reserved ${reserved}, actual ${actual.wireBytes}, common growth ${contextGrowthBytes}`);
+  };
+  for (const content of ['', escaped]) {
+    bound([user], [user, { role: 'user', content }]);
+    bound([user], [{ role: 'system', content }, user]);
+    bound([system, user], [system, user, { role: 'assistant', content }]);
+    bound([system, user, { role: 'user', content: '' }], [system, user, { role: 'user', content }], true);
+  }
+  for (const role of ['system', 'user', 'assistant']) {
+    const parts = Array(32).fill(text(''));
+    const current = { role, content: parts };
+    const replacement = { role, content: 'x'.repeat(JSON.stringify(parts).length - 2) };
+    const withContext = (msg) => (role === 'system' ? [system, msg, user] : [system, user, msg]);
+    bound(withContext(current), withContext(replacement), true);
+  }
+  const unchanged = { messages: [user] };
+  assert.equal(provider.reserveWireBytes(unchanged, { feedback: [], contextGrowthBytes: 0 }), provider.inspectRequest(unchanged).wireBytes);
+});
+
 test('Gemini wire reservation bounds replacement with large mixed multimodal results including full 32-part batches', async () => {
   const { provider } = fixture([{ functionCall: { name: 'lookup' } }]);
   const reply = await provider.complete(request);
@@ -102,6 +131,21 @@ test('Gemini wire reservation bounds replacement with large mixed multimodal res
       assert.ok(upper >= provider.inspectRequest(actual).wireBytes);
     }
   }
+});
+
+test('Gemini reserves pending feedback separately from installed results and image omission', async () => {
+  const name = 'a'.repeat(128);
+  const { provider } = fixture(['first', 'second', 'third'].map((key) => ({ functionCall: { id: key.repeat(40), name, args: {} } })));
+  const reply = await provider.complete(request);
+  const [a, b, c] = reply.output.map((call) => call.id);
+  const project = (feedback) => ({ ...request, exchanges: [{ reply, feedback }] });
+  const feedback = (toolCallId, status, content) => ({ toolCallId, status, content });
+  const base = project([feedback(a, 'ok', [image]), feedback(b, 'ok', Array(4).fill(text(''))), feedback(c, 'ok', [text('')])]);
+  const actual = [feedback(c, 'error', [text('error')]), feedback(a, 'ok', [text('image omitted'.repeat(12))]), feedback(b, 'ok', [image, text('result'), image])];
+  const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
+  const omitted = bytes(actual[1].content[0]);
+  const bound = provider.reserveWireBytes(base, { feedback: [actual[0], actual[2]].map((value) => ({ toolCallId: value.toolCallId, maxBytes: bytes(value) })), contextGrowthBytes: 0, imageOmissionBytes: omitted, imageOmissionByExchange: [omitted] });
+  assert.ok(bound >= provider.inspectRequest(project(actual)).wireBytes);
 });
 
 test('Gemini stream changes only the method and SSE query, preserving the configured proxy path and tenant', async () => {

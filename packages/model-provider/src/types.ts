@@ -146,10 +146,11 @@ export interface ModelProvider {
 export interface ModelRequestReservation {
   /** Size of each complete common feedback value replacing a slot in the request. */
   readonly feedback: readonly { readonly toolCallId: string; readonly maxBytes: number }[];
+  /** Maximum increase in the common request's UTF-8 JSON bytes for one optional prefix message, including its array separator on insertion. */
   readonly contextGrowthBytes: number;
-  /** An optional prefix message can change even at the same byte length. */
+  /** Set when that message can be replaced or removed even at zero byte growth. */
   readonly mutableContext?: true;
-  /** Extra common JSON bytes when prior images may turn into omission text. */
+  /** Sum of the full common JSON byte budgets of possible image omission markers, before subtracting any displaced image bytes. */
   readonly imageOmissionBytes?: number;
   /** Per-exchange share of the image omission allowance, in request order. */
   readonly imageOmissionByExchange?: readonly number[];

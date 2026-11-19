@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ModelProtocolIssue, ProviderError } from './error.js';
+import { identity } from './value.js';
 import type { ModelExchange, ModelInputContent, ModelRequest, ModelRequestReservation, OpenAIResponsesReply } from './types.js';
 
 type ResponsesBinding = Pick<OpenAIResponsesReply['native'], 'model' | 'bindingId' | 'continuation'>;
@@ -12,7 +13,13 @@ function inputPart(item: ModelInputContent) {
   return item.kind === 'text' ? { type: 'input_text', text: item.text } : { type: 'input_image', image_url: `data:${item.mimeType};base64,${item.data}`, detail: 'auto' };
 }
 
-function outputItems(reply: OpenAIResponsesReply) {
+/** Responses echoes this identity in FunctionCallOutput, whose call_id allows 1–64 characters. */
+export function checkResponsesCallId(id: unknown): void {
+  identity(id);
+  if (Array.from(id).length > 64) throw new TypeError('Responses function call ID exceeds 64 characters');
+}
+
+function outputItems(reply: OpenAIResponsesReply, projection: 'proof-v1' | 'replay') {
   return reply.native.items.map((item) => {
     if (item.kind === 'function_call') {
       const call = reply.output[item.index];
@@ -24,7 +31,8 @@ function outputItems(reply: OpenAIResponsesReply) {
       if (part.kind === 'refusal') return { type: part.kind, refusal: part.refusal };
       const text = reply.output[part.index];
       if (text?.kind !== 'text') throw new TypeError('Invalid Responses message layout');
-      return { type: part.kind, text: text.text, annotations: [] };
+      // The persisted v1 digest predates the explicit empty logprobs array on the wire.
+      return { type: part.kind, text: text.text, annotations: [], logprobs: projection === 'replay' ? [] : undefined };
     });
     return { type: item.kind, id: item.id, status: item.status, role: 'assistant', phase: item.phase, content };
   });
@@ -47,7 +55,7 @@ export function responsesPrefixProof(requestDigest: string, reply: OpenAIRespons
   const { bindingId, model, continuation, previousResponseId } = reply.native;
   return createHash('sha256')
     .update('capix.openai-responses.reply.v1\n')
-    .update(JSON.stringify([bindingId, model, continuation, previousResponseId, continuation === 'previous-response-id' ? requestDigest : null, reply.id, reply.model, [reply.termination.kind, reply.termination.reason], outputItems(reply)]))
+    .update(JSON.stringify([bindingId, model, continuation, previousResponseId, continuation === 'previous-response-id' ? requestDigest : null, reply.id, reply.model, [reply.termination.kind, reply.termination.reason], outputItems(reply, 'proof-v1')]))
     .digest('hex');
 }
 
@@ -78,7 +86,11 @@ function projectHistory(request: ModelRequest, binding: ResponsesBinding) {
     if (native.bindingId !== binding.bindingId || native.model !== binding.model || native.continuation !== binding.continuation || native.previousResponseId !== previousResponseId) throw new TypeError('Responses history has a different deployment, strategy or predecessor');
     addHistoryIdentity(responseIds, reply.id);
     for (const item of native.items) addHistoryIdentity(itemIds, item.id);
-    for (const item of reply.output) if (item.kind === 'tool-call') addHistoryIdentity(callIds, item.id);
+    for (const item of reply.output) {
+      if (item.kind !== 'tool-call') continue;
+      checkResponsesCallId(item.id);
+      addHistoryIdentity(callIds, item.id);
+    }
     if (native.prefixSha256 !== responsesPrefixProof(prefix.copy().digest('hex'), reply)) throw new TypeError('Responses history disagrees with its original reply');
     const feedback = feedbackItems(exchange);
     if (stored) {
@@ -88,7 +100,7 @@ function projectHistory(request: ModelRequest, binding: ResponsesBinding) {
       input = feedback;
     } else {
       if (native.items.some((item) => item.kind === 'reasoning' && !item.encryptedContent)) throw new ModelProtocolIssue('REQUEST', 'missing-reasoning-ciphertext');
-      input.push(...outputItems(reply), ...feedback);
+      input.push(...outputItems(reply, 'replay'), ...feedback);
     }
   }
   return { input, source: { ...binding, previousResponseId, prefixSha256: prefix.digest('hex') } };

@@ -1,5 +1,5 @@
 import { parseModelJson, deliverModelConsumer, ProviderError } from './error.js';
-import { acceptResponsesReply, checkResponsesFunctionCall, reconcileResponsesItem, responsesEnvelope, responsesOutputItem } from './responses-reply.js';
+import { acceptResponsesReply, checkResponsesBinding, checkResponsesFunctionCall, reconcileResponsesItem, responsesEnvelope, responsesOutputItem } from './responses-reply.js';
 import type { ResponsesSource } from './responses-wire.js';
 import type { ModelControls, ModelStreamProgress, OpenAIResponsesReply } from './types.js';
 import { count, identity, record } from './value.js';
@@ -42,12 +42,14 @@ export class ResponsesStream {
     this.signal.throwIfAborted();
     const value: unknown = parseModelJson(data);
     if (!record(value) || typeof value.type !== 'string' || (event && event !== value.type)) throw responsesEnvelope();
+    if (value.type === 'response.failed' && record(value.response)) checkResponsesBinding(value.response, this.binding);
     if (value.type === 'error' || value.type === 'response.failed') throw new ProviderError('HTTP', 'Responses endpoint returned a stream error');
     if (!count(value.sequence_number) || (this.#sequence !== undefined && value.sequence_number !== this.#sequence + 1)) throw responsesEnvelope();
     this.#sequence = value.sequence_number;
     if (value.type === 'response.created') {
       const source = value.response;
       if (this.#id || !record(source) || source.object !== 'response' || (source.status !== 'in_progress' && source.status !== 'queued') || source.error != null || !Array.isArray(source.output) || source.output.length) throw responsesEnvelope();
+      checkResponsesBinding(source, this.binding);
       identity(source.id);
       identity(source.model);
       this.#id = source.id;
@@ -62,7 +64,10 @@ export class ResponsesStream {
       case 'response.completed': {
         const source = value.response;
         if (!record(source) || source.object !== 'response' || source.id !== this.#id || source.model !== this.#model || value.type !== 'response.' + String(source.status) || source.error != null) throw responsesEnvelope();
-        if (source.status === 'queued' || source.status === 'in_progress') return false;
+        if (source.status === 'queued' || source.status === 'in_progress') {
+          checkResponsesBinding(source, this.binding);
+          return false;
+        }
         if (!Array.isArray(source.output) || source.output.length !== this.#items.length) throw responsesEnvelope();
         const output = source.output.map((raw: unknown, index: number) => {
           const item = responsesOutputItem(raw);

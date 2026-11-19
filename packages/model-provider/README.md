@@ -82,7 +82,7 @@ OpenAI Responses 的两种续轮策略使用同一个 `OpenAIResponsesProvider`�
 
 当前支持文本与固定图片输入、直接调用宿主函数、消息与推理摘要的 SSE 预览，以及工具结果中的文本和图片。显式设置 `maxTokens` 时，Responses 适配器要求至少 16。工具结果的首个文本块编码 `status`，后面按顺序跟随结果内容。拒绝正文保存在原生材料中，截断保留结束原因。遇到托管工具、非空引用注解或其他无法完整回传的输出项时，请求会明确失败。回放 reasoning 需要网关返回相应密文。可在本地运行[原生协议测试](https://github.com/weiliang0121/capix/blob/main/packages/model-provider/test/responses-provider.test.mjs)和[完整工具场景](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/responses-recovery.test.mjs)。
 
-SSE 的 `response.output_item.done` 与回复终态按相同的 JSON 接纳规则核对。例如，省略的 `phase` 与 `null` 等价，省略的 `logprobs` 与空数组等价。两份快照的正文、有效阶段、工具参数或调用身份冲突时，整轮回复仍会被拒绝。[快照一致性回归](https://github.com/weiliang0121/capix/blob/main/packages/model-provider/test/responses-reply.test.mjs)
+SSE 的创建、排队、进行中和终态快照只要回显 `store` 或 `previous_response_id`，都须与当前请求一致。`response.output_item.done` 与终态快照按相同的 JSON 接纳规则核对，省略的 `phase` 与 `null` 等价，省略的 `logprobs` 与空数组等价。显式历史回放的 `output_text` 会发送 `annotations: []` 和 `logprobs: []`。工具结果使用的 `call_id` 必须能按 `function_call_output` 的输入约束回传，长度为 1 至 64 个 Unicode 码点。[Responses 请求契约](https://developers.openai.com/api/reference/resources/responses/methods/create) · [快照一致性回归](https://github.com/weiliang0121/capix/blob/main/packages/model-provider/test/responses-reply.test.mjs)
 
 ## Gemini generateContent
 
@@ -120,6 +120,8 @@ const model = new GeminiGenerateContentProvider({
 | Gemini generateContent | `json-value` 保存固定 JSON 对象。`native.parts` 按原顺序引用正文与调用，保留原生 Part 边界、思考、签名和可选原生调用 ID。                                                    | `STOP` 为 `completed`。提示被拦截或候选触发 `SAFETY` 等过滤规则时为 `refused`。    |
 
 其余结束原因保留原文并归入 `incomplete`。Tool 只推进已完整接纳的回复。`modelReplyText(reply)` 拼接文本，遇到工具调用时拒绝。协议版本、块顺序或续轮所需材料不完整时拒绝接纳。签名作为不透明数据传回原服务。
+
+Messages 流可在报告 `stop_reason` 后继续更新累计用量。适配器在 `message_stop` 交付最终回复。若 `max_tokens` 截断末个工具调用的 JSON 参数，回复保留之前完整的块及用量，略去无法解析的调用，终态为 `incomplete/max_tokens`。Tool 对整轮停止派发，包括同轮中参数已经完整的调用。[Anthropic 工具参数流](https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming) · [工具执行回归](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/messages-recovery.test.mjs)
 
 公开 `requireModelReply`、`requireModelRequest`、`requireToolResult`、`requireToolFeedback` 和 `requireModelExchange` 对未知值作完整校验，返回原对象身份，不克隆、不冻结，也不缓存对可变对象的信任。适用于资源、Interaction、实体与 CP 的接纳边界。校验拒绝旧双字段形状、未知字段/版本、重复 ID、不完整反馈、getter、Proxy、循环引用与非 JSON 值；错误不包含传入正文。Provider 自己生成的回复已深冻结。旧 `text/finishReason` 双字段回复不是新协议的有效持久值，不能自动迁移后冒充已认证反馈。
 
@@ -249,6 +251,8 @@ Gemini 流中间事件的 `finishReason: null` 表示这一帧尚未给出终态
 `assertModelContinuation(request, reservation?, additionalNodes?)` 可在没有 Provider 实例或凭证时核对候选请求。它验证请求和预留；对于绑定原始前缀的 Messages 签名思考和 Responses 服务端续轮，拒绝可能改写该前缀的上下文或图片预留。要在执行工具前同时确认宿主此次选择的部署及其发送上限，将该部署的 Provider 传给 Tool 的 `inspection`。
 
 各适配器都实现同步 `reserveWireBytes(request, reservation)`，用于 Tool 在产生反馈和上下文之前计算整个请求体的保守上界。实际正文计量仍由 `inspectRequest` 提供。[工具预算契约](https://github.com/weiliang0121/capix/blob/main/packages/tool/README.md#预算与等待)
+
+直接调用时，`contextGrowthBytes` 表示一条可选前缀消息引起的公共请求 JSON 字节增长上限，插入时计入数组分隔符。已有消息可能等长替换或移除时传 `mutableContext: true`。图片省略使用每个候选文本标记的完整 JSON 字节数，计算预算时保留被替换图片的空间。`ModelExchanges.previewFeedback` 已按交换给出这些标记的上界，合计值传 `imageOmissionBytes`，各交换的数值传 `imageOmissionByExchange`。
 
 协议参考 [Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create) · [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) · [Gemini generateContent](https://ai.google.dev/api/generate-content) · [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)
 

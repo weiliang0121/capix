@@ -19,7 +19,7 @@
 - **model-exchanges** 持有固定起点、按序交换和反馈槽。普通载入只需公开回复校验器。工具执行前预览下一轮时，实体复用实际发送时的图片保留规则，不会写入反馈。[交换实体](../../packages/model-exchanges/README.md)
 - **tool** 拥有成员登记、执行与恢复。工具执行可能产生外部效果，所以 Tool 在派发前用公共接口核对历史能否续接，并预留新反馈和上下文的容量。具体编码的开销由 Provider 计算。Runtime、Interaction 与 Checkpoint 沿用原有调用契约。[预检与恢复](../native-tool-integration.md) · [容量检查](../../packages/tool/src/budget.ts)
 
-## 两处兼容性修正
+## 回复身份与用量
 
 - **Gemini 回复身份。** 早期实现把 Chat 回复的身份要求套在了 Gemini 上，省略 `responseId` 或 `modelVersion` 的完整文本也会被拒绝。现在 JSON 和 SSE 共用接纳规则：有上游值时保留原值，省略的 ID 在接纳时生成一次，省略的模型版本使用配置模型，并分别标记来源。工具反馈槽使用已保存的回复 ID 和 Part 位置；发给上游的函数反馈只携带上游实际提供的调用 ID。[Google 回复类型](https://googleapis.github.io/js-genai/release_docs/classes/types.GenerateContentResponse.html) · [JSON/SSE 回归](../../packages/model-provider/test/gemini-reply.test.mjs) · [冷恢复](../../packages/tool/test/gemini-recovery.test.mjs)
 - **Messages 部分用量。** 上游只报告普通输入和输出时，缺少缓存读写计数，总输入仍未知。适配器保存已报告的原生计数，宿主用 `modelReplyUsage(reply)` 可直接读取已知的公共字段。公共 `reply.usage` 和 attempt 完成事件继续提供完整统计或 `null`。[官方流式示例](https://platform.claude.com/docs/en/build-with-claude/streaming#basic-streaming-request) · [计量与快照回归](../../packages/model-exchanges/test/messages.test.mjs)
@@ -28,9 +28,15 @@ Messages 的思考块仍须提供协议要求的签名，Responses 若回显与�
 
 ## 宿主升级影响
 
-普通文本调用可沿用原来的请求方式。具体 Chat 适配器保留原返回类型和已存回复形状。直接使用通用 `ModelReply` 的 TypeScript 代码如需读取协议专属字段，要先按 `native.format` 收窄。按公共终态、输出、参数及用量做消费的 harness 可以复用于四种协议。[类型定义](../../packages/model-provider/src/types.ts)
+具体 Chat 适配器保留原返回类型和已存回复形状。升级通用 harness 时，分别验证以下三条实际调用路径。
 
-交换快照维持 v2，读取某种原生回复需要包含该校验器的包版本。可恢复 Tool 的目录预检策略由 v4 升至 v5，旧目录下的调用即使仅用 Chat 也会拒绝恢复，已有材料保留。Tool CP 仍为 v5，模型节点 CP 仍为 v3。自定义检查器若在有效 wire 上限下为未知反馈或上下文预留空间，需要同步实现 `reserveWireBytes`；内置 Provider 可直接作为 `inspection`。[恢复边界](../development-compatibility.md) · [Tool 检查器](../../packages/tool/README.md)
+| 宿主路径             | 接线与验收                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 第一次工具调用       | 将实际发送请求的内置 Provider 作为 `ToolModelSource.inspection`。若封装检查器，用同一实例同步转发 `inspectRequest(request)` 与 `reserveWireBytes(request, reservation)`。启用 wire 上限时，纯文本首轮成功仍可能在首个工具派发前因缺少预留能力失败。用一个可计数的工具验证一次执行、两次模型请求和最终正文。[Tool 检查器](../../packages/tool/README.md)                               |
+| 工具参数与日志       | 执行工具时用 `readModelToolArguments(call)`。记录参数字节数时按 `call.arguments.encoding` 分支，`json-text` 量原始 `text`，`json-value` 量 `JSON.stringify(value)` 的 UTF-8 字节。这个数表示参数大小；完整请求体的字节数由 `inspectRequest` 提供。访问协议专属数据前按 `reply.native.format` 收窄。[公共类型](../../packages/model-provider/src/types.ts)                             |
+| 交付复核与结构化结果 | 单独构造复核请求，将系统指令放在首个用户消息之前，待复核材料放入用户消息。当前 Messages 适配器拒绝 `responseFormat: 'json_object'`，可在指令中要求 JSON，再由宿主解析并校验业务 schema。Gemini 等支持该选项的部署可显式启用它。用实际 Provider 的 `inspectRequest` 核对出站请求，再验收最终正文、`termination.kind` 和解析结果。[适配器配置](../../packages/model-provider/README.md) |
+
+交换快照维持 v2，读取某种原生回复需要包含该校验器的包版本。可恢复 Tool 的目录预检策略由 v4 升至 v5，旧目录下的调用即使仅用 Chat 也会拒绝恢复，已有材料保留。Tool CP 仍为 v5，模型节点 CP 仍为 v3。[恢复边界](../development-compatibility.md)
 
 ## 验收口径
 

@@ -440,3 +440,45 @@ test('a manual-thinking turn can call another tool after feedback without an int
   }
   assert.deepEqual((await provider.complete({ ...request, exchanges })).output, [{ kind: 'text', text: '完成' }]);
 });
+
+test('Messages preserves the stop reason across subsequent cumulative usage deltas', async () => {
+  const frames = events({ ...answer, usage });
+  frames.splice(-1, 0, { type: 'message_delta', delta: {}, usage: { output_tokens: 9 } }, { type: 'message_delta', delta: { stop_reason: null }, usage: { cache_read_input_tokens: 4, output_tokens: null } });
+  const complete = () => model(async () => sse(frames)).complete({ ...request, stream: true });
+  const reply = await complete();
+  assert.deepEqual(reply.termination, { kind: 'completed', reason: 'end_turn' });
+  assert.deepEqual(reply.usage, { promptTokens: 21, completionTokens: 9, totalTokens: 30, promptCacheHitTokens: 4 });
+  frames.splice(-1, 0, { type: 'message_delta', delta: { stop_reason: 'max_tokens' } });
+  await assert.rejects(complete(), { code: 'ENVELOPE' });
+});
+
+test('Messages returns the finished blocks when max_tokens cuts off the final streamed tool input', async () => {
+  // https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming
+  const frames = events({ ...toolReply, stop_reason: 'max_tokens' });
+  const lastFragment = frames.findLast((frame) => frame.delta?.type === 'input_json_delta');
+  lastFragment.delta.partial_json = '"city":"北';
+  const complete = (sample) => model(async () => sse(sample)).complete({ ...request, stream: true });
+  const reply = await complete(frames);
+  const finished = await model(async () => Response.json({ ...toolReply, stop_reason: 'max_tokens', content: content.slice(0, -1) })).complete(request);
+  assert.deepEqual(reply, finished);
+  assert.deepEqual(reply.termination, { kind: 'incomplete', reason: 'max_tokens' });
+  assert.deepEqual(
+    reply.output.filter((item) => item.kind === 'tool-call').map((item) => item.id),
+    ['first'],
+  );
+  const history = { ...request, exchanges: [{ reply, feedback: [{ toolCallId: 'first', status: 'ok', content: [{ kind: 'text', text: 'done' }] }] }] };
+  assert.throws(() => assertModelContinuation(history));
+  assert.throws(() => model(assert.fail).inspectRequest(history), { code: 'REQUEST' });
+  await assert.rejects(complete(frames.filter((frame) => frame.delta?.type !== 'signature_delta')), { code: 'ENVELOPE' });
+  await assert.rejects(complete(frames.slice(0, -1)), { code: 'ENVELOPE' });
+  for (const input of ['{"city":"北', [], null]) {
+    const malformed = { ...toolReply, stop_reason: 'max_tokens', content: [...content.slice(0, -1), { ...content.at(-1), input }] };
+    await assert.rejects(model(async () => Response.json(malformed)).complete(request), { code: 'ENVELOPE' });
+  }
+  const laterBlock = frames.findIndex((frame) => frame.type === 'message_delta');
+  await assert.rejects(complete([...frames.slice(0, laterBlock), { type: 'content_block_start', index: content.length, content_block: content[1] }, { type: 'content_block_stop', index: content.length }, ...frames.slice(laterBlock)]), { code: 'ENVELOPE' });
+  for (const reason of ['tool_use', 'end_turn', 'refusal', 'pause_turn']) {
+    frames.at(-2).delta.stop_reason = reason;
+    await assert.rejects(complete(frames), { code: 'ENVELOPE' });
+  }
+});

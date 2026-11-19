@@ -146,6 +146,9 @@ test('feedback preview accounts for displaced images in the old prefix and curre
   const omitted = known.request.exchanges[1].feedback[0].content.filter((part) => part.kind === 'text');
   assert.equal(omitted.length, 31);
   assert.ok(preview.omissionBytes[1] >= omitted.reduce((sum, part) => sum + Buffer.byteLength(JSON.stringify(part)), 0));
+  const provider = new ChatCompletionsProvider({ endpoint: 'https://offline.fixture.test/chat/completions', apiKey: 'offline', model: 'offline' });
+  const wireLimit = provider.reserveWireBytes(preview.request, { feedback: [{ toolCallId: 'next', maxBytes: 8192 }], contextGrowthBytes: 0, imageOmissionByExchange: preview.omissionBytes, imageOmissionBytes: preview.omissionBytes.reduce((sum, bytes) => sum + bytes, 0) });
+  assert.ok(wireLimit >= provider.inspectRequest(known.request).wireBytes);
   assert.deepEqual(entity.snapshot(), saved);
   const closed = entity.complete(origin, open, 'next', feedback);
   assert.deepEqual(entity.request({ origin, exchanges: [first, closed] }), known.request);

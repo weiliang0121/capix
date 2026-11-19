@@ -72,7 +72,7 @@ for (const continuation of ['replay', 'previous-response-id']) {
       assert.equal(body.max_output_tokens, 320);
       assert.equal(body.temperature, 0.5);
       if (remote) assert.equal(body.input.length, 2);
-      else assert.deepEqual(body.input.slice(2, 6), output);
+      else assert.deepEqual(body.input.slice(2, 6), [reasoning, { ...message, content: [{ ...message.content[0], logprobs: [] }] }, call, another]);
       assert.deepEqual(
         body.input.slice(-2).map((item) => item.call_id),
         round === 0 ? ['one', 'two'] : ['one2', 'two2'],

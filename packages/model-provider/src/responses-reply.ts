@@ -1,9 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { requireOpenAIResponsesReply } from './contract.js';
 import { ModelProtocolIssue, ProviderError } from './error.js';
-import { responsesPrefixProof, type ResponsesSource } from './responses-wire.js';
+import { checkResponsesCallId, responsesPrefixProof, type ResponsesSource } from './responses-wire.js';
 import type { ModelUsage, OpenAIResponsesReply } from './types.js';
-import { count, freezeJson, identity, record, shape } from './value.js';
+import { count, freezeJson, record, shape } from './value.js';
 
 export function responsesEnvelope(): ProviderError {
   return new ProviderError('ENVELOPE', 'Model response is not a supported Responses envelope');
@@ -26,7 +26,7 @@ export function checkResponsesFunctionCall(item: Record<string, unknown>): void 
     shape(item.caller, ['type']);
     if (item.caller.type !== 'direct') throw responsesEnvelope();
   }
-  identity(item.call_id);
+  checkResponsesCallId(item.call_id);
   if (typeof item.name !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(item.name) || typeof item.arguments !== 'string') throw responsesEnvelope();
 }
 
@@ -105,13 +105,17 @@ export function reconcileResponsesItem(terminal: Record<string, unknown>, done: 
   return item;
 }
 
+export function checkResponsesBinding(value: Record<string, unknown>, binding: ResponsesSource): void {
+  if (value.store !== undefined && value.store !== (binding.continuation === 'previous-response-id')) throw new ModelProtocolIssue('ENVELOPE', 'store-mismatch');
+  if (value.previous_response_id !== undefined && value.previous_response_id !== binding.previousResponseId) throw new ModelProtocolIssue('ENVELOPE', 'predecessor-mismatch');
+}
+
 /** Only representable assistant items may enter history. Indices refer to the single common output. */
 export function acceptResponsesReply(value: unknown, binding: ResponsesSource): OpenAIResponsesReply {
   if (!record(value) || value.object !== 'response') throw responsesEnvelope();
+  checkResponsesBinding(value, binding);
   if (value.status === 'failed') throw new ProviderError('HTTP', 'Responses endpoint reported a failed response');
   if (value.error != null || !Array.isArray(value.output) || (value.status !== 'completed' && value.status !== 'incomplete')) throw responsesEnvelope();
-  if (value.store !== undefined && value.store !== (binding.continuation === 'previous-response-id')) throw new ModelProtocolIssue('ENVELOPE', 'store-mismatch');
-  if (value.previous_response_id !== undefined && value.previous_response_id !== binding.previousResponseId) throw new ModelProtocolIssue('ENVELOPE', 'predecessor-mismatch');
   const { output, items, refused } = projectResponsesOutput(value.output);
   let termination: OpenAIResponsesReply['termination'];
   if (value.status === 'incomplete') {

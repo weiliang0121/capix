@@ -84,6 +84,50 @@ test('Messages Tool replays native blocks and real feedback, then cold-confirms 
   }
 });
 
+test('Messages max_tokens reaches the exchange and prevents every tool effect in a truncated batch', async () => {
+  const events = [
+    { type: 'message_start', message: { ...message(true), content: [], stop_reason: null } },
+    { type: 'content_block_start', index: 0, content_block: blocks[2] },
+    { type: 'content_block_stop', index: 0 },
+    // The first call already has valid input when the second call runs out of tokens.
+    { type: 'content_block_start', index: 1, content_block: { ...blocks[3], input: {} } },
+    { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{"key":' } },
+    { type: 'content_block_stop', index: 1 },
+    { type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage: { output_tokens: 13 } },
+    { type: 'message_stop' },
+  ];
+  let requests = 0;
+  const effects = [];
+  const provider = new AnthropicMessagesProvider({
+    ...route,
+    fetch: async () => {
+      requests++;
+      return new Response(events.map((event) => 'data: ' + JSON.stringify(event) + '\n\n').join(''), { headers: { 'Content-Type': 'text/event-stream' } });
+    },
+  });
+  const sender = host((request) => provider.complete(request));
+  const lookup = member('lookup', ({ key }) => {
+    effects.push(key);
+    return { text: key };
+  });
+  const scene = assembly({ policyVersion: 'truncated-batch', tools: { lookup } }, sender, { inspection: provider });
+  try {
+    await assert.rejects(scene.runner.run({ request: { ...input.request, stream: true } }), /Incomplete model reply cannot execute tools/);
+    const [entry] = scene.entity.values();
+    assert.deepEqual(entry.reply.termination, { kind: 'incomplete', reason: 'max_tokens' });
+    assert.deepEqual(
+      entry.reply.output.map((call) => call.id),
+      ['toolu_a'],
+    );
+    assert.deepEqual(entry.feedback, []);
+    assert.deepEqual(effects, []);
+    assert.equal(requests, 1);
+  } finally {
+    await sender.interactions.settled();
+    sender.interactions.close();
+  }
+});
+
 test('Messages rejects another deployment’s continuation before running the proposed tools', async () => {
   const previous = new AnthropicMessagesProvider({ ...route, bindingId: 'another-deployment', fetch: async () => Response.json(message(true)) });
   const active = new AnthropicMessagesProvider({ ...route, fetch: () => assert.fail('rejected continuation reached transport') });

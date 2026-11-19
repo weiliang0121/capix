@@ -14,6 +14,7 @@ export class MessagesStream {
   #blocks: Record<string, unknown>[] = [];
   #active?: ReturnType<typeof readMessagesBlock>;
   #partial: string[] = [];
+  #unparsedToolInput = false;
   #inMessageDelta = false;
   #progress?: ModelStreamProgress['kind'];
   done = false;
@@ -47,6 +48,7 @@ export class MessagesStream {
       }
       case 'content_block_start': {
         if (!this.#id || this.#inMessageDelta || this.#active || value.index !== this.#blocks.length) throw new ModelProtocolIssue('ENVELOPE', 'event-order');
+        if (this.#unparsedToolInput) throw new ModelProtocolIssue('ENVELOPE', 'invalid-block');
         const block = readMessagesBlock(value.content_block);
         if (block.type === 'text') this.preview('text', block.text);
         if (block.type === 'thinking') this.preview('reasoning', block.thinking);
@@ -63,28 +65,35 @@ export class MessagesStream {
       case 'content_block_stop': {
         const block = this.#active;
         if (!block || value.index !== this.#blocks.length) throw new ModelProtocolIssue('ENVELOPE', 'event-order');
+        this.#active = undefined;
         if (block.type === 'tool_use' && this.#partial.length) {
           let input: unknown;
           try {
             input = JSON.parse(this.#partial.join(''));
           } catch {
-            throw new ModelProtocolIssue('ENVELOPE', 'invalid-block');
+            // Only the final tool input can be cut short by max_tokens. The
+            // terminal reason arrives after this block has already closed.
+            this.#unparsedToolInput = true;
+            return false;
+          } finally {
+            this.#partial = [];
           }
           if (!record(input)) throw new ModelProtocolIssue('ENVELOPE', 'invalid-block');
           block.input = input;
         }
         if (block.type === 'thinking' && !block.signature?.trim()) throw new ModelProtocolIssue('ENVELOPE', 'missing-thinking-signature');
         this.#blocks.push(block);
-        this.#active = undefined;
         return false;
       }
       case 'message_delta': {
-        if (!this.#id || this.#reason || this.#active) throw new ModelProtocolIssue('ENVELOPE', 'event-order');
+        if (!this.#id || this.#active) throw new ModelProtocolIssue('ENVELOPE', 'event-order');
         if (!record(value.delta)) throw new ModelProtocolIssue('ENVELOPE', 'invalid-event');
         this.#inMessageDelta = true;
         const reason = value.delta.stop_reason;
         if (reason != null) {
           identity(reason);
+          if (this.#reason !== undefined && reason !== this.#reason) throw new ModelProtocolIssue('ENVELOPE', 'event-order');
+          if (this.#unparsedToolInput && reason !== 'max_tokens') throw new ModelProtocolIssue('ENVELOPE', 'invalid-block');
           this.#reason = reason;
         }
         this.mergeUsage(value.usage);
