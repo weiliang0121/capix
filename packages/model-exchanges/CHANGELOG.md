@@ -1,5 +1,16 @@
 # @weiliang0121/capix-model-exchanges
 
+## 0.8.0
+
+### Minor Changes
+
+- e6a04d0: Admit and restore Responses, Messages and Gemini replies with the matching model-provider, retaining native continuation material and tool feedback slots in v2 snapshots. Add a read-only feedback preview that applies the same image retention rules as the next request and accounts for retained images that pending feedback could displace.
+
+### Patch Changes
+
+- Updated dependencies [e6a04d0]
+  - @weiliang0121/capix-model-provider@0.10.0
+
 ## 0.7.2
 
 ### Patch Changes
