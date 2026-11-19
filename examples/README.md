@@ -18,6 +18,7 @@ node examples/notes-assistant.mjs
 
 - [字典资源工厂](dictionary.mjs)、[Runner](runner.mjs)：结构、资源与装配的最小起点。
 - [预设工厂](presets.mjs)：Sequence／Dynamic 的结构组合。
+- [多 Agent 并行审阅](parallel-review.mjs)：同一审阅成员按模块并发读取受限材料，协调者按输入顺序收齐发现，再请求一次模型复核。执行 `node examples/parallel-review.mjs api` 可以只审阅一个模块。
 - [Tool](tool.mjs)：离线模型选择成员并消费真实工具反馈。
 - [运行输出](runner-output.mjs)、[调用退出](invocation-exit.mjs)：输出接收、真实关闭及故障归属。
 - [记录](records.mjs)：独立记录实体与可选观测消费。

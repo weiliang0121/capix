@@ -12,6 +12,9 @@ hero:
     - theme: alt
       text: 为什么用 CAPiX
       link: /why
+    - theme: alt
+      text: 多 Agent 并行协作
+      link: /scenarios/multi-agent
 ---
 
 <script setup>

@@ -65,11 +65,19 @@ export default defineConfig({
       { text: 'Why CAPiX', link: '/why' },
       { text: '教程', link: '/guide/getting-started' },
       { text: '核心概念', link: '/concepts/' },
+      { text: '应用场景', link: '/scenarios/multi-agent' },
       { text: '参考', link: '/README' },
     ],
     sidebar: {
       '/guide/': [tutorial, reading],
       '/concepts/': [concepts, reading],
+      '/scenarios/': [
+        {
+          text: '应用场景',
+          items: [{ text: '多 Agent 并行协作', link: '/scenarios/multi-agent' }],
+        },
+        reading,
+      ],
       '/examples/': [examples, reading],
       '/why': [reading, tutorial],
       '/': [

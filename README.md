@@ -24,6 +24,7 @@ CAPiX 是一个 Agent 框架，帮助你组合已有能力，构筑自己的智�
 推荐从[构建便签助手](https://weiliang0121.github.io/capix/guide/getting-started.html)开始：先运行一个完整的工具循环，再沿同一份源码理解、拆解和扩展。示例默认离线，便签读写真实发生；接入真实模型是教程中的下一步。
 
 - [核心概念](https://weiliang0121.github.io/capix/concepts/)：是什么、怎么用、为什么这样设计。
+- [多 Agent 并行协作](docs/scenarios/multi-agent.md)演示如何并行审阅变更、限定每个 Agent 可读的材料，再汇总复核。
 - [按主题实践](https://weiliang0121.github.io/capix/examples/)：结构、资源、实体、输出和记录的可运行示例。
 - [参考与契约](https://weiliang0121.github.io/capix/README.html)：准确的 API、生命周期与承诺边界。
 
