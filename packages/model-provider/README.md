@@ -82,6 +82,8 @@ OpenAI Responses 的两种续轮策略使用同一个 `OpenAIResponsesProvider`�
 
 当前支持文本与固定图片输入、直接调用宿主函数、消息与推理摘要的 SSE 预览，以及工具结果中的文本和图片。显式设置 `maxTokens` 时，Responses 适配器要求至少 16。工具结果的首个文本块编码 `status`，后面按顺序跟随结果内容。拒绝正文保存在原生材料中，截断保留结束原因。遇到托管工具、非空引用注解或其他无法完整回传的输出项时，请求会明确失败。回放 reasoning 需要网关返回相应密文。可在本地运行[原生协议测试](https://github.com/weiliang0121/capix/blob/main/packages/model-provider/test/responses-provider.test.mjs)和[完整工具场景](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/responses-recovery.test.mjs)。
 
+SSE 的 `response.output_item.done` 与回复终态按相同的 JSON 接纳规则核对。例如，省略的 `phase` 与 `null` 等价，省略的 `logprobs` 与空数组等价。两份快照的正文、有效阶段、工具参数或调用身份冲突时，整轮回复仍会被拒绝。[快照一致性回归](https://github.com/weiliang0121/capix/blob/main/packages/model-provider/test/responses-reply.test.mjs)
+
 ## Gemini generateContent
 
 ```js

@@ -8,8 +8,12 @@ const route = { endpoint: 'https://gateway.invalid/v1/responses', model: 'local-
 const functionCall = { type: 'function_call', id: 'fc_lookup', call_id: 'call_lookup', status: 'completed', name: 'lookup', arguments: '{"key":"用户"}' };
 const answer = { type: 'message', id: 'msg_answer', role: 'assistant', status: 'completed', phase: 'final_answer', content: [{ type: 'output_text', text: 'found', annotations: [] }] };
 
+function responseBody(body, first, output) {
+  return { object: 'response', id: first ? 'resp_lookup' : 'resp_answer', model: route.model, status: 'completed', error: null, incomplete_details: null, store: body.store, previous_response_id: body.previous_response_id ?? null, output, usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 } };
+}
+
 function generation(body, first, output = [first ? functionCall : answer]) {
-  return Response.json({ object: 'response', id: first ? 'resp_lookup' : 'resp_answer', model: route.model, status: 'completed', error: null, incomplete_details: null, store: body.store, previous_response_id: body.previous_response_id ?? null, output, usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 } });
+  return Response.json(responseBody(body, first, output));
 }
 
 function scenario(continuation, run) {
@@ -90,6 +94,81 @@ for (const continuation of ['replay', 'previous-response-id']) {
     }
   });
 }
+
+test('Responses delivers streamed text with explicit terminal defaults after one tool execution', async () => {
+  const requests = [];
+  const effects = [];
+  const done = { type: 'message', id: answer.id, role: 'assistant', status: 'completed', content: answer.content };
+  const terminal = { ...done, phase: null, content: [{ ...done.content[0], logprobs: [] }] };
+  const provider = new OpenAIResponsesProvider({
+    ...route,
+    continuation: 'previous-response-id',
+    fetch: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      requests.push(body);
+      assert.ok(requests.length <= 2);
+      assert.equal(body.stream, true);
+      const first = requests.length === 1;
+      const completed = responseBody(body, first, [first ? functionCall : terminal]);
+      const starting = { ...completed, output: [], status: 'in_progress', usage: null };
+      const call = { output_index: 0, item_id: functionCall.id };
+      const text = { output_index: 0, item_id: done.id, content_index: 0 };
+      const events = [
+        { type: 'response.created', response: starting },
+        { type: 'response.in_progress', response: starting },
+        ...(first
+          ? [
+              { type: 'response.output_item.added', output_index: 0, item: { ...functionCall, arguments: '', status: 'in_progress' } },
+              { type: 'response.function_call_arguments.delta', ...call, delta: functionCall.arguments },
+              { type: 'response.function_call_arguments.done', ...call, arguments: functionCall.arguments },
+            ]
+          : [
+              { type: 'response.output_item.added', output_index: 0, item: { ...done, content: [], status: 'in_progress' } },
+              { type: 'response.content_part.added', ...text, part: { ...done.content[0], text: '' } },
+              { type: 'response.output_text.delta', ...text, delta: done.content[0].text },
+              { type: 'response.output_text.done', ...text, text: done.content[0].text },
+              { type: 'response.content_part.done', ...text, part: done.content[0] },
+            ]),
+        { type: 'response.output_item.done', output_index: 0, item: first ? functionCall : done },
+        { type: 'response.completed', response: completed },
+      ];
+      return new Response(events.map((event, sequence_number) => 'event: ' + event.type + '\ndata: ' + JSON.stringify({ ...event, sequence_number }) + '\n\n').join(''), { headers: { 'Content-Type': 'text/event-stream' } });
+    },
+  });
+  const local = host((request) => provider.complete(request));
+  const lookup = member('lookup', ({ key }) => {
+    effects.push(key);
+    return { text: 'record ' + key };
+  });
+  const scene = assembly({ tools: { lookup }, policyVersion: 'stream-defaults' }, local, { inspection: provider });
+  try {
+    assert.equal(await scene.runner.run({ request: { ...input.request, stream: true } }), 'found');
+    assert.deepEqual(effects, ['用户']);
+    assert.deepEqual(
+      requests.map((body) => body.previous_response_id),
+      [undefined, 'resp_lookup'],
+    );
+    assert.deepEqual(requests[1].input, [
+      {
+        type: 'function_call_output',
+        call_id: functionCall.call_id,
+        output: [
+          { type: 'input_text', text: '{"status":"ok"}' },
+          { type: 'input_text', text: 'record 用户' },
+        ],
+      },
+    ]);
+    assert.equal(local.sent.length, 2);
+    assert.deepEqual(
+      [...local.states.values()].map((state) => state.feedback.payload.id),
+      ['resp_lookup', 'resp_answer'],
+    );
+    assert.deepEqual(scene.entity.snapshot().entries[0].feedback, [{ toolCallId: functionCall.call_id, status: 'ok', content: [{ kind: 'text', text: 'record 用户' }] }]);
+  } finally {
+    await local.interactions.settled();
+    local.interactions.close();
+  }
+});
 
 test('Responses replay without encrypted reasoning rejects before dispatching tools or continuing', async () => {
   const posts = [];

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { requireOpenAIResponsesReply } from './contract.js';
 import { ModelProtocolIssue, ProviderError } from './error.js';
 import { responsesPrefixProof, type ResponsesSource } from './responses-wire.js';
@@ -54,16 +55,11 @@ function reasoningParts(parts: unknown, type: 'reasoning_text' | 'summary_text')
   });
 }
 
-/** Only representable assistant items may enter history. Indices refer to the single common output. */
-export function acceptResponsesReply(value: unknown, binding: ResponsesSource): OpenAIResponsesReply {
-  if (!record(value) || value.object !== 'response') throw responsesEnvelope();
-  if (value.status === 'failed') throw new ProviderError('HTTP', 'Responses endpoint reported a failed response');
-  if (value.error != null || !Array.isArray(value.output) || (value.status !== 'completed' && value.status !== 'incomplete')) throw responsesEnvelope();
-  if (value.store !== undefined && value.store !== (binding.continuation === 'previous-response-id')) throw new ModelProtocolIssue('ENVELOPE', 'store-mismatch');
-  if (value.previous_response_id !== undefined && value.previous_response_id !== binding.previousResponseId) throw new ModelProtocolIssue('ENVELOPE', 'predecessor-mismatch');
+/** Project wire items into the same ordered output and native layout for JSON and SSE. */
+function projectResponsesOutput(rawItems: readonly unknown[]) {
   const output: unknown[] = [];
   let refused = false;
-  const items = value.output.map((raw: unknown) => {
+  const items = rawItems.map((raw) => {
     const item = responsesOutputItem(raw);
     switch (item.type) {
       case 'message': {
@@ -98,6 +94,25 @@ export function acceptResponsesReply(value: unknown, binding: ResponsesSource): 
         throw responsesEnvelope();
     }
   });
+  return { output, items, refused };
+}
+
+/** Equivalent snapshots may encode defaults differently. Replay material must agree. */
+export function reconcileResponsesItem(terminal: Record<string, unknown>, done: Record<string, unknown>): Record<string, unknown> {
+  // Some endpoints provide the full reasoning ciphertext only in output_item.done.
+  const item = terminal.type === 'reasoning' && terminal.encrypted_content == null && typeof done.encrypted_content === 'string' ? { ...terminal, encrypted_content: done.encrypted_content } : terminal;
+  if (!isDeepStrictEqual(item, done) && !isDeepStrictEqual(projectResponsesOutput([item]), projectResponsesOutput([done]))) throw responsesEnvelope();
+  return item;
+}
+
+/** Only representable assistant items may enter history. Indices refer to the single common output. */
+export function acceptResponsesReply(value: unknown, binding: ResponsesSource): OpenAIResponsesReply {
+  if (!record(value) || value.object !== 'response') throw responsesEnvelope();
+  if (value.status === 'failed') throw new ProviderError('HTTP', 'Responses endpoint reported a failed response');
+  if (value.error != null || !Array.isArray(value.output) || (value.status !== 'completed' && value.status !== 'incomplete')) throw responsesEnvelope();
+  if (value.store !== undefined && value.store !== (binding.continuation === 'previous-response-id')) throw new ModelProtocolIssue('ENVELOPE', 'store-mismatch');
+  if (value.previous_response_id !== undefined && value.previous_response_id !== binding.previousResponseId) throw new ModelProtocolIssue('ENVELOPE', 'predecessor-mismatch');
+  const { output, items, refused } = projectResponsesOutput(value.output);
   let termination: OpenAIResponsesReply['termination'];
   if (value.status === 'incomplete') {
     shape(value.incomplete_details, ['reason']);

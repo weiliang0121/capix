@@ -92,6 +92,49 @@ test('Responses retains refusal and truncation as distinct terminal outcomes', a
   assert.deepEqual(interrupted.termination, { kind: 'incomplete', reason: 'max_output_tokens' });
 });
 
+function completeSnapshots(index, done, terminal, status = 'completed') {
+  const final = { ...response, status, incomplete_details: status === 'incomplete' ? { reason: 'max_output_tokens' } : null, output: response.output.with(index, terminal) };
+  const sequence = events(final).map((event) => (event.type === 'response.output_item.done' && event.output_index === index ? { ...event, item: done } : event));
+  return provider(() => stream(sequence)).complete({ ...request, stream: true });
+}
+
+test('Responses reconciles equivalent JSON representations in done and terminal snapshots', async () => {
+  const plain = { type: 'message', id: message.id, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: '查询' }] };
+  const defaults = { ...plain, phase: null, content: [{ ...plain.content[0], annotations: [], logprobs: [] }] };
+  const direct = { ...call, async: false, namespace: null, caller: { type: 'direct' } };
+  for (const [index, left, right] of [
+    [1, plain, defaults],
+    [2, call, direct],
+  ]) {
+    for (const status of ['completed', 'incomplete']) {
+      const json = await provider(() => Response.json({ ...response, status, incomplete_details: status === 'incomplete' ? { reason: 'max_output_tokens' } : null, output: response.output.with(index, left) })).complete(request);
+      assert.deepEqual(await completeSnapshots(index, left, right, status), json);
+      assert.deepEqual(await completeSnapshots(index, right, left, status), json);
+    }
+  }
+});
+
+test('Responses rejects contradictory material or invalid metadata in either snapshot', async () => {
+  for (const [index, valid, other] of [
+    [1, message, { ...message, phase: 'final_answer' }],
+    [1, message, { ...message, content: [{ ...message.content[0], logprobs: [1] }] }],
+    [1, message, { ...message, content: [{ ...message.content[0], annotations: [{ type: 'url_citation' }] }] }],
+    [1, message, { ...message, content: [{ ...message.content[0], extra: true }] }],
+    [2, call, { ...call, caller: { type: 'direct', extra: true } }],
+    [2, call, { ...call, async: true }],
+    [2, call, { ...call, namespace: 'server' }],
+    [2, call, { ...call, status: 'incomplete' }],
+    [0, reasoning, { ...reasoning, encrypted_content: 'different' }],
+  ]) {
+    await assert.rejects(completeSnapshots(index, valid, other), { code: 'ENVELOPE' });
+    await assert.rejects(completeSnapshots(index, other, valid), { code: 'ENVELOPE' });
+  }
+  // Both statuses are valid in an incomplete response, but the two snapshots must agree.
+  await assert.rejects(completeSnapshots(2, call, { ...call, status: 'incomplete' }, 'incomplete'), { code: 'ENVELOPE' });
+  await assert.rejects(completeSnapshots(0, reasoning, { ...reasoning, status: 'completed' }), { code: 'ENVELOPE' });
+  await assert.rejects(completeSnapshots(0, { ...reasoning, encrypted_content: null }, reasoning), { code: 'ENVELOPE' });
+});
+
 test('Responses rejects unsupported material, contradictory statuses, identifiers and counters', async () => {
   for (const [fields, reason] of [
     [{ store: true }, 'store-mismatch'],

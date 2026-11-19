@@ -1,6 +1,5 @@
-import { isDeepStrictEqual } from 'node:util';
 import { parseModelJson, deliverModelConsumer, ProviderError } from './error.js';
-import { acceptResponsesReply, checkResponsesFunctionCall, responsesEnvelope, responsesOutputItem } from './responses-reply.js';
+import { acceptResponsesReply, checkResponsesFunctionCall, reconcileResponsesItem, responsesEnvelope, responsesOutputItem } from './responses-reply.js';
 import type { ResponsesSource } from './responses-wire.js';
 import type { ModelControls, ModelStreamProgress, OpenAIResponsesReply } from './types.js';
 import { count, identity, record } from './value.js';
@@ -74,10 +73,7 @@ export class ResponsesStream {
             if (source.status !== 'incomplete') throw responsesEnvelope();
             return item;
           }
-          // The done event can carry the full encrypted blob even when the terminal snapshot omits it.
-          const final = item.type === 'reasoning' && item.encrypted_content == null && typeof finished.encrypted_content === 'string' ? { ...item, encrypted_content: finished.encrypted_content } : item;
-          if (!isDeepStrictEqual(final, finished)) throw responsesEnvelope();
-          return final;
+          return reconcileResponsesItem(item, finished);
         });
         this.#reply = acceptResponsesReply({ ...source, output }, this.binding);
         return true;
