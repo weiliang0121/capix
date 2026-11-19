@@ -43,7 +43,7 @@ function usage(value: unknown): ModelUsage | null {
   if (hit !== undefined && (!count(hit) || hit > promptTokens)) throw responsesEnvelope();
   if (written !== undefined && (!count(written) || written > promptTokens)) throw responsesEnvelope();
   if (reasoning !== undefined && (!count(reasoning) || reasoning > completionTokens)) throw responsesEnvelope();
-  return { promptTokens, completionTokens, totalTokens, ...(hit === undefined ? {} : { promptCacheHitTokens: hit }) };
+  return { promptTokens, completionTokens, totalTokens, ...(hit === undefined ? {} : { promptCacheHitTokens: hit }), ...(written === undefined ? {} : { promptCacheWriteTokens: written }) };
 }
 
 function reasoningParts(parts: unknown, type: 'reasoning_text' | 'summary_text'): string[] {

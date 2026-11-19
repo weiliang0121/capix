@@ -128,7 +128,7 @@ for (const service of services) {
         if (service.usage.prompt_cache_hit_tokens !== undefined) {
           usage.promptCacheHitTokens = service.usage.prompt_cache_hit_tokens;
           usage.promptCacheMissTokens = service.usage.prompt_cache_miss_tokens;
-        }
+        } else if (service.usage.prompt_tokens_details) usage.promptCacheHitTokens = service.usage.prompt_tokens_details.cached_tokens;
         assert.deepEqual(first.reply.usage, usage);
         assert.equal(first.feedback[0].toolCallId, 'call_lookup');
       } finally {

@@ -17,8 +17,8 @@ export function validMessagesCounts(counts: Record<string, unknown>): counts is 
 export function projectMessagesUsage(counts: AnthropicMessagesUsageCounts): Partial<ModelUsage> | null {
   const { input_tokens: input, output_tokens: output, cache_read_input_tokens: hit, cache_creation_input_tokens: write } = counts;
   const prompt = input !== undefined && hit !== undefined && write !== undefined ? input + hit + write : undefined;
-  if (prompt === undefined && output === undefined && hit === undefined) return null;
-  return { ...(prompt === undefined ? {} : { promptTokens: prompt }), ...(output === undefined ? {} : { completionTokens: output }), ...(hit === undefined ? {} : { promptCacheHitTokens: hit }), ...(prompt !== undefined && output !== undefined ? { totalTokens: prompt + output } : {}) };
+  if (prompt === undefined && output === undefined && hit === undefined && write === undefined) return null;
+  return { ...(prompt === undefined ? {} : { promptTokens: prompt }), ...(output === undefined ? {} : { completionTokens: output }), ...(hit === undefined ? {} : { promptCacheHitTokens: hit }), ...(write === undefined ? {} : { promptCacheWriteTokens: write }), ...(prompt !== undefined && output !== undefined ? { totalTokens: prompt + output } : {}) };
 }
 
 export function messagesTerminationKind(reason: string): ModelReply['termination']['kind'] {
@@ -36,7 +36,7 @@ export function checkMessagesReply(native: Record<string, unknown>, { output, te
   const { kind, reason } = termination;
   const hasCalls = calls > 0;
   if (kind !== messagesTerminationKind(reason) || (kind === 'completed' && (reason === 'tool_use') !== hasCalls)) throw new TypeError('Model termination disagrees with Anthropic Messages output');
-  if (usage && (usage.totalTokens !== usage.promptTokens + usage.completionTokens || usage.promptCacheMissTokens !== undefined)) throw new TypeError('Invalid Anthropic Messages usage counts');
+  if (usage && (usage.totalTokens !== usage.promptTokens + usage.completionTokens || usage.promptCacheMissTokens !== undefined || (usage.promptCacheWriteTokens !== undefined && usage.promptCacheWriteTokens > usage.promptTokens - (usage.promptCacheHitTokens ?? 0)))) throw new TypeError('Invalid Anthropic Messages usage counts');
 }
 /** Each visible block is stored once, in output. The layout interleaves it with signed material. */
 function checkMessagesLayout(native: unknown, outputLength: number): void {

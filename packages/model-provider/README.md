@@ -177,7 +177,7 @@ DeepSeek 思考模式在带 `tools` 的后续请求中要求回传此前回复�
 
 ## 流式与用量
 
-Messages 按事件类型与块索引累积文本、思考和工具参数，到 `message_stop` 才交付完整回复。普通文本和公开的思考文本分别交给 `emit` 和 `emitReasoning`。签名与遮盖数据仅用于原协议续轮。HTTP 200 响应中的显式错误事件终止该次调用，提前 EOF 只在允许传输重试时重试。输入 token 按普通、缓存读取、缓存写入三种口径合计，输出使用最终累计值。四项齐全时，`reply.usage` 和完成事件才提供完整统计。部分计数保存在 `native.partialUsage`。跨协议调用 `modelReplyUsage(reply)` 可读取含义明确的公共计数，签名为 `Partial<ModelUsage> | null`。例如只报告普通输入 25 和输出 15 时，返回 `{ completionTokens: 15 }`，总输入仍未知。仅报告普通输入或缓存写入时，可从原生字段读取相应数值。[官方流式示例](https://platform.claude.com/docs/en/build-with-claude/streaming#basic-streaming-request)
+Messages 按事件类型与块索引累积文本、思考和工具参数，到 `message_stop` 才交付完整回复。普通文本和公开的思考文本分别交给 `emit` 和 `emitReasoning`。签名与遮盖数据仅用于原协议续轮。HTTP 200 响应中的显式错误事件终止该次调用，提前 EOF 只在允许传输重试时重试。输入 token 按普通、缓存读取、缓存写入三种口径合计，输出使用最终累计值。四项齐全时，`reply.usage` 和完成事件才提供完整统计。部分计数保存在 `native.partialUsage`。跨协议调用 `modelReplyUsage(reply)` 可读取含义明确的公共计数，签名为 `Partial<ModelUsage> | null`。例如只报告普通输入 25 和输出 15 时，返回 `{ completionTokens: 15 }`，总输入仍未知。仅报告缓存写入时，公共字段 `promptCacheWriteTokens` 也会保留该值。例如普通输入 12、缓存读取 3、缓存写入 5、输出 7 对应提示总量 20 和总用量 27。[官方流式示例](https://platform.claude.com/docs/en/build-with-claude/streaming#basic-streaming-request)
 
 Gemini 按 SSE 事件累积完整 Part。候选的有效 `finishReason` 或提示拦截原因确认终态；终态事件缺少计量时，等待尾部用量事件或正常 EOF。尚未收到终态的提前 EOF 会被拒绝。`emit` 和 `emitReasoning` 分别交付原生 Part 中的正文和思考文本，`progress` 按 Part 顺序报告活动类别。输入用量合计提示与工具提示 token，输出用量合计候选与思考 token，缓存读取量单列。缺少可靠依据时 `usage` 为 `null`。以下为 Chat Completions 流规则。
 
@@ -195,7 +195,9 @@ progress、emitReasoning 与 emit 使用相同的同步消费者失败语义：�
 
 SSE 按 `tool_calls[index]` 拼接名称与参数片段，保留 reasoning_content，终态与独立 usage 均支持。缺少 ID、重复 ID、索引缺口、超过 32 个调用、终态后继续 choice、重复 usage、缺少 finish_reason 或 `[DONE]` 均拒绝。`[DONE]` 结束协议后立即释放读取，不要求上游 HTTP 连接先关闭。默认不重发，也不退回非流式请求；显式重试的流中断边界见下节。原有 UTF-8 分片、SSE 换行/注释、多行 data、接收者失败、取消和总超时行为保持。
 
-JSON 与 SSE 共用 `ModelUsage`：`promptTokens / completionTokens / totalTokens`，可选 `promptCacheHitTokens / promptCacheMissTokens` 原样保留。计数必须是非负安全整数，缓存单项不超过 promptTokens，两项都报告时其和须等于 promptTokens。缺失不估算为零；不把其他厂商的缓存字段自动映射成 DeepSeek 计数。
+JSON 与 SSE 共用 `ModelUsage`。提示、输出和总计分别为 `promptTokens`、`completionTokens` 和 `totalTokens`。Chat Completions 优先读取 DeepSeek 的 `prompt_cache_hit_tokens`，缺失时使用 `prompt_tokens_details.cached_tokens`。只有回报 `prompt_cache_miss_tokens` 才填写 `promptCacheMissTokens`。命中和未命中都已知时，两项之和必须等于提示总量。
+
+Messages 的 `cache_creation_input_tokens` 和 Responses 的 `input_tokens_details.cache_write_tokens` 映射为 `promptCacheWriteTokens`。缓存读取与写入已包含在提示用量中。各计数须为非负安全整数，缓存单项最多为提示总量。已回报的 0 保留，缺失的缓存计数省略。
 
 ## 定位协议错误
 

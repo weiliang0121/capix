@@ -21,7 +21,7 @@ test('a Messages exchange restores offline and encodes feedback in call order wh
     async fetch(_url, { body }) {
       requests.push(JSON.parse(body));
       const first = requests.length === 1;
-      return Response.json({ type: 'message', id: first ? 'msg_01' : 'msg_02', role: 'assistant', model: 'fixture', content: first ? content : [{ type: 'text', text: 'done' }], stop_reason: first ? 'tool_use' : 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5 } });
+      return Response.json({ type: 'message', id: first ? 'msg_01' : 'msg_02', role: 'assistant', model: 'fixture', content: first ? content : [{ type: 'text', text: 'done' }], stop_reason: first ? 'tool_use' : 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 2 } });
     },
   });
   const entity = new ModelExchanges();
@@ -36,8 +36,8 @@ test('a Messages exchange restores offline and encodes feedback in call order wh
   const restored = ModelExchanges.restore(snapshot, { persistence: { commit: () => assert.fail('cold read wrote data') } });
   assert.deepEqual(restored.snapshot(), snapshot);
   const next = restored.request({ origin, exchanges: [closed] });
-  assert.deepEqual(next.exchanges[0].reply.native.partialUsage, { input_tokens: 10, output_tokens: 5 });
-  assert.deepEqual(modelReplyUsage(next.exchanges[0].reply), { completionTokens: 5 });
+  assert.deepEqual(next.exchanges[0].reply.native.partialUsage, { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 2 });
+  assert.deepEqual(modelReplyUsage(next.exchanges[0].reply), { completionTokens: 5, promptCacheWriteTokens: 2 });
   assert.deepEqual(
     next.exchanges[0].feedback.map((item) => item.toolCallId),
     ['second', 'first'],

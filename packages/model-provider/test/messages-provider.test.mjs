@@ -93,7 +93,7 @@ test('Messages JSON and SSE preserve the same public output, signed replay, real
     const reasoning = [];
     const progress = [];
     const reply = await provider.complete(initial, { emit: (text) => previews.push(text), emitReasoning: (text) => reasoning.push(text), progress: ({ kind }) => progress.push(kind) });
-    assert.deepEqual(reply.usage, { promptTokens: 20, completionTokens: 7, totalTokens: 27, promptCacheHitTokens: 3 });
+    assert.deepEqual(reply.usage, { promptTokens: 20, completionTokens: 7, totalTokens: 27, promptCacheWriteTokens: 5, promptCacheHitTokens: 3 });
     assert.deepEqual(previews, stream ? ['先查', '再查'] : []);
     assert.deepEqual(reasoning, stream ? ['查'] : []);
     assert.deepEqual(progress, stream ? ['reasoning', 'text', 'tool-call', 'text', 'tool-call'] : []);
@@ -301,16 +301,16 @@ test('Messages JSON and SSE preserve final partial counters and expose only know
     [
       { input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
       { input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-      { promptTokens: 0, promptCacheHitTokens: 0 },
+      { promptTokens: 0, promptCacheHitTokens: 0, promptCacheWriteTokens: 0 },
     ],
-    [{ cache_creation_input_tokens: 5, output_tokens: null }, { cache_creation_input_tokens: 5 }, null],
+    [{ cache_creation_input_tokens: 5, output_tokens: null }, { cache_creation_input_tokens: 5 }, { promptCacheWriteTokens: 5 }],
     [
       { cache_read_input_tokens: 0, output_tokens: 0 },
       { cache_read_input_tokens: 0, output_tokens: 0 },
       { promptCacheHitTokens: 0, completionTokens: 0 },
     ],
     [{ input_tokens: null, service_tier: 'standard' }, undefined, null],
-    [usage, undefined, { promptTokens: 20, promptCacheHitTokens: 3, completionTokens: 7, totalTokens: 27 }],
+    [usage, undefined, { promptTokens: 20, promptCacheWriteTokens: 5, promptCacheHitTokens: 3, completionTokens: 7, totalTokens: 27 }],
   ]) {
     for (const stream of [false, true]) {
       const frames = events(answer);
@@ -330,7 +330,7 @@ test('Messages JSON and SSE preserve final partial counters and expose only know
 test('nullable cumulative counters preserve observations and missing counts never become zero', async () => {
   const counters = { ...usage, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
   let reply = await model(async () => Response.json({ ...answer, usage: counters })).complete(request);
-  assert.deepEqual(reply.usage, { promptTokens: 12, completionTokens: 7, totalTokens: 19, promptCacheHitTokens: 0 });
+  assert.deepEqual(reply.usage, { promptTokens: 12, completionTokens: 7, totalTokens: 19, promptCacheHitTokens: 0, promptCacheWriteTokens: 0 });
   for (const absent of [null, undefined]) {
     reply = await model(async () => Response.json({ ...answer, usage: { ...counters, cache_creation_input_tokens: absent } })).complete(request);
     assert.equal(reply.usage, null);
@@ -339,7 +339,7 @@ test('nullable cumulative counters preserve observations and missing counts neve
   const stop = frames.at(-2);
   stop.usage = { input_tokens: null, cache_read_input_tokens: null, cache_creation_input_tokens: null, output_tokens: 8 };
   reply = await model(async () => sse(frames)).complete({ ...request, stream: true });
-  assert.deepEqual(reply.usage, { promptTokens: 20, completionTokens: 8, totalTokens: 28, promptCacheHitTokens: 3 });
+  assert.deepEqual(reply.usage, { promptTokens: 20, completionTokens: 8, totalTokens: 28, promptCacheWriteTokens: 5, promptCacheHitTokens: 3 });
   const onlyInitialUsage = frames.filter((frame) => frame.type !== 'message_delta' || frame.delta.stop_reason);
   delete stop.usage;
   reply = await model(async () => sse(onlyInitialUsage)).complete({ ...request, stream: true });
@@ -449,7 +449,7 @@ test('Messages preserves the stop reason across subsequent cumulative usage delt
   const complete = () => model(async () => sse(frames)).complete({ ...request, stream: true });
   const reply = await complete();
   assert.deepEqual(reply.termination, { kind: 'completed', reason: 'end_turn' });
-  assert.deepEqual(reply.usage, { promptTokens: 21, completionTokens: 9, totalTokens: 30, promptCacheHitTokens: 4 });
+  assert.deepEqual(reply.usage, { promptTokens: 21, completionTokens: 9, totalTokens: 30, promptCacheWriteTokens: 5, promptCacheHitTokens: 4 });
   frames.splice(-1, 0, { type: 'message_delta', delta: { stop_reason: 'max_tokens' } });
   await assert.rejects(complete(), { code: 'ENVELOPE' });
 });

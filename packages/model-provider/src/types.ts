@@ -37,6 +37,8 @@ export interface ModelUsage {
   readonly totalTokens: number;
   readonly promptCacheHitTokens?: number;
   readonly promptCacheMissTokens?: number;
+  /** Reported input used to create a prompt cache entry, already included in promptTokens. */
+  readonly promptCacheWriteTokens?: number;
 }
 interface Reply<Call extends ModelToolCall, Native> {
   readonly formatVersion: 1;
