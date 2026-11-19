@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import site from '../../docs/.vitepress/config.mjs';
 import { checkPackageReadme, checkReference } from '../../scripts/docs/check.mjs';
+
+test('the multi-agent scenario is directly reachable from the site and imports its runnable example', async () => {
+  const route = '/scenarios/multi-agent';
+  const docs = new URL('../../docs/', import.meta.url);
+  const [home, scenario] = await Promise.all([readFile(new URL('index.md', docs), 'utf8'), readFile(new URL('scenarios/multi-agent.md', docs), 'utf8')]);
+  assert.ok(
+    site.themeConfig.nav.some(({ link }) => link === route),
+    'The top-level navigation must link directly to the multi-agent scenario',
+  );
+  assert.match(home, /(?:\]\(|\bhref=["']|^\s*link:\s*["']?)\.?\/scenarios\/multi-agent(?=[\s)"']|$)/m, 'The home page must link directly to the multi-agent scenario');
+  assert.match(scenario, /^<<<[ \t]+\.\.\/\.\.\/examples\/parallel-review\.mjs(?=[\s#{]|$)/m, 'The scenario must import source from its runnable example');
+});
 
 test('public site references reject private repository paths and missing example imports', async () => {
   const root = await mkdtemp(join(tmpdir(), 'capix-docs-'));
