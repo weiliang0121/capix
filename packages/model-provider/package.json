@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node ../../scripts/test/run.mjs --package ."
   },
-  "description": "Chat Completions model protocol adapter with streaming and native tool calls for CAPiX.",
+  "description": "Chat Completions, OpenAI Responses, Anthropic Messages and Gemini generateContent adapters with streaming and native tool calls for CAPiX.",
   "license": "MIT",
   "author": "wei.liang (https://github.com/weiliang0121)",
   "repository": {

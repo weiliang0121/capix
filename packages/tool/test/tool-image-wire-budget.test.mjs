@@ -18,6 +18,7 @@ test('portable image projection reserves escaped identities and all attachments 
     let placeholderBytes;
     let actual;
     const inspection = {
+      reserveWireBytes: provider.reserveWireBytes.bind(provider),
       inspectRequest(request) {
         const measured = provider.inspectRequest(request);
         if (request.exchanges.length) {

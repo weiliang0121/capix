@@ -4,6 +4,11 @@ import { MemoryCheckpointStore, createCheckpointValueBlock } from '@weiliang0121
 import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
 import { ToolBudgetError, ToolModelCallLimitError } from '@weiliang0121/capix-tool';
 import { assembly, member, host, journal, input, reply, call, final } from './fixture.mjs';
+// The injected test transport serializes the common request as its wire body.
+function reserveJsonWireBytes(request, { feedback, contextGrowthBytes }) {
+  const projected = request.exchanges.at(-1).feedback;
+  return this.inspectRequest(request).wireBytes + contextGrowthBytes + feedback.reduce((total, slot) => total + slot.maxBytes - Buffer.byteLength(JSON.stringify(projected.find((item) => item.toolCallId === slot.toolCallId))), 0);
+}
 const close = async (model) => {
   await model.interactions.settled();
   model.interactions.close();
@@ -50,6 +55,7 @@ for (const variant of ['default', 'inspector', 'feedback', 'collection', 'closur
     const sentinel = new ToolBudgetError('TOOL_REQUEST_LIMIT', 10000, 6000, 'reserved');
     const options = variant === 'default' ? { capacityPolicy: undefined } : variant === 'feedback' ? { requestContext: { maxBytes: 10000 }, budgets: { maxFeedbackBytes: 100, maxRequestBytes: 6000 } } : variant === 'collection' ? { budgets: { maxReplyBytes: 1024, maxCollectionBytes: 30000, maxFeedbackBytes: 4096, maxRequestBytes: 6000 } } : variant === 'closure' ? { budgets: { maxFeedbackBytes: 4096, maxRequestBytes: 1000 } } : variant === 'wire' ? { budgets: { maxFeedbackBytes: 4096, maxWireRequestBytes: 6000 } } : variant === 'loop' ? { maxModelCalls: 2 } : {};
     const inspection = {
+      reserveWireBytes: reserveJsonWireBytes,
       inspectRequest(request) {
         if (variant === 'inspector' && request.exchanges?.length) throw sentinel;
         return { requestBytes: Buffer.byteLength(JSON.stringify(request)), wireBytes: Buffer.byteLength(JSON.stringify(request)) };
@@ -216,6 +222,7 @@ for (const metric of ['requestBytes', 'wireBytes'])
     const boundaries = [];
     const model = host(send);
     const inspection = {
+      reserveWireBytes: reserveJsonWireBytes,
       inspectRequest(request) {
         const size = Buffer.byteLength(JSON.stringify(request));
         return { requestBytes: size, wireBytes: size, ...(request.exchanges?.length ? { [metric]: 20000 } : {}) };
@@ -326,3 +333,90 @@ for (const scope of ['wire', 'exchange'])
       }
     }
   });
+
+for (const room of [550, 10])
+  test(`under the exchange hard limit with ${room} spare bytes, only a real fitting defer feedback can close the exchange`, async () => {
+    const maximum = 2 * 1024 * 1024;
+    const batch = reply('near-hard-limit', [call('a', 'lookup', { key: 'a' })]);
+    batch.native.reasoningContent = '';
+    const minimum = { reply: batch, feedback: [{ toolCallId: 'a', status: 'ok', content: [{ kind: 'text', text: '' }] }] };
+    batch.native.reasoningContent = 'x'.repeat(maximum - room - Buffer.byteLength(JSON.stringify(minimum)));
+    assert.equal(Buffer.byteLength(JSON.stringify(minimum)), maximum - room);
+    const model = host((request) => (request.exchanges.length ? final : batch));
+    let effects = 0;
+    const fixture = assembly(
+      {
+        policyVersion: 'hard-cap-defer',
+        capacityPolicy: 'defer',
+        tools: {
+          lookup: member('lookup', () => {
+            effects++;
+            return { text: 'effect' };
+          }),
+        },
+        budgets: { maxFeedbackBytes: 4096, maxReplyBytes: maximum, maxRequestBytes: 2 * maximum },
+      },
+      model,
+    );
+    try {
+      if (room === 550) {
+        assert.equal(await fixture.runner.run(input), 'finished');
+        const rejection = JSON.parse(model.sent[1].exchanges[0].feedback[0].content[0].text);
+        assert.equal(rejection.code, 'TOOL_CAPACITY_DEFERRED');
+        assert.equal(rejection.reason.code, 'TOOL_EXCHANGE_LIMIT');
+        assert.equal(rejection.reason.limit, maximum);
+        assert.equal(rejection.executed, false);
+      } else {
+        await assert.rejects(fixture.runner.run(input), /byte limit/);
+        assert.equal(model.sent.length, 1);
+        assert.equal(fixture.entity.snapshot().entries[0].feedback.length, 0);
+      }
+      assert.equal(effects, 0);
+    } finally {
+      await close(model);
+    }
+  });
+
+test('a mixed batch can defer a large uninstalled schema rejection at the exchange hard limit', async () => {
+  const { z } = await import('zod');
+  const maximum = 2 * 1024 * 1024;
+  const fields = Array.from({ length: 6 }, (_, i) => 'field' + String(i).padEnd(55, 'x'));
+  const valid = Object.fromEntries(fields.map((key) => [key, 'ok']));
+  const batch = reply('mixed-hard-limit', [call('a', 'lookup', valid), call('b', 'lookup', {})]);
+  const minimum = { reply: batch, feedback: ['a', 'b'].map((toolCallId) => ({ toolCallId, status: 'ok', content: [{ kind: 'text', text: '' }] })) };
+  for (const constrained of [false, true]) {
+    batch.native.reasoningContent = '';
+    if (constrained) batch.native.reasoningContent = 'x'.repeat(maximum - 800 - Buffer.byteLength(JSON.stringify(minimum)));
+    const model = host((request) => (request.exchanges.length ? final : batch));
+    let effects = 0;
+    const lookup = member('lookup', () => {
+      effects++;
+      return { text: '' };
+    });
+    lookup.input = z.strictObject(Object.fromEntries(fields.map((key) => [key, z.string()])));
+    const fixture = assembly({ policyVersion: 'mixed-defer', capacityPolicy: 'defer', tools: { lookup }, budgets: { maxFeedbackBytes: 4096, maxReplyBytes: maximum, maxRequestBytes: 2 * maximum } }, model);
+    try {
+      assert.equal(await fixture.runner.run(input), 'finished');
+      const [exchange] = model.sent[1].exchanges;
+      const added = Buffer.byteLength(JSON.stringify(exchange)) - Buffer.byteLength(JSON.stringify(minimum));
+      if (constrained) {
+        assert.equal(effects, 0);
+        assert.ok(added <= 800);
+        assert.deepEqual(
+          exchange.feedback.map(({ toolCallId, content }) => {
+            const { code, executed, reason } = JSON.parse(content[0].text);
+            return [toolCallId, code, executed, reason.code];
+          }),
+          ['a', 'b'].map((id) => [id, 'TOOL_CAPACITY_DEFERRED', false, 'TOOL_EXCHANGE_LIMIT']),
+        );
+        assert.deepEqual(fixture.entity.snapshot().entries[0].receptions, []);
+      } else {
+        assert.equal(effects, 1);
+        assert.ok(added > 800, 'the ordinary schema rejection alone exceeds the available space');
+        assert.equal(JSON.parse(exchange.feedback[1].content[0].text).code, 'INVALID_ARGUMENTS');
+      }
+    } finally {
+      await close(model);
+    }
+  }
+});

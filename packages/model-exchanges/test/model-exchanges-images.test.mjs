@@ -127,3 +127,28 @@ test('historical image projection reduces a valid large request to the default p
   await provider.complete(actual);
   assert.equal(sends, 1);
 });
+
+test('feedback preview accounts for displaced images in the old prefix and current slots without writing', () => {
+  const entity = new ModelExchanges();
+  const origin = entity.begin('projection', basis(1));
+  const first = append(entity, origin, 'first');
+  const open = entity.intake(origin, { parentContextId: 'parent', childContextId: 'current', position: 'model' }, reply(['next']));
+  const prefix = { origin, exchanges: [first] };
+  const saved = entity.snapshot();
+  const placeholder = { toolCallId: 'next', status: 'ok', content: Array.from({ length: 32 }, () => ({ kind: 'text', text: '' })) };
+  const preview = entity.previewFeedback(prefix, open, [placeholder], [{ toolCallId: 'next', maxBytes: 8192 }]);
+  const feedback = { status: 'ok', content: Array.from({ length: 32 }, () => image) };
+  const known = entity.previewFeedback(prefix, open, [{ toolCallId: 'next', ...feedback }]);
+  assert.deepEqual(known.omissionBytes, [0, 0]);
+  assert.equal(preview.request.exchanges[0].feedback[0].content[2].kind, 'image');
+  assert.equal(known.request.exchanges[0].feedback[0].content[2].kind, 'text');
+  assert.ok(preview.omissionBytes[0] >= Buffer.byteLength(JSON.stringify(known.request.exchanges[0].feedback[0].content[2])));
+  const omitted = known.request.exchanges[1].feedback[0].content.filter((part) => part.kind === 'text');
+  assert.equal(omitted.length, 31);
+  assert.ok(preview.omissionBytes[1] >= omitted.reduce((sum, part) => sum + Buffer.byteLength(JSON.stringify(part)), 0));
+  assert.deepEqual(entity.snapshot(), saved);
+  const closed = entity.complete(origin, open, 'next', feedback);
+  assert.deepEqual(entity.request({ origin, exchanges: [first, closed] }), known.request);
+  assert.throws(() => entity.previewFeedback(prefix, open, []), /revision|mismatch/i);
+  assert.deepEqual(entity.previewFeedback(prefix, closed, []).request, known.request);
+});

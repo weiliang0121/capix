@@ -19,10 +19,31 @@ import type { ResourceEventConsumer } from '@weiliang0121/capix-resources';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import * as memory from '@weiliang0121/capix-memory';
 import { View, createViewSource, openView, type ViewAccess } from '@weiliang0121/capix-view';
-import type { ModelControls } from '@weiliang0121/capix-model-provider';
+import { AnthropicMessagesProvider, ChatCompletionsProvider, GeminiGenerateContentProvider, OpenAIResponsesProvider, modelReplyUsage, type OpenAIResponsesConfiguration, type ModelControls, type ModelProtocolDiagnostic, type ModelRequest } from '@weiliang0121/capix-model-provider';
+
+// Check the published concrete return types and the common Tool inspection capability.
+async function checkProviderTypes(chat: ChatCompletionsProvider, messages: AnthropicMessagesProvider, responses: OpenAIResponsesProvider, gemini: GeminiGenerateContentProvider, request: ModelRequest) {
+  const chatReply = await chat.complete(request);
+  chatReply.native.reasoningContent satisfies string | undefined;
+  const nativeReply = await messages.complete(request);
+  nativeReply.native.format satisfies 'anthropic-messages';
+  modelReplyUsage(nativeReply)?.completionTokens satisfies number | undefined;
+  messages satisfies NonNullable<ToolModelSource['inspection']>;
+  const response = await responses.complete(request);
+  response.native.format satisfies 'openai-responses';
+  response.native.continuation satisfies NonNullable<OpenAIResponsesConfiguration['continuation']>;
+  responses satisfies NonNullable<ToolModelSource['inspection']>;
+  const googleReply = await gemini.complete(request);
+  googleReply.native.format satisfies 'gemini-generate-content';
+  gemini satisfies NonNullable<ToolModelSource['inspection']>;
+}
+void checkProviderTypes;
 
 // Separate preview channels remain usable through the published declarations.
 const modelControls: ModelControls = {
+  attempt(event) {
+    if (event.kind === 'failed') event.failure.diagnostic satisfies ModelProtocolDiagnostic | undefined;
+  },
   emit(delta) {
     delta satisfies string;
   },

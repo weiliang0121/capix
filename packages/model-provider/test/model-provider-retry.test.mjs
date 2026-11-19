@@ -186,24 +186,26 @@ test('cut-off SSE attempts can retry while final output contains only the winnin
     [1, 'text', 'discarded answer'],
     [2, 'text', 'winner'],
   ]);
-  assert.deepEqual(events.find((value) => value.kind === 'failed').failure, { code: 'ENVELOPE', phase: 'stream' });
+  assert.deepEqual(events.find((value) => value.kind === 'failed').failure, { code: 'ENVELOPE', phase: 'stream', diagnostic: { protocol: 'chat-completions', phase: 'stream', reason: 'missing-terminal' } });
   assert.equal(modelReplyText(reply), 'winner');
   assert.equal(reply.native.reasoningContent, undefined);
 });
 
 test('malformed JSON, UTF-8 and SSE protocol stay terminal even with retry enabled', async () => {
   const cases = [
-    [false, () => new Response('not json')],
-    [false, () => new Response(new Uint8Array([255]))],
-    [false, () => Response.json({})],
-    [true, () => streamResponse('data: not json\n\n')],
-    [true, () => streamResponse(new Uint8Array([255]))],
-    [true, () => streamResponse(event(chunk({ content: 42 })))],
-    [true, () => streamResponse(event('[DONE]'))],
-    [true, () => streamResponse(event(chunk({ content: 'partial' })) + event('[DONE]'))],
-    [true, () => streamResponse(event(chunk({ content: 'first' })) + event({ ...chunk({}, 'stop'), id: 'changed' }))],
+    [false, 'missing-body', () => new Response(null)],
+    [true, 'unexpected-content-type', () => Response.json({})],
+    [false, 'invalid-json', () => new Response('not json')],
+    [false, 'invalid-utf8', () => new Response(new Uint8Array([255]))],
+    [false, 'invalid-envelope', () => Response.json({})],
+    [true, 'invalid-json', () => streamResponse('data: not json\n\n')],
+    [true, 'invalid-utf8', () => streamResponse(new Uint8Array([255]))],
+    [true, 'invalid-envelope', () => streamResponse(event(chunk({ content: 42 })))],
+    [true, 'invalid-envelope', () => streamResponse(event('[DONE]'))],
+    [true, 'invalid-envelope', () => streamResponse(event(chunk({ content: 'partial' })) + event('[DONE]'))],
+    [true, 'invalid-envelope', () => streamResponse(event(chunk({ content: 'first' })) + event({ ...chunk({}, 'stop'), id: 'changed' }))],
   ];
-  for (const [stream, response] of cases) {
+  for (const [stream, reason, response] of cases) {
     let sends = 0;
     await assert.rejects(
       provider(
@@ -213,10 +215,25 @@ test('malformed JSON, UTF-8 and SSE protocol stay terminal even with retry enabl
         },
         { retry },
       ).complete({ messages, stream }),
-      isCode('ENVELOPE'),
+      { code: 'ENVELOPE', diagnostic: { protocol: 'chat-completions', phase: stream ? 'stream' : 'response', reason } },
     );
     assert.equal(sends, 1);
   }
+});
+
+test('a caller SyntaxError used to abort during a stream keeps its identity', async () => {
+  const controller = new AbortController();
+  const reason = new SyntaxError('caller cancellation');
+  let sends = 0;
+  const model = provider(
+    async () => {
+      sends++;
+      return streamResponse(wire());
+    },
+    { retry },
+  );
+  await assert.rejects(model.complete({ messages, stream: true }, { signal: controller.signal, emit: () => controller.abort(reason) }), (error) => error === reason);
+  assert.equal(sends, 1);
 });
 
 test('valid completed, refused and incomplete replies never trigger another send', async () => {

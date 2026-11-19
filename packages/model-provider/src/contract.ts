@@ -1,8 +1,33 @@
-import type { ModelExchange, ModelReply, ModelRequest, ToolFeedback, ToolResult } from './types.js';
+import { nativeReplyProtocol } from './native-reply.js';
+import type { ChatCompletionsReply, AnthropicMessagesReply, GeminiGenerateContentReply, OpenAIResponsesReply, ModelUsage, ModelOutput, ModelExchange, ModelReply, ModelRequest, ModelToolCall, ToolFeedback, ToolResult } from './types.js';
 import { count, identity, maximumModelExchangeBytes, maximumModelRequestBytes, record, requireJson, shape, toolLimit } from './value.js';
 
-export function terminationKind(reason: string): ModelReply['termination']['kind'] {
-  return reason === 'stop' || reason === 'tool_calls' ? 'completed' : reason === 'content_filter' ? 'refused' : 'incomplete';
+export { terminationKind } from './chat-contract.js';
+export { messagesTerminationKind } from './messages-contract.js';
+export function isChatCompletionsReply(reply: ModelReply): reply is ChatCompletionsReply {
+  return reply.native.format === 'chat-completions';
+}
+
+export function requireChatCompletionsReply(value: unknown): ChatCompletionsReply {
+  const reply = requireModelReply(value);
+  if (!isChatCompletionsReply(reply)) throw new TypeError('Expected Chat Completions reply');
+  return reply;
+}
+export function requireAnthropicMessagesReply(value: unknown): AnthropicMessagesReply {
+  const reply = requireModelReply(value);
+  if (reply.native.format !== 'anthropic-messages') throw new TypeError('Expected Anthropic Messages reply');
+  return reply as AnthropicMessagesReply;
+}
+export function requireOpenAIResponsesReply(value: unknown): OpenAIResponsesReply {
+  const reply = requireModelReply(value);
+  if (reply.native.format !== 'openai-responses') throw new TypeError('Expected OpenAI Responses reply');
+  return reply as OpenAIResponsesReply;
+}
+
+export function requireGeminiGenerateContentReply(value: unknown): GeminiGenerateContentReply {
+  const reply = requireModelReply(value);
+  if (reply.native.format !== 'gemini-generate-content') throw new TypeError('Expected Gemini GenerateContent reply');
+  return reply as GeminiGenerateContentReply;
 }
 
 /** Complete validation of the single persistent reply material; returns the same object. */
@@ -18,34 +43,36 @@ function checkReply(value: unknown): asserts value is ModelReply {
   identity(value.model);
   shape(value.termination, ['kind', 'reason']);
   identity(value.termination.reason);
-  if (value.termination.kind !== terminationKind(value.termination.reason)) throw new TypeError('Model termination does not match its reason');
-  shape(value.native, ['format', 'version'], ['reasoningContent']);
-  if (value.native.format !== 'chat-completions' || value.native.version !== 1 || ('reasoningContent' in value.native && typeof value.native.reasoningContent !== 'string')) throw new TypeError('Unsupported model native material');
-  if (!Array.isArray(value.output) || value.output.length > toolLimit + 1) throw new TypeError('Model output is invalid');
-  let text = false;
+  if (!record(value.native)) throw new TypeError('Unsupported model native material');
+  const protocol = nativeReplyProtocol(value.native);
+  const kind = value.termination.kind;
+  if (kind !== 'completed' && kind !== 'refused' && kind !== 'incomplete') throw new TypeError('Invalid model termination');
+  if (!Array.isArray(value.output)) throw new TypeError('Model output is invalid');
   const calls = new Set<string>();
   for (const item of value.output) {
-    if (record(item) && item.kind === 'text') {
-      checkText(item);
-      if (text || calls.size) throw new TypeError('Unsupported Chat Completions output order');
-      text = true;
-    } else {
+    if (record(item) && item.kind === 'text') checkText(item);
+    else {
       shape(item, ['kind', 'id', 'name', 'arguments']);
       if (item.kind !== 'tool-call') throw new TypeError('Unsupported model output kind');
       identity(item.id);
       toolName(item.name);
-      shape(item.arguments, ['encoding', 'text']);
-      if (item.arguments.encoding !== 'json-text' || typeof item.arguments.text !== 'string') throw new TypeError('Unsupported tool argument representation');
+      if (protocol.argumentEncoding === 'json-text') {
+        shape(item.arguments, ['encoding', 'text']);
+        if (item.arguments.encoding !== 'json-text' || typeof item.arguments.text !== 'string') throw new TypeError('Invalid JSON text tool arguments');
+      } else {
+        shape(item.arguments, ['encoding', 'value']);
+        if (item.arguments.encoding !== 'json-value' || !record(item.arguments.value)) throw new TypeError('Invalid JSON object tool arguments');
+      }
       if (calls.has(item.id) || calls.size >= toolLimit) throw new TypeError('Duplicate or excessive model tool calls');
       calls.add(item.id);
     }
   }
-  if ((value.termination.reason === 'tool_calls' && !calls.size) || (value.termination.reason === 'stop' && calls.size)) throw new TypeError('Model termination disagrees with tool output');
   if (value.usage !== null) {
     shape(value.usage, ['promptTokens', 'completionTokens', 'totalTokens'], ['promptCacheHitTokens', 'promptCacheMissTokens']);
     const { promptTokens, completionTokens, totalTokens, promptCacheHitTokens: hit, promptCacheMissTokens: miss } = value.usage;
     if (!count(promptTokens) || !count(completionTokens) || !count(totalTokens) || (hit !== undefined && (!count(hit) || hit > promptTokens)) || (miss !== undefined && (!count(miss) || miss > promptTokens)) || (typeof hit === 'number' && typeof miss === 'number' && hit !== promptTokens - miss)) throw new TypeError('Invalid model usage counts');
   }
+  protocol.check(value.native, { id: value.id, model: value.model, output: value.output as ModelOutput[], termination: { kind, reason: value.termination.reason }, usage: value.usage as ModelUsage | null }, calls.size);
 }
 function checkText(value: unknown): void {
   shape(value, ['kind', 'text']);
@@ -110,9 +137,15 @@ export function requireModelRequest(value: unknown): ModelRequest {
   return value as ModelRequest;
 }
 
+/** Validate the request with structural room for future feedback and message nodes. */
+export function assertModelRequestNodeCapacity(request: ModelRequest, additionalNodes: number): void {
+  if (!count(additionalNodes)) throw new RangeError('Invalid model request node reservation');
+  measureModelRequest(request, additionalNodes);
+}
+
 /** Internal preparation boundary shared by request validation and provider inspection. */
-export function measureModelRequest(value: unknown): number {
-  const bytes = requireJson(value, maximumModelRequestBytes);
+export function measureModelRequest(value: unknown, additionalNodes = 0): number {
+  const bytes = requireJson(value, maximumModelRequestBytes, additionalNodes);
   checkRequest(value);
   return bytes;
 }
@@ -157,6 +190,19 @@ function checkRequest(value: unknown): asserts value is ModelRequest {
   if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature) || value.temperature < 0 || value.temperature > 2)) throw new TypeError('temperature must be between zero and two');
   if (value.responseFormat !== undefined && (typeof value.responseFormat !== 'string' || !['text', 'json_object'].includes(value.responseFormat))) throw new TypeError('Unsupported response format');
   if (value.stream !== undefined && typeof value.stream !== 'boolean') throw new TypeError('stream must be a boolean');
+}
+
+/**
+ * Decode one admitted tool call for a consumer. The member schema validates the result;
+ * the stored call keeps its original representation for protocol continuation.
+ */
+export function readModelToolArguments(call: ModelToolCall): unknown {
+  if (call.arguments.encoding === 'json-value') return call.arguments.value;
+  try {
+    return JSON.parse(call.arguments.text);
+  } catch {
+    throw new SyntaxError('Model tool arguments contain invalid JSON');
+  }
 }
 
 /** Text projection only. Completion, refusal and empty-output policies belong to callers. */

@@ -251,7 +251,7 @@ test('preflight reserves a larger next context before effects for both common an
       const model = host((request) => (request.exchanges.length ? final : reply('one', [call('a', 'lookup', { key: 'a' })])));
       const options = configuration(false, {
         requestContext: { maxBytes },
-        budgets: { maxFeedbackBytes: 100, [budget]: budget === 'maxRequestBytes' ? 1500 : 6500 },
+        budgets: { maxFeedbackBytes: 100, [budget]: budget === 'maxRequestBytes' ? 1500 : 2000 },
         tools: {
           lookup: member('lookup', () => {
             effects++;

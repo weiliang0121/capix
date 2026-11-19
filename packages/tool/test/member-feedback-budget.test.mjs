@@ -149,7 +149,7 @@ test('request reservation counts placeholder JSON once and reports reserved fail
       inspectRequest(request) {
         const requestBytes = Buffer.byteLength(JSON.stringify(request));
         const feedback = request.exchanges?.[0]?.feedback[0];
-        if (feedback?.content.length > 1) reserved = requestBytes + 1024 - Buffer.byteLength(JSON.stringify(feedback));
+        if (feedback?.content[0]?.text === '') reserved = requestBytes + 1024 - Buffer.byteLength(JSON.stringify(feedback));
         return { requestBytes, wireBytes: requestBytes };
       },
     };

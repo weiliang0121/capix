@@ -319,6 +319,20 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         const receipt = fact.reception.status === 'accepted' ? work.children.facts.accepted(ref, toolReception(state.active.name)) : work.children.facts.handled(ref, toolReception(state.active.name));
         return processTools(work, { ...state, current: receipt.reference, cursor: state.cursor + 1, active: null }, refs);
       }
+      // An existing relation cannot be reclassified as unexecuted. If resuming
+      // it can still run member code, require today's route and reservation first.
+      if (!fact.returned && state.current) {
+        const entry = work.resources.exchanges.read(state.origin, state.current, false);
+        const calls = entry.reply.output.filter((item) => item.kind === 'tool-call');
+        await preflight(
+          work,
+          state,
+          state.current,
+          calls,
+          calls.map((call) => selectTool(entries, catalog, call)),
+          false,
+        );
+      }
       return receiveTool(work, state, refs, work.children.resume(ref));
     }
     async function confirmExchanges(work: RestoredWork, state: State, refs: Refs) {
@@ -390,6 +404,16 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       if (!text.trim()) throw new Error('Tool final answer is empty');
       return text;
     }
+    function preflight(work: Work, state: State, current: ExchangeReference, calls: readonly ModelToolCall[], selectedCalls: readonly ToolSelection[], defer: boolean) {
+      const feedbackReservations = calls.map((call, index) => {
+        const selected = selectedCalls[index]!;
+        const maxBytes = tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes;
+        if (selected.kind === 'accepted') return { toolCallId: call.id, maxBytes };
+        assertToolFeedbackBytes(call.id, selected.result, { maxFeedbackBytes: maxBytes });
+        return { toolCallId: call.id, maxBytes: Buffer.byteLength(JSON.stringify({ toolCallId: call.id, ...selected.result }), 'utf8'), fixed: selected.result };
+      });
+      return work.resources.model.preflight({ feedbackReservations, origin: state.origin, exchanges: state.exchanges, current, budgets, defer, ...(requestContext ? { context: requestContext } : {}) });
+    }
     async function processTools(work: Work, initial: State, refs: Refs): Promise<string> {
       let state = initial;
       if (!state.current) throw new Error('Missing model exchange');
@@ -403,17 +427,10 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         return value;
       }
       const selectedCalls = calls.map((call) => selectTool(entries, catalog, call));
-      const feedbackReservations = calls.map((call, index) => {
-        const selected = selectedCalls[index]!;
-        const maxBytes = tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes;
-        if (selected.kind === 'accepted') return { toolCallId: call.id, maxBytes };
-        assertToolFeedbackBytes(call.id, selected.result, { maxFeedbackBytes: maxBytes });
-        return { toolCallId: call.id, maxBytes: Buffer.byteLength(JSON.stringify({ toolCallId: call.id, ...selected.result }), 'utf8') };
-      });
       const savedBoundary = state.deferred.find((boundary) => boundary.exchange.id === entry.id);
       let boundary = savedBoundary;
       if (state.cursor < calls.length && !boundary) {
-        const reason = await work.resources.model.preflight({ feedbackReservations, origin: state.origin, exchanges: state.exchanges, current: state.current, budgets, defer: capacityPolicy === 'defer', ...(requestContext ? { context: requestContext } : {}) });
+        const reason = await preflight(work, state, state.current, calls, selectedCalls, capacityPolicy === 'defer');
         if (reason) {
           const pending = calls.slice(state.cursor);
           if (pending.some((call) => entry.feedback.some((feedback) => feedback.toolCallId === call.id))) throw new Error('Pending capacity calls already have feedback');

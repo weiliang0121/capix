@@ -1,12 +1,45 @@
+import type { ModelProtocolDiagnostic } from './types.js';
+
 /** Bounded public diagnostics never contain credentials, request text or upstream bodies. */
 export class ProviderError extends Error {
   constructor(
     readonly code: 'CONFIGURATION' | 'REQUEST' | 'REQUEST_LIMIT' | 'NETWORK' | 'HTTP' | 'TIMEOUT' | 'RESPONSE_LIMIT' | 'ENVELOPE',
     message: string,
     readonly status?: number,
+    readonly diagnostic?: ModelProtocolDiagnostic,
   ) {
     super(message);
     this.name = 'ProviderError';
+  }
+}
+
+/** Annotate codec failures at the adapter boundary, where the actual wire phase is known. */
+export class ModelProtocolIssue extends ProviderError {
+  constructor(
+    code: 'ENVELOPE' | 'REQUEST',
+    readonly reason: ModelProtocolDiagnostic['reason'],
+  ) {
+    super(code, 'Model protocol validation failed (' + reason + ')');
+  }
+
+  at(protocol: ModelProtocolDiagnostic['protocol'], phase: ModelProtocolDiagnostic['phase']): ProviderError {
+    return new ProviderError(this.code, this.message, undefined, Object.freeze({ protocol, phase, reason: this.reason }));
+  }
+}
+
+export function parseModelJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ModelProtocolIssue('ENVELOPE', 'invalid-json');
+  }
+}
+
+export function decodeModelText(decoder: TextDecoder, bytes?: Uint8Array): string {
+  try {
+    return decoder.decode(bytes, { stream: bytes !== undefined });
+  } catch {
+    throw new ModelProtocolIssue('ENVELOPE', 'invalid-utf8');
   }
 }
 

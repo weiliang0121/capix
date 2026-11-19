@@ -1,5 +1,5 @@
 import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
-import type { ModelAttemptEvent, ModelAttemptFailure, ModelControls, ModelRetryOptions } from '@weiliang0121/capix-model-provider';
+import type { ModelAttemptEvent, ModelAttemptFailure, ModelControls, ModelProtocolDiagnostic, ModelRetryOptions } from '@weiliang0121/capix-model-provider';
 
 const retry: ModelRetryOptions = { maxAttempts: 3, delayMs: 1000, maxDelayMs: 30000 };
 const failure: ModelAttemptFailure = { code: 'NETWORK', phase: 'read' };
@@ -11,7 +11,8 @@ const controls: ModelControls = {
       void [next, delay];
     } else if (event.kind === 'failed') {
       const diagnostic: ModelAttemptFailure = event.failure;
-      void diagnostic;
+      const protocolIssue: ModelProtocolDiagnostic | undefined = diagnostic.diagnostic;
+      void protocolIssue;
     } else if (event.kind === 'completed') {
       const total: number | undefined = event.usage?.totalTokens;
       void total;

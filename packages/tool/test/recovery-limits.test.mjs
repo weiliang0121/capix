@@ -86,7 +86,7 @@ test('captured recovery preserves class capability getters and private receivers
     assert.deepEqual(await access.endpoints.model.wait({ reference: fixture.input.reference, waitMs: 0, maxReplyBytes: 1024 }), final);
     assert.ok(reads.exchanges > 0);
     assert.ok(reads.channel > 0);
-    assert.ok(reads.inspection > 0);
+    assert.equal(reads.inspection, 0);
     assert.equal(reads.recovery, 1);
     // Context preparation still requires an own data capability; it never reads this getter.
     await assert.rejects(access.endpoints.model.prepare({ prefix: fixture.input.basis, context: {} }));

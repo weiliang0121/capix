@@ -2,17 +2,20 @@
 
 CAPiX 当前开发阶段只支持当前格式。旧格式明确拒绝，不自动升级、降级读取、清空或补造缺失依据。版本号是接纳边界，不是自动兼容承诺。
 
-| 层              | 当前支持                               | 拒绝边界                                                    |
-| --------------- | -------------------------------------- | ----------------------------------------------------------- |
-| Checkpoint      | Frame v6、完整逻辑 Image 与增量 Commit | 旧 Frame、不兼容 key/version、round 2/continuation 执行恢复 |
-| Memory          | 状态与固定请求 v2、完整 Stable 内容    | 旧 topic/来源正文形状、缺失或冲突的固定效果依据             |
-| ModelExchanges  | 快照 v2，固定起点及交换前缀            | 旧格式、丢失起点、不准确来源和不完整反馈                    |
-| 模型回复        | ModelReply v1，完整原生回复            | 旧 text/finishReason 双字段形状、未知字段和版本             |
-| Transcript wire | protocol 根入口定义的单帧表示          | 非法字段、版本和帧内不一致；跨帧连续性由消费者核验          |
+| 层              | 当前支持                                                                                                    | 拒绝边界                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Checkpoint      | Frame v6、完整逻辑 Image 与增量 Commit                                                                      | 旧 Frame、不兼容 key/version、round 2/continuation 执行恢复 |
+| Memory          | 状态与固定请求 v2、完整 Stable 内容                                                                         | 旧 topic/来源正文形状、缺失或冲突的固定效果依据             |
+| ModelExchanges  | 快照 v2，固定起点及交换前缀                                                                                 | 旧格式、丢失起点、不准确来源和不完整反馈                    |
+| 模型回复        | ModelReply v1，Chat Completions v1、OpenAI Responses v1、Anthropic Messages v1 或 Gemini generateContent v1 | 旧 text/finishReason 双字段形状、未知字段和版本             |
+| Tool            | 目录预检策略 v5，Tool CP v5，模型节点 CP v3                                                                 | 旧目录摘要、缺少真实反馈或不匹配的容量依据                  |
+| Transcript wire | protocol 根入口定义的单帧表示                                                                               | 非法字段、版本和帧内不一致；跨帧连续性由消费者核验          |
 
 拒绝不等于删除。宿主如使用持久数据库，应明确只创建新库或打开当前完整格式；旧库在修改前拒绝，不能通过普通启动改写、清空或自动创建同身份的空实体。重置须由用户明确处置原数据。
 
 当前格式仍支持实体静默载入、按交互身份读取反馈、显式 CP 恢复与完整 v6 Image 冷导入。格式检查不省略值域、容量、归属、修订、终态和未知提交核验；它也不授予业务恢复许可。
+
+读取含 Responses、Messages 或 Gemini 回复的 v2 交换快照，需要支持对应原生格式的 Provider 校验器。Gemini 的本地回复身份与配置模型来源、Messages 的部分计数随各自回复保存，原有 Chat v1 形状继续按同一契约接纳。Tool 目录预检策略从 v4 升到 v5，旧目录下的调用即使只用 Chat 也会拒绝恢复。[协议升级影响](proposals/model-provider-adapters.md#宿主升级影响)
 
 ## 保留与性能
 

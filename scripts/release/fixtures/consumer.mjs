@@ -19,7 +19,7 @@ import { readOutput, validateExecutionRecordSnapshot, validateInvocationRecordVa
 import { z } from 'zod';
 import { Tool, ToolModelResource } from '@weiliang0121/capix-tool';
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
-import { requireModelRequest, requireModelReply } from '@weiliang0121/capix-model-provider';
+import { AnthropicMessagesProvider, GeminiGenerateContentProvider, OpenAIResponsesProvider, modelReplyUsage, requireModelRequest, requireModelReply } from '@weiliang0121/capix-model-provider';
 import { MemoryCheckpointStore, cloneCheckpointHead } from '@weiliang0121/capix-checkpoint';
 import { Memories, MemoryViewSource, memoryResources } from '@weiliang0121/capix-memory';
 import { View, createViewSource, openView } from '@weiliang0121/capix-view';
@@ -180,13 +180,77 @@ assert.ok(restoredEvents.every((event) => event.contextId === coldImage.frame.ow
 assert.equal(coldStore.read(coldImage.frame.owner.contextId).delivery.status, 'succeeded');
 // Exercise the distributed Tool preset with host-owned plain entity/channel resources.
 const modelContract = { key: 'release.tool.model.v1', request: requireModelRequest, reply: requireModelReply };
+for (const continuation of ['replay', 'previous-response-id']) {
+  const wire = [];
+  const responses = new OpenAIResponsesProvider({
+    endpoint: 'https://release.invalid/v1/responses',
+    apiKey: 'fixture',
+    model: 'gateway-model',
+    bindingId: 'release',
+    continuation,
+    fetch: async (_url, init) => {
+      const request = JSON.parse(init.body);
+      wire.push(request);
+      const first = wire.length === 1;
+      return Response.json({ object: 'response', id: first ? 'resp_first' : 'resp_second', model: 'gateway-model', status: 'completed', error: null, incomplete_details: null, store: request.store, previous_response_id: request.previous_response_id ?? null, output: first ? [{ type: 'function_call', id: 'fc_item', call_id: 'call_lookup', status: 'completed', name: 'lookup', arguments: '{}' }] : [{ type: 'message', id: 'msg_second', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text: 'found', annotations: [] }] }] });
+    },
+  });
+  const request = { messages: [{ role: 'user', content: 'lookup' }], tools: [{ name: 'lookup', description: 'read one record', parameters: { type: 'object' } }] };
+  const first = requireModelReply(await responses.complete(request));
+  const next = await responses.complete({ ...request, exchanges: [{ reply: first, feedback: [{ toolCallId: 'call_lookup', status: 'ok', content: [{ kind: 'text', text: 'result' }] }] }] });
+  assert.deepEqual(next.output, [{ kind: 'text', text: 'found' }]);
+  assert.equal(wire[1].previous_response_id, continuation === 'previous-response-id' ? first.id : undefined);
+  assert.equal(wire[1].input.at(-1).call_id, 'call_lookup');
+}
+{
+  const requests = [];
+  const gemini = new GeminiGenerateContentProvider({
+    endpoint: 'https://release.invalid/v1beta/models/offline:generateContent',
+    apiKey: 'fixture',
+    model: 'offline',
+    bindingId: 'release',
+    async fetch(_url, { body }) {
+      requests.push(JSON.parse(body));
+      const first = requests.length === 1;
+      const parts = first ? [{ functionCall: { name: 'lookup', args: { key: 'abc' } } }] : [{ text: 'found' }];
+      return Response.json({ ...(first ? {} : { responseId: 'google-second', modelVersion: 'served-version' }), candidates: [{ content: { role: 'model', parts }, finishReason: 'STOP' }] });
+    },
+  });
+  const request = { messages: [{ role: 'user', content: 'lookup' }], tools: [{ name: 'lookup', description: 'Look up a record', parameters: { type: 'object', properties: { key: { type: 'string' } } } }] };
+  const first = requireModelReply(await gemini.complete(request));
+  assert.equal(first.native.idSource, 'local');
+  assert.equal(first.native.modelSource, 'configured');
+  const call = first.output[0];
+  assert.equal(call.kind, 'tool-call');
+  const next = await gemini.complete({ ...request, exchanges: [{ reply: first, feedback: [{ toolCallId: call.id, status: 'ok', content: [{ kind: 'text', text: 'abc' }] }] }] });
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1].contents.at(-1), { role: 'user', parts: [{ functionResponse: { name: 'lookup', response: { output: [{ kind: 'text', text: 'abc' }] } } }] });
+  assert.deepEqual(next.output, [{ kind: 'text', text: 'found' }]);
+}
 const modelRequests = [];
-const modelReply = (id, output) => ({ formatVersion: 1, id, model: 'offline-consumer', output, termination: { kind: 'completed', reason: output.some((item) => item.kind === 'tool-call') ? 'tool_calls' : 'stop' }, usage: null, native: { format: 'chat-completions', version: 1 } });
+const provider = new AnthropicMessagesProvider({
+  endpoint: 'https://release.invalid/v1/messages',
+  apiKey: 'fixture',
+  model: 'offline-consumer',
+  bindingId: 'release',
+  anthropicVersion: '2023-06-01',
+  maxTokens: 256,
+  async fetch(_url, { body }) {
+    const { messages } = JSON.parse(body);
+    const first = modelRequests.length === 1;
+    if (!first) {
+      const feedback = messages.at(-1).content[0];
+      assert.equal(feedback.tool_use_id, 'lookup-1');
+      assert.match(JSON.stringify(feedback.content), /translated:hello/);
+    }
+    return Response.json({ type: 'message', id: first ? 'lookup-request' : 'final-answer', role: 'assistant', model: 'offline-consumer', content: first ? [{ type: 'tool_use', id: 'lookup-1', name: 'lookup', input: { key: 'hello' } }] : [{ type: 'text', text: 'translated:hello' }], stop_reason: first ? 'tool_use' : 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5 } });
+  },
+});
 const exchanges = new ModelExchanges();
 const interactions = new runtime.Interactions().register(modelContract, {
   send(request) {
     modelRequests.push(structuredClone(request));
-    return request.exchanges.length === 0 ? modelReply('lookup-request', [{ kind: 'tool-call', id: 'lookup-1', name: 'lookup', arguments: { encoding: 'json-text', text: '{"key":"hello"}' } }]) : modelReply('final-answer', [{ kind: 'text', text: 'translated:hello' }]);
+    return provider.complete(request);
   },
 });
 let toolExecutions = 0;
@@ -209,6 +273,7 @@ const toolResources = new Resources().register(new Resource(exchanges), ModelExc
   new Resource({
     exchanges,
     channel: interactions.bind(modelContract),
+    inspection: provider,
     context: {
       prepare(prefix) {
         contextPreparations++;
@@ -238,6 +303,11 @@ assert.deepEqual(
 assert.deepEqual(modelRequests[1].exchanges[0].feedback, [{ toolCallId: 'lookup-1', status: 'ok', content: [{ kind: 'text', text: 'translated:hello' }] }]);
 assert.equal(exchanges.snapshot().origins.length, 1);
 assert.equal(exchanges.snapshot().entries.length, 2);
+for (const { reply } of exchanges.values()) {
+  assert.equal(reply.usage, null);
+  assert.deepEqual(modelReplyUsage(reply), { completionTokens: 5 });
+}
+assert.deepEqual(ModelExchanges.restore(exchanges.snapshot()).snapshot(), exchanges.snapshot());
 await interactions.settled();
 interactions.close();
 // Typed domain facts cross the installed resource/invocation boundary without a domain union.

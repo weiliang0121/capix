@@ -1,5 +1,5 @@
 import { ProviderError } from './error.js';
-import type { ChatCompletionsConfiguration } from './types.js';
+import type { ModelRetryOptions } from './types.js';
 
 export interface RetrySettings {
   readonly maxAttempts: number;
@@ -7,7 +7,7 @@ export interface RetrySettings {
   readonly maxDelayMs: number;
 }
 
-export function retrySettings(value: ChatCompletionsConfiguration['retry']): RetrySettings {
+export function retrySettings(value: ModelRetryOptions | undefined): RetrySettings {
   if (value === undefined) return Object.freeze({ maxAttempts: 1, delayMs: 1000, maxDelayMs: 30_000 });
   if (typeof value !== 'object' || value === null) throw new ProviderError('CONFIGURATION', 'Model retry settings must be an object');
   const maxAttempts = value.maxAttempts;

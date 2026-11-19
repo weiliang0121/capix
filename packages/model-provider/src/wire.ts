@@ -1,11 +1,11 @@
-import { requireModelReply, terminationKind } from './contract.js';
+import { isChatCompletionsReply, requireChatCompletionsReply, terminationKind } from './contract.js';
 import { ProviderError } from './error.js';
-import type { ModelExchange, ModelInputContent, ModelOutput, ModelReply, ModelRequest } from './types.js';
+import type { ModelExchange, ModelInputContent, ModelOutput, ChatCompletionsReply, ModelRequest } from './types.js';
 import { acceptUsage } from './usage.js';
 import { freezeJson, record, toolLimit } from './value.js';
 
 /** Shared JSON/SSE normalization. Native fields never contain duplicated public output. */
-export function acceptWireReply(value: unknown): ModelReply {
+export function acceptWireReply(value: unknown): ChatCompletionsReply {
   if (!record(value) || !Array.isArray(value.choices) || value.choices.length !== 1 || value.error != null) throw envelope();
   const choice: unknown = value.choices[0];
   if (!record(choice) || (choice.index !== undefined && choice.index !== 0) || !record(choice.message) || typeof choice.finish_reason !== 'string' || !choice.finish_reason) throw envelope();
@@ -25,7 +25,7 @@ export function acceptWireReply(value: unknown): ModelReply {
   if (message.content === null && !output.length && choice.finish_reason === 'stop') throw envelope();
   const reply = { formatVersion: 1, id: value.id, model: value.model, output, termination: { kind: terminationKind(choice.finish_reason), reason: choice.finish_reason }, usage: acceptUsage(value.usage), native: { format: 'chat-completions', version: 1, ...(typeof message.reasoning_content === 'string' ? { reasoningContent: message.reasoning_content } : {}) } };
   try {
-    return freezeJson(requireModelReply(reply));
+    return freezeJson(requireChatCompletionsReply(reply));
   } catch {
     throw envelope();
   }
@@ -35,6 +35,7 @@ export function encodeMessages(request: ModelRequest): unknown[] {
   return [...request.messages.map((message) => ({ role: message.role, content: typeof message.content === 'string' ? message.content : message.content.map(encodeContent) })), ...(request.exchanges ?? []).flatMap(encodeExchange)];
 }
 function encodeExchange({ reply, feedback }: ModelExchange): unknown[] {
+  if (!isChatCompletionsReply(reply)) throw new TypeError('Chat Completions cannot continue this exchange');
   const calls = reply.output.filter((item) => item.kind === 'tool-call');
   const byId = new Map(feedback.map((item) => [item.toolCallId, item]));
   const attachments: unknown[] = [];

@@ -1,6 +1,6 @@
 import { types } from 'node:util';
 import { maximumModelExchangeEntryBytes, type ModelExchangeEntry, type ModelExchangeOrigin } from '@weiliang0121/capix-model-exchanges';
-import { maximumModelExchangeBytes, maximumModelRequestBytes, maximumModelWireRequestBytes, requireModelExchange, requireModelReply, requireModelRequest, requireToolFeedback, requireToolResult, type ModelExchange, type ModelReply, type ModelRequest, type ModelRequestInspection, type ToolResult } from '@weiliang0121/capix-model-provider';
+import { assertModelContinuation, maximumModelExchangeBytes, maximumModelRequestBytes, maximumModelWireRequestBytes, requireModelExchange, requireModelReply, requireModelRequest, requireToolFeedback, requireToolResult, type ModelExchange, type ModelReply, type ModelRequest, type ModelRequestInspection, type ModelRequestReservation, type ToolResult } from '@weiliang0121/capix-model-provider';
 
 /** UTF-8 bytes of complete JSON values, including protocol envelopes and call IDs. */
 export interface ToolByteBudgets {
@@ -14,6 +14,7 @@ export interface ToolByteBudgets {
 export const defaultToolByteBudgets: ToolByteBudgets = Object.freeze({ maxReplyBytes: 64 * 1024, maxFeedbackBytes: 4 * 1024, maxRequestBytes: 2 * 1024 * 1024, maxCollectionBytes: 8 * 1024 * 1024 });
 export interface ToolRequestInspection {
   inspectRequest(request: ModelRequest): ModelRequestInspection;
+  reserveWireBytes?(request: ModelRequest, reservation: ModelRequestReservation): number;
 }
 export function resolveToolBudgets(configuration: Partial<ToolByteBudgets> = {}): ToolByteBudgets {
   const resolved = { ...defaultToolByteBudgets, ...configuration };
@@ -112,8 +113,13 @@ export function assertToolExchangeBytes(exchange: ModelExchange, growth = 0, def
   if (defer && growth > 0) return Object.freeze({ code: 'TOOL_EXCHANGE_LIMIT', bytes: total, limit: maximumModelExchangeBytes, phase: 'reserved' });
   throw new ToolBudgetError('TOOL_EXCHANGE_LIMIT', total, maximumModelExchangeBytes, growth > 0 ? 'reserved' : 'actual');
 }
-export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteBudgets, inspection?: ToolRequestInspection, growth = 0, pendingToolCallIds: readonly string[] = [], defer = false, expectedCapacity?: Pick<ToolCapacityReason, 'code' | 'limit'>): ToolCapacityReason | undefined {
+export function assertToolHistoricalRequest(request: ModelRequest, budgets: ToolByteBudgets): void {
   requireModelRequest(request);
+  within('TOOL_REQUEST_LIMIT', bytes(request), budgets.maxRequestBytes);
+}
+export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteBudgets, inspection?: ToolRequestInspection, projection?: { readonly growth: number; readonly additionalNodes: number; readonly reservation: ModelRequestReservation; readonly defer?: boolean }, expectedCapacity?: Pick<ToolCapacityReason, 'code' | 'limit'>): ToolCapacityReason | undefined {
+  const { growth = 0, reservation, defer } = projection ?? {};
+  assertModelContinuation(request, reservation, projection?.additionalNodes ?? 0);
   if (budgets.maxWireRequestBytes !== undefined && !inspection) throw new TypeError('An explicit tool wire request budget requires host request inspection');
   const measured = inspection?.inspectRequest(request);
   if (measured && typeof measured === 'object' && 'then' in measured) {
@@ -133,20 +139,23 @@ export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteB
   // The saved fact alone cannot authenticate a lower transport limit.
   if (expectedCapacity && expectedCapacity.limit !== (expectedCapacity.code === 'TOOL_REQUEST_LIMIT' ? requestLimit : expectedCapacity.code === 'TOOL_WIRE_REQUEST_LIMIT' ? wireLimit : maximumModelExchangeBytes)) throw new Error('Saved capacity decision differs from the effective request budget');
   if (!Number.isSafeInteger(growth) || growth < 0) throw new RangeError('Invalid tool request byte reservation');
-  const phase = growth > 0 || pendingToolCallIds.length > 0 ? 'reserved' : 'actual';
+  const phase = growth > 0 || reservation?.mutableContext || (reservation?.feedback.length ?? 0) > 0 ? 'reserved' : 'actual';
   const compare = (code: ToolCapacityReason['code'], value: number, limit: number): ToolCapacityReason | undefined => {
     if (value <= limit) return undefined;
     if (defer && phase === 'reserved') return Object.freeze({ code, bytes: value, limit, phase });
     throw new ToolBudgetError(code, value, limit, phase);
   };
+  let wireBytes = measured?.wireBytes;
+  if (wireBytes !== undefined && wireLimit !== undefined && phase === 'reserved') {
+    if (!reservation || typeof inspection?.reserveWireBytes !== 'function') throw new TypeError('A tool wire budget with pending feedback or context requires reserveWireBytes');
+    const upper = inspection.reserveWireBytes(request, reservation);
+    if (types.isPromise(upper)) void Promise.prototype.then.call(upper, undefined, () => undefined);
+    if (!Number.isSafeInteger(upper) || upper < wireBytes) throw new TypeError('Tool wire reservation must synchronously bound the complete inspected body');
+    wireBytes = upper;
+  }
   const requestFailure = compare('TOOL_REQUEST_LIMIT', Math.max(measured?.requestBytes ?? 0, bytes(request)) + growth, requestLimit);
   if (requestFailure) return requestFailure;
-  // Feedback JSON can double through string escaping. Portable image attachments
-  // add bounded metadata: at most 32 image references/index labels per result,
-  // one escaped call identity per group, and group/user message envelopes.
-  // Reserve metadata separately so large image bytes are not charged four times.
-  const imageOverhead = pendingToolCallIds.reduce((total, id) => total + 32 * 128 + 2 * bytes(id) + 128, 0);
-  if (measured && wireLimit !== undefined) return compare('TOOL_WIRE_REQUEST_LIMIT', measured.wireBytes + 2 * growth + imageOverhead, wireLimit);
+  if (wireBytes !== undefined && wireLimit !== undefined) return compare('TOOL_WIRE_REQUEST_LIMIT', wireBytes, wireLimit);
   return undefined;
 }
 
