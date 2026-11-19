@@ -31,6 +31,13 @@ const concepts = {
     { text: '恢复：依据与续接', link: '/concepts/recovery' },
   ],
 };
+const scenarios = {
+  text: '应用场景',
+  items: [
+    { text: '多 Agent 并行协作', link: '/scenarios/multi-agent' },
+    { text: '从capix出发，如何思考智能组织', link: '/essays/intelligent-organization' },
+  ],
+};
 const examples = {
   text: '按主题实践',
   items: [
@@ -71,13 +78,8 @@ export default defineConfig({
     sidebar: {
       '/guide/': [tutorial, reading],
       '/concepts/': [concepts, reading],
-      '/scenarios/': [
-        {
-          text: '应用场景',
-          items: [{ text: '多 Agent 并行协作', link: '/scenarios/multi-agent' }],
-        },
-        reading,
-      ],
+      '/scenarios/': [scenarios, reading],
+      '/essays/': [scenarios, reading],
       '/examples/': [examples, reading],
       '/why': [reading, tutorial],
       '/': [
