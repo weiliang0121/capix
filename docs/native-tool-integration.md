@@ -4,13 +4,13 @@ CAPiX 使用三个独立包组合工具调用：Provider 负责模型协议，Mo
 
 ## 责任与调用关系
 
-| 包                                                       | 保证                                                                               | 不承担                                 |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------- |
-| [model-provider](../packages/model-provider/README.md)   | Chat Completions 文本／函数调用、完整 ModelReply、SSE 接纳、请求预检、显式请求重试 | 工具执行、业务参数判断、任务重做、CP   |
-| [model-exchanges](../packages/model-exchanges/README.md) | 固定起点、完整回复、按 toolCallId 的反馈槽位、准确接纳凭据、请求重建               | 执行节点、资源授权、重发判断           |
-| [tool](../packages/tool/README.md)                       | 同源目录与成员、Schema 校验、串行模型／工具推进、预算、可选 CP                     | 任意外部效果幂等、跨实体事务、自动恢复 |
-| interaction                                              | 固定请求、独立一次发送、持久反馈与局部等待                                         | 因调用取消终止发送、未知反馈自动重发   |
-| runtime / invocation                                     | 结构绑定、本次 Work、父子接纳、窗口关闭、真实交付                                  | 模型协议和宿主业务策略                 |
+| 包                                                       | 保证                                                                                                                                   | 不承担                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| [model-provider](../packages/model-provider/README.md)   | Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini generateContent 的原生调用、完整 ModelReply、SSE 接纳、预算与显式重试 | 工具执行、业务参数判断、任务重做、CP   |
+| [model-exchanges](../packages/model-exchanges/README.md) | 固定起点、完整回复、按 toolCallId 的反馈槽位、准确接纳凭据、请求重建                                                                   | 执行节点、资源授权、重发判断           |
+| [tool](../packages/tool/README.md)                       | 同源目录与成员、Schema 校验、串行模型／工具推进、预算、可选 CP                                                                         | 任意外部效果幂等、跨实体事务、自动恢复 |
+| interaction                                              | 固定请求、独立一次发送、持久反馈与局部等待                                                                                             | 因调用取消终止发送、未知反馈自动重发   |
+| runtime / invocation                                     | 结构绑定、本次 Work、父子接纳、窗口关闭、真实交付                                                                                      | 模型协议和宿主业务策略                 |
 
 ```text
 Tool Group → 模型子调用 → ToolModelResource
@@ -28,11 +28,13 @@ Tool 不依赖 Runtime 实现；宿主用普通 Scene、Resources、Runner 装�
 
 ## 一份完整模型回复
 
-Provider 的 ModelReply v1 保存 id、model、有序 output、termination、usage 和原生协议补充。output 包含 text 或 tool-call；工具参数保留 `{encoding:'json-text',text}` 的原始字符串。参数非法 JSON 时不擅自修复，业务执行方明确拒绝。
+Provider 的 ModelReply v1 保存 id、model、有序 output、termination、usage 和原生协议补充。output 包含有序 text 或 tool-call。Chat Completions 和 Responses 工具调用保留 `{encoding:'json-text',text}` 的原文，Messages 和 Gemini 工具调用保留 `{encoding:'json-value',value}` 的 JSON 对象。Tool 通过 Provider 的公共函数 `readModelToolArguments(call)` 取得参数，再按登记成员的 Schema 校验。
 
-共同字段与 native 合成唯一续接材料，没有另一份可以分别修改的 continuation。Chat Completions 的 reasoning_content 保存在 native 中，后续由 Provider 编码；只保留普通 assistant 文本不能替代精确续接依据。Provider 不承诺其他厂商的原生协议。
+共同字段与 native 合成唯一续接材料，没有另一份可以分别修改的 continuation。Chat Completions 的 reasoning_content 保存在 native 中，后续由 Provider 编码；只保留普通 assistant 文本不能替代精确续接依据。Anthropic Messages 通过 `native.blocks` 保留公共输出的位置、带签名的思考内容和遮盖块。只读取历史时可离线验证材料结构，继续发送还需匹配绑定、配置模型和 API 版本。
 
-`stop` 和 `tool_calls` 是 completed，content_filter 是 refused；其他及未知终止原因保留原文并归 incomplete。协议完成不等于工具业务成功。`modelReplyText` 拒绝含工具调用的回复，也不替代非空正文、结束状态等业务检查。
+Messages 的签名思考与原提示前缀绑定。带签名或遮盖块的回复会记录 `native.prefixSha256`，续轮时校验系统提示、工具目录、此前消息和该次回复。Tool 在本轮工具执行前，离线核对动态上下文或图片淘汰能否改写这段前缀。追加当前工具的结果可以正常续轮。将实际发送者的 Provider 同时传给 `inspection`，还可在执行前核对目标部署、模型和 API 版本。
+
+Chat Completions 的 `stop`、`tool_calls`，Messages 的 `end_turn`、`stop_sequence`、`tool_use`，以及 Gemini 的 `STOP` 可被接纳为 completed。Chat 的 `content_filter`、Messages 的 `refusal`、Gemini 的提示拦截或候选过滤归入 refused。未知结束原因保留原文并归入 incomplete。协议完成不等于工具业务成功。`modelReplyText` 拒绝含工具调用的回复，也不替代非空正文、结束状态等业务检查。
 
 `ToolResult` 为 `{status:'ok'|'error',content:readonly ModelInputContent[]}`，content 接受 1–32 个文本或固定图片块；ToolFeedback 另含 toolCallId。Provider 要求每个模型调用都有准确、完整反馈，按原模型调用顺序编码关联。不能用措辞暗示错误，也不把工具结果提升为 system 指令。提示策略、结果可信度和资源授权由宿主决定。
 
@@ -62,19 +64,31 @@ ModelExchanges 的起点保存初始消息、请求选项、工具定义、目�
 
 同步持久端口成功后才安装并发布；端口抛错或返回异步值为 PersistenceError，写入停止，宿主从权威介质重新载入确认未知结果。发布失败保留已成立事实，不撤回内容，也不授权再次执行工具。
 
+### Responses 的两种续轮
+
+宿主在 Provider 上选择策略。默认 `replay` 发送 `store: false`，展开固定输入、原生输出项和真实工具反馈。`previous-response-id` 发送 `store: true`，后续沿用准确的上一份 `response.id`，只传新增反馈。两种模式均用 `function_call.call_id` 关联工具输出。响应 ID 与输出项 ID 各自保存，工具成员继续使用同一个调用契约。
+
+服务端模式需要与远端一致的历史前缀。Tool 在执行工具前检查将来的上下文替换、旧图片淘汰能否改变已有前缀。普通完成点的冷恢复仍读本地固定材料，能否发起下一次续轮还取决于远端响应是否存在。更换部署、模型或续轮策略时，宿主同步更新可恢复 Tool 的 `policyVersion`。[两种模式的恢复回归](../packages/tool/test/responses-recovery.test.mjs)
+
+### Gemini 的原生 Part 回放
+
+每轮从固定起点和闭合交换重建 `contents`。`native.parts` 保存原生 Part 的顺序、边界和思考签名。公共 `toolCallId` 由回复身份与 Part 位置确定，ModelExchanges 据此接纳反馈，Provider 按原调用顺序回放 `functionCall` 并编码 `functionResponse`。上游提供调用 ID 时原样回传，省略时继续按位置关联，包括同名并行调用。图片反馈以内联图片和同一结果内的 `$ref` 表达。[Gemini Provider 契约](../packages/model-provider/README.md#gemini-generatecontent)
+
+离线读取校验固定回复和签名 Part 的摘要。继续发送还需匹配配置模型与宿主的 `bindingId`。宿主将发送所用的 Provider 注入 `inspection`，Tool 即可在执行成员前核对绑定和下一次请求的容量上界。部分反馈的冷恢复继续使用尚未闭合的槽位，完成点则根据原 Interaction 和已安装的交换核验。[交换快照回归](../packages/model-exchanges/test/gemini.test.mjs) · [Tool 冷恢复回归](../packages/tool/test/gemini-recovery.test.mjs)
+
 ## 有界推进与流式
 
 工具串行执行，登记 1–32 个成员；maxModelCalls 默认 1000，接受正安全整数，作为异常循环的兜底，也可由作者显式设置。它统计单次 Tool 调用中的模型请求，包含最终回答，显式恢复不重置；耗尽时抛出带 calls/limit 的 ToolModelCallLimitError，不再启动下一次模型调用，已有工具效果保留。次数属于固定目录配置，改变它会拒绝原 CP。waitMs 默认 30000。
 
 调用次数与 token、上下文及数据容量分别管理。Tool 默认单回复 64 KiB、包含 toolCallId 的完整反馈 4 KiB（图片按含 base64 的实际 JSON UTF-8 字节计量）、展开请求 2 MiB、集合 8 MiB；成员可另限输出。工具派发前保守预留反馈与下一请求，避免已经产生效果后才发现明显无法反馈。提高次数不会扩大这些容量，也不自动压缩历史；实际检查位置与配置见 [预算表](../packages/tool/README.md#预算与等待)。
 
-maxWireRequestBytes 显式设置时要求同步 inspection，可用 Provider.inspectRequest；预检不发请求、不返回正文或密钥、不预留额度。修改输入后发送仍重新核验。集合、预设和 Provider 各有独立上限；共享调用不形成跨实体预留事务。
+maxWireRequestBytes 显式设置时要求同步 inspection。内置 Provider 均可作为 `ToolModelSource.inspection` 直接注入。有效 wire 上限下，未知工具反馈或上下文还须由 `reserveWireBytes` 给出该编码的整个请求体上界。预检不发请求、不返回正文或密钥、不预留额度。修改输入后发送仍重新核验。集合、预设和 Provider 各有独立上限；共享调用不形成跨实体预留事务。
 
 Provider 公共组装请求与 HTTP 编码请求分别支持到 64 MiB，默认发送预算各为 2 MiB，宿主通过 `maxRequestBytes` / `maxWireRequestBytes` 显式配置；回复、单份反馈、单个闭合 exchange 仍各受 2 MiB JSON 限制，深度 64、100000 值不变。`inspectRequest` 返回实际计量及配置 `limits`，合法但超过配置预算时仍可测量，`complete` 在发送前再次拒绝超限。Tool 使用自身预算与 Provider 上限的较小值，并在工具执行前独立预留 exchange 容量。默认总超时 60 秒、传输响应预算 2 MiB。合法单项不保证累计历史仍能装入下一请求，限制也不是堆内存或 token 上界。ModelExchanges 默认最多 10000 起点、10000 交换、累计 64 MiB，单起点／交换实体最多 8 MiB；集合容量、传输预算和 CP 的 8 MiB 逻辑图分别验证。
 
 Provider 一次 complete 默认仅发送一次 HTTP，无隐式重试。显式 retry 只在一次发送者内部对固定编码请求作有限尝试；来源确认、取消、等待、计数与预览隔离见 [Provider 重试契约](../packages/model-provider/README.md#显式请求重试)。它不重启 Interaction、Tool 或已失败调用，不重做已执行工具，也不保证服务端推理只计费一次。Tool 的 maxModelCalls 仍统计逻辑模型调用，宿主需要实际尝试额度时通过 attempt 通知另行核验。
 
-SSE 固定回复身份，检查索引、完整终态、usage 与 DONE；缺失或冲突明确拒绝，不回退非流式。只有显式许可下的传输读取失败与提前结束可重试，完整非法协议不重试。DONE 后释放读取，不要求 HTTP 连接先关闭。emit 只发布正文预览，不把工具参数或思考文本作为正文。可选同步 emitReasoning 独立交付供应商公开返回的 reasoning_content 非空增量，宿主决定展示或保存；不改变最终回复与 exchanges 的原始思考材料。可选同步 progress 以 `ModelStreamProgress` 的 `{ kind: 'reasoning' | 'text' | 'tool-call' }` 报告已校验非空流式增量的类别变化，同类连续增量去重；不含思考或工具内容，不表示执行或完成。三个通道均在当前 chunk 完整校验后交付，类别去重不抑制文本增量；空字段和非流式回复不合成预览或进度。消费者失败、取消与流读取清理沿用 emit 规则，已展示的预览不能代替最终回复接纳。准确回调顺序与失败语义见 [Provider 流式契约](../packages/model-provider/README.md#流式与用量)。
+Chat Completions 的 SSE 固定回复身份，检查索引、完整终态、usage 与 DONE；缺失或冲突明确拒绝，不回退非流式。只有显式许可下的传输读取失败与提前结束可重试，完整非法协议不重试。DONE 后释放读取，不要求 HTTP 连接先关闭。emit 只发布正文预览，不把工具参数或思考文本作为正文。可选同步 emitReasoning 独立交付供应商公开返回的 reasoning_content 非空增量，宿主决定展示或保存；不改变最终回复与 exchanges 的原始思考材料。可选同步 progress 以 `ModelStreamProgress` 的 `{ kind: 'reasoning' | 'text' | 'tool-call' }` 报告已校验非空流式增量的类别变化，同类连续增量去重；不含思考或工具内容，不表示执行或完成。三个通道均在当前 chunk 完整校验后交付，类别去重不抑制文本增量；空字段和非流式回复不合成预览或进度。消费者失败、取消与流读取清理沿用 emit 规则，已展示的预览不能代替最终回复接纳。准确回调顺序与失败语义见 [Provider 流式契约](../packages/model-provider/README.md#流式与用量)。
 
 Tool 的 stream 可让 Provider 消费 SSE，但预设只交付最终正文，不转交中间候选。stages 仅提供内部结构 ID 供宿主投影真实进度。候选正文、完整模型回复、最终 Transcript 消息、父接纳和 Runner settled 分别表达不同事实。
 
@@ -103,6 +117,11 @@ ToolModelPending 携带原交互引用。局部等待到期或调用取消不取
 
 ## 框架验证
 
+协议选择、各包改动和宿主升级影响见[模型协议适配设计](proposals/model-provider-adapters.md)。
+
+- [兼容端点两轮回归](../packages/tool/test/chat-endpoints.test.mjs)、[Messages 原生协议](../packages/model-provider/test/messages-provider.test.mjs)、[Messages 冷恢复](../packages/tool/test/messages-recovery.test.mjs)使用本仓 HTTP 样本离线运行。
+- Gemini 回归覆盖 JSON/SSE 的 Part 保真、原生调用 ID 缺省或存在时的两轮交换、图片反馈及执行前容量预留。[Gemini 请求](../packages/model-provider/test/gemini-provider.test.mjs) · [Gemini 回复](../packages/model-provider/test/gemini-reply.test.mjs) · [Gemini 冷恢复](../packages/tool/test/gemini-recovery.test.mjs)
+- [Responses 回复](../packages/model-provider/test/responses-reply.test.mjs)和[两种续轮策略的恢复](../packages/tool/test/responses-recovery.test.mjs)验证本地回放与服务端响应 ID 的边界。
 - [Provider 工具协议](../packages/model-provider/test/model-provider-tools.test.mjs)、[流式](../packages/model-provider/test/model-provider-streaming.test.mjs) 和[请求预检](../packages/model-provider/test/model-provider-inspection.test.mjs) 验证接纳、原生续接和大小限制。
 - [固定起点](../packages/model-exchanges/test/model-exchanges-origins.test.mjs) 与[恢复](../packages/model-exchanges/test/model-exchanges-restoration.test.mjs) 验证实体独立保存、冲突与缺失依据拒绝。
 - [Tool 行为](../packages/tool/test/tool.test.mjs)、[恢复](../packages/tool/test/recovery.test.mjs) 和[类型](../packages/tool/test/types.test.mjs) 使用公开包验证串行推进、失败分流、预算、新 Runner／Store 恢复和拒绝反例。

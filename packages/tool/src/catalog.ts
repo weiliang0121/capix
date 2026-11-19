@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { ModelImageContext } from '@weiliang0121/capix-model-exchanges';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 import { Callable, type ChildCallable } from '@weiliang0121/capix-structure';
-import { requireModelRequest, type ToolResult, type ModelTool, type JsonObject } from '@weiliang0121/capix-model-provider';
+import { readModelToolArguments, requireModelRequest, type ToolResult, type ModelToolCall, type ModelTool, type JsonObject } from '@weiliang0121/capix-model-provider';
 import type { ToolMember } from './types.js';
 import type { ToolByteBudgets } from './budget.js';
 import type { ToolRequestContext } from './context.js';
@@ -85,16 +85,16 @@ export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: 
     return freeze({ name, description: registration.description, parameters: schema });
   });
   requireModelRequest({ messages: [{ role: 'user', content: '' }], tools });
-  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 4, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, maxFeedbackBytes: registration.maxFeedbackBytes ?? execution.budgets.maxFeedbackBytes, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
+  const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 5, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, maxFeedbackBytes: registration.maxFeedbackBytes ?? execution.budgets.maxFeedbackBytes, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
   return Object.freeze({ policyVersion, ...(execution.imageContext === undefined ? {} : { imageContext: execution.imageContext }), tools: Object.freeze(tools), digest: createHash('sha256').update(canonical(basis)).digest('hex') });
 }
 export type ToolSelection = { readonly kind: 'accepted'; readonly entry: ToolEntry; readonly input: unknown } | { readonly kind: 'rejected'; readonly result: ToolResult };
-export function selectTool(entries: readonly ToolEntry[], catalog: ToolCatalog, call: { readonly name: string; readonly arguments: { readonly encoding: 'json-text'; readonly text: string } }): ToolSelection {
+export function selectTool(entries: readonly ToolEntry[], catalog: ToolCatalog, call: ModelToolCall): ToolSelection {
   const entry = entries.find((item) => item.name === call.name);
   if (!entry) return reject('UNKNOWN_TOOL', 'Requested tool is not registered.');
   let input: unknown;
   try {
-    input = JSON.parse(call.arguments.text);
+    input = readModelToolArguments(call);
   } catch {
     return reject('INVALID_ARGUMENTS', 'Tool arguments must be valid JSON.');
   }

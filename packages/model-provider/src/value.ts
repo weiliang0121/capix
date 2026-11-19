@@ -9,8 +9,8 @@ export const maximumModelWireRequestBytes = 64 * 1024 * 1024;
 export const toolLimit = 32;
 
 /** Validate and count encoded JSON bytes without cloning or evaluating accessors. */
-export function requireJson(value: unknown, limit = valueLimit): number {
-  let nodes = 0;
+export function requireJson(value: unknown, limit = valueLimit, additionalNodes = 0): number {
+  let nodes = additionalNodes;
   let bytes = 0;
   const ancestors = new Set<object>();
   const add = (size: number) => {
@@ -34,7 +34,8 @@ export function requireJson(value: unknown, limit = valueLimit): number {
     }
     if (typeof item !== 'object' || isProxy(item) || ancestors.has(item)) throw new TypeError('Model value must be acyclic JSON');
     const array = Array.isArray(item);
-    if (!array && Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) throw new TypeError('Model value must contain plain objects');
+    const prototype = Object.getPrototypeOf(item);
+    if (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) throw new TypeError('Model value must contain plain objects and arrays');
     const descriptors = Object.getOwnPropertyDescriptors(item);
     const keys = Reflect.ownKeys(descriptors);
     if (array && keys.length !== item.length + 1) throw new TypeError('Model arrays must be dense');

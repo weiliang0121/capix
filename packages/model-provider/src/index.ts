@@ -1,5 +1,15 @@
+export { assertModelContinuation } from './continuation.js';
+export { modelReplyUsage } from './native-reply.js';
+export { maximumFeedbackImages } from './reservation.js';
+export { AnthropicMessagesProvider } from './messages.js';
 export { ChatCompletionsProvider } from './provider.js';
+export { OpenAIResponsesProvider } from './responses.js';
+export { GeminiGenerateContentProvider } from './gemini.js';
+export type { AnthropicMessagesConfiguration, AnthropicMessagesReply, AnthropicMessagesToolCall, AnthropicMessagesBlock, AnthropicMessagesUsageCounts } from './types.js';
+export type { ChatCompletionsConfiguration, ChatCompletionsReply, ChatCompletionsToolCall } from './types.js';
+export type { GeminiGenerateContentConfiguration, GeminiGenerateContentPart, GeminiGenerateContentReply, GeminiGenerateContentToolCall } from './types.js';
+export type { OpenAIResponsesConfiguration, OpenAIResponsesItem, OpenAIResponsesReply, OpenAIResponsesToolCall } from './types.js';
 export { ProviderError, ProviderRequestLimitError } from './error.js';
-export { requireModelReply, requireModelRequest, requireModelExchange, requireToolResult, requireToolFeedback, modelReplyText } from './contract.js';
-export type { ChatCompletionsConfiguration, ModelControls, ModelStreamProgress, ModelAttemptFailure, ModelAttemptEvent, ModelRetryOptions, ModelMessage, ModelProvider, ModelReply, ModelRequest, ModelRequestInspection, ModelOutput, ModelTextOutput, ModelImageInput, ModelInputContent, ModelToolCall, ModelUsage, ModelExchange, ModelTool, ModelToolChoice, ToolResult, ToolFeedback, JsonObject, JsonValue } from './types.js';
+export { assertModelRequestNodeCapacity, requireModelReply, requireModelRequest, requireModelExchange, requireToolResult, requireToolFeedback, modelReplyText, readModelToolArguments } from './contract.js';
+export type { ModelRequestReservation, ModelControls, ModelStreamProgress, ModelAttemptFailure, ModelAttemptEvent, ModelProtocolDiagnostic, ModelRetryOptions, ModelMessage, ModelProvider, ModelReply, ModelRequest, ModelRequestInspection, ModelOutput, ModelTextOutput, ModelImageInput, ModelInputContent, ModelToolCall, ModelUsage, ModelExchange, ModelTool, ModelToolChoice, ToolResult, ToolFeedback, JsonObject, JsonValue } from './types.js';
 export { maximumModelExchangeBytes, maximumModelRequestBytes, maximumModelWireRequestBytes } from './value.js';

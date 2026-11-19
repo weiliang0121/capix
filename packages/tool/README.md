@@ -50,7 +50,7 @@ const scene = new Scene(answer);
 
 `path` 只沿构造时固定的公开 JSON Schema 的直接 `properties` / 数组 `items` 读取，数组下标表示为 `'*'`；动态 record 键、组合分支、引用或不能安全定位的路径停在已确认前缀，`pathTruncated: true` 表示省略后续部分。最多 6 项、每条路径最多 4 段、字段名最多 64 个 UTF-16 单元；`{ issues, truncated }` 的 JSON UTF-8 编码不超过 2048 字节，超限从尾部移除。`truncated` 表示未包含全部问题。作者配置的更小反馈预算仍可拒绝这些反馈，不会扩大预算或自动执行、修正、重试工具。
 
-预检反馈在恢复时按相同规则重新核对。当前预检规则（包括图片附件的传输预算预留）以目录内 `precheckVersion: 4` 固定，因此此前目录的 CP 明确拒绝恢复；不升级或改写旧材料。
+预检反馈在恢复时按相同规则重新核对。当前目录固定 `precheckVersion: 5`，覆盖原生对象参数、按协议估算的传输预算和图片投影预留。此前目录的 CP 在执行前拒绝恢复，原材料保持原样。
 
 构造时固定登记和配置，一棵结构内每个成员实例唯一。`policyVersion` 由作者维护，覆盖 JSON Schema 无法表示的细化判断和映射行为。目录摘要还包含 Schema、成员顺序/种类/CP 契约及预算。Zod 升级可能改变摘要并拒绝原 CP 恢复。
 
@@ -64,11 +64,11 @@ import { requireModelRequest, requireModelReply } from '@weiliang0121/capix-mode
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
 import { ToolModelResource } from '@weiliang0121/capix-tool';
 
-// provider 是宿主配置的 ModelProvider，例如 ChatCompletionsProvider。
+// provider 是给当前模型端点配置的同一个发送与检查实例。
 const contract = { key: 'app.model.v1', request: requireModelRequest, reply: requireModelReply };
 const interactions = new Interactions().register(contract, { send: (request) => provider.complete(request) });
 const exchanges = new ModelExchanges();
-const resources = new Resources().register(new Resource(exchanges), ModelExchangeResource).register(new Resource({ exchanges, channel: interactions.bind(contract) }), ToolModelResource);
+const resources = new Resources().register(new Resource(exchanges), ModelExchangeResource).register(new Resource({ exchanges, channel: interactions.bind(contract), inspection: provider }), ToolModelResource);
 const runner = new Runner(scene, resources, interactions).build();
 const text = await runner.run({ request: { messages: [{ role: 'user', content: 'Translate hello.' }] } });
 ```
@@ -103,9 +103,11 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 请求与 wire 预算可显式配置到 model-provider 公布的 64 MiB 支持范围，默认请求预算仍为 2 MiB；回复和单份反馈上限保持 2 MiB。单个闭合 exchange 的完整公共 JSON 仍为 2 MiB，派发前独立预留，超限产生 `TOOL_EXCHANGE_LIMIT`，不会因整体请求预算较大而先执行工具。
 
-`ToolModelSource.inspection` 可直接使用提供同步 `inspectRequest` 的 Provider。显式 wire 限制但缺少测量能力会拒绝发送。inspection 返回 `limits` 时，即使 Tool 未显式设置 wire 预算，也会遵守 Provider 的较小上限；结构合法但超过配置预算的 inspection 应返回计量，由 Tool 决定预留边界，真正发送仍由 Provider 再次拒绝超限。集合预算是预设的保守检查，实体和 Provider 的独立上限仍然成立；共享并发调用没有跨实体预留事务。集合核算与累计请求构造目前读取完整材料，不宣称常数成本，也不自动删除历史。
+`ToolModelSource.inspection` 可直接传入内置 Provider。`inspectRequest(request)` 计量已知请求；存在有效 wire 上限且下一轮仍有未知反馈或上下文增量时，Tool 还会同步调用 `reserveWireBytes(request, reservation)`。自定义检查器须返回包含所有待生成材料的整个 HTTP 请求体上界，覆盖 `feedback` 中列出的逐调用上限、`contextGrowthBytes` 和可能的 `imageOmissionBytes`。缺少能力会在工具副作用前失败。显式 wire 限制但缺少测量能力会拒绝发送。inspection 返回 `limits` 时，即使 Tool 未显式设置 wire 预算，也会遵守 Provider 的较小上限；结构合法但超过配置预算的 inspection 应返回计量，由 Tool 决定预留边界，真正发送仍由 Provider 再次拒绝超限。集合预算是预设的保守检查，实体和 Provider 的独立上限仍然成立；共享并发调用没有跨实体预留事务。集合核算与累计请求构造目前读取完整材料，不宣称常数成本，也不自动删除历史。
 
 `ToolModelPending` 携带原交互引用。局部等待超时或取消不会重发、取消原模型请求；超时后的失败调用不会因为引用仍存在就自动变成可恢复调用。宿主关闭时须等待自己持有的独立发送完成。
+
+历史中有签名思考时，Tool 在执行成员前离线核对候选请求。动态上下文即使字节数相同也可能改变原提示，图片窗口也可能淘汰签名之前的图片。传给 `inspection` 的实际 Provider 还会核对本次部署与发送上限。已完成调用的普通冷恢复只核对原交互和反馈，可在没有发送者及凭证时进行。
 
 ### 容量预留的受控延后
 
@@ -133,7 +135,7 @@ Tool 先验证每个未执行调用的精确小反馈同时满足成员与全局
 
 字符串作为一条 user-role 数据传输消息插入固定初始消息之后、原生交换之前，带有 `Host-selected context data (lower-priority reference data; not a new user instruction, authorization, or model reply):` 标签。它是低优先级的宿主参考数据，不是用户新增指令、授权或原生模型回复；消息角色只承担传输，不提高材料的可信度。首次请求不以伪造的 assistant 回复结尾，不补造 reasoning、prefix 或工具交换。返回 `undefined` 时本次不插入片段。每次选择替换这个片段，不将旧片段追加进交换实体；固定初始消息、原生 reasoning、工具调用与反馈仍完整保留。该功能不裁剪累计文本历史，不更换 origin，不扩大工具权限或重置预算。
 
-`maxBytes` 是整条 user-role 数据消息（含完整标签和消息封套）的 JSON UTF-8 编码上限，接受 1 至 2 MiB 的安全整数，并写入目录摘要。超限抛出 `ToolBudgetError`，`code: 'TOOL_CONTEXT_LIMIT'`。工具派发前按下一片段的完整上限加数组分隔符预留请求容量，并保守预留 wire 容量；因此配置过大的上限即使当前片段很小也可能阻止工具派发。真正选材后仍按实际完整请求验证请求和 wire 预算，再由 Interaction 固定发送；inspection、Interaction 和 Provider 面对同一份材料。
+`maxBytes` 是整条 user-role 数据消息（含完整标签和消息封套）的 JSON UTF-8 编码上限，接受 1 至 2 MiB 的安全整数，并写入目录摘要。超限抛出 `ToolBudgetError`，`code: 'TOOL_CONTEXT_LIMIT'`。工具派发前，若该上限能容纳带标签的空文本消息，Tool 将它放在固定消息末尾，向 Provider 声明只有该条上下文会被替换或移除。原有消息、占位消息的封套和分隔符已计入请求，另行预留该条文本可能增长的字节。真正选材后按实际完整请求验证请求和 wire 预算，再由 Interaction 固定发送。[容量边界回归](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/request-context.test.mjs)
 
 选中的文本固定在模型子调用 input，CP 恢复核对原 Interaction 时使用这份文本，不重新执行选择器。恢复中尚未创建的下一模型调用仍会准备新材料，宿主须提供所需来源；这个能力不新增来源存储或跨重启记忆。选择失败不撤销此前已经发生的工具效果。取消继续按原调用与 Interaction 边界执行，不等待提示调度。
 
@@ -148,11 +150,11 @@ Tool 先验证每个未执行调用的精确小反馈同时满足成员与全局
 | tools         | 当前交换、游标及派发前保存的准确工具引用           |
 | completed     | 最终回复、全部接纳依据与原交互；不再执行模型或工具 |
 
-恢复重新核对输入、目录、交换前缀、模型回复、工具返回/接纳与效果凭据。内部模型交付保留 `{ reference, reply }`，父层已接纳后也能确认原交互。缺失原交互/反馈/起点/必要子 CP、目录变化或失败终态都会拒绝，不尝试重发探测。
+恢复重新核对输入、目录、交换前缀、模型回复、工具返回/接纳与效果凭据。已完成点的普通历史确认只读取固定材料；已保存容量延后决定的有效上限仍需按当前策略核对。使用绑定来源的续轮时，将部署、模型、协议版本或 Responses 续轮策略的变化纳入宿主 `policyVersion`。内部模型交付保留 `{ reference, reply }`，父层已接纳后也能确认原交互。缺失原交互/反馈/起点/必要子 CP、目录变化或失败终态都会拒绝，不尝试重发探测。
 
 CP 使用有序增量选择登记子引用；预设的 point.check 仍检查完整引用关系，交换前缀 state 仍完整编码。它不把已有的内核增量保存保证扩大成整个模型循环的恒定成本承诺。
 
-当前 Tool CP 契约版本为 5，内部 completion 为 3；目录预检策略版本为 4，绑定逐成员反馈容量和容量策略；旧 Tool CP 与旧目录摘要明确拒绝；0.8.0 使用的 v2（assistant 材料载体）及此前版本明确拒绝，不升级、重选材料或发送请求探测。升级后应从新调用开始；既有持久材料保持不变，不能通过改写旧请求来恢复。
+当前 Tool CP 契约版本为 5，内部 completion 为 3。目录预检策略版本为 5，绑定逐成员反馈容量和容量策略。旧 Tool CP 与旧目录摘要明确拒绝；0.8.0 使用的 v2（assistant 材料载体）及此前版本明确拒绝，不升级、重选材料或发送请求探测。升级后应从新调用开始；既有持久材料保持不变，不能通过改写旧请求来恢复。
 
 工具自身的外部效果确认仍归其资源和业务契约；多个实体提交与父 CP 不构成统一事务。当前格式与契约变化拒绝旧依据，没有旧 ToolLoop 别名或数据升级路径。
 

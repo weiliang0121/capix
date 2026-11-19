@@ -4,7 +4,7 @@ import { isProxy } from 'node:util/types';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { publishFact, type ChangeCapture, type EventConsumer } from '@weiliang0121/capix-changes';
-import { requireModelReply, requireModelRequest, requireToolFeedback, requireToolResult, type ModelReply, type ModelRequest, type ToolFeedback, type ToolResult } from '@weiliang0121/capix-model-provider';
+import { maximumFeedbackImages, requireModelExchange, requireModelReply, requireModelRequest, requireToolFeedback, requireToolResult, type ModelExchange, type ModelReply, type ModelRequest, type ModelRequestReservation, type ToolFeedback, type ToolResult } from '@weiliang0121/capix-model-provider';
 import type { ExchangeOperation, ExchangeReference, ExchangeOriginReference, ExchangePrefix, ModelExchangeBasis, ModelExchangeOrigin, ModelExchangeChange, ModelExchangeEntry, ModelExchangesCommit, ModelExchangesPersistence, ModelExchangesState } from './types.js';
 import { canonical, capture, captureSnapshotEnvelope, counter, encodedBytes, identity, record, requireExchangeOperation, requireExchangeReference, requireExchangeOriginReference } from './value.js';
 import { defaultModelExchangeLimits, maximumModelExchangeLimits, maximumModelExchangeEntryBytes, maximumModelExchangeOriginBytes } from './limits.js';
@@ -165,7 +165,58 @@ export class ModelExchanges {
     const reference = requireExchangeOriginReference(prefix.origin);
     const origin = this.origin(reference);
     const entries = this.closed(reference, prefix.exchanges as readonly ExchangeReference[]);
-    return Object.freeze(requireModelRequest({ ...origin.request, ...(origin.catalog.tools.length === 0 ? {} : { tools: origin.catalog.tools }), exchanges: projectImages(entries, origin.catalog.imageContext?.retainLatestToolImages) }));
+    return projectedRequest(origin, projectImages(entries, origin.catalog.imageContext?.retainLatestToolImages));
+  }
+
+  /** Preview a closed next exchange without installing its provisional feedback.
+   * Pending text placeholders can later become images and displace retained images. */
+  previewFeedback(prefix: ExchangePrefix, reference: ExchangeReference, feedback: readonly ToolFeedback[], reservations: ModelRequestReservation['feedback'] = []): { readonly request: ModelRequest; readonly omissionBytes: readonly number[] } {
+    const accepted = record(capture(prefix), ['origin', 'exchanges']);
+    const originRef = requireExchangeOriginReference(accepted.origin);
+    const origin = this.origin(originRef);
+    const entries = this.closed(originRef, accepted.exchanges as readonly ExchangeReference[]);
+    const current = this.read(originRef, reference);
+    if (this.#originEntries.get(origin.id)?.[entries.length] !== current.id) throw conflict('Feedback preview requires the next exchange in the exact prefix');
+    const captured = capture(feedback);
+    if (!Array.isArray(captured)) throw new TypeError('Feedback preview requires the remaining slots');
+    feedback = requireModelExchange({ reply: current.reply, feedback: Object.freeze([...current.feedback, ...captured]) }).feedback;
+    const slots = capture(reservations);
+    if (!Array.isArray(slots) || slots.length > 32) throw new TypeError('Invalid pending feedback slots');
+    const pending = new Map<string, number>();
+    for (const value of slots) {
+      const { toolCallId, maxBytes } = record(value, ['toolCallId', 'maxBytes']);
+      const placeholder = feedback.find((item) => item.toolCallId === toolCallId);
+      if (typeof toolCallId !== 'string' || typeof maxBytes !== 'number' || !placeholder || maxBytes < encodedBytes(placeholder) || pending.has(toolCallId) || current.feedback.some((item) => item.toolCallId === toolCallId) || placeholder.status !== 'ok' || placeholder.content.some((part) => part.kind !== 'text' || part.text !== '')) throw new TypeError('Invalid pending feedback slot');
+      pending.set(toolCallId, maximumFeedbackImages(toolCallId, maxBytes));
+    }
+    const all = [...entries, { ...current, feedback }];
+    const retain = origin.catalog.imageContext?.retainLatestToolImages;
+    const exchanges = projectImages(all, retain);
+    const omissionBytes = exchanges.map(() => 0);
+    if (retain !== undefined && pending.size) {
+      // Already omitted images stay omitted. New images can displace only the
+      // earliest retained images, and can themselves fall outside the window.
+      const possible = [...pending.values()].reduce((sum, images) => sum + images, 0);
+      const visible = exchanges.reduce((sum, entry) => sum + entry.feedback.reduce((count, value) => count + value.content.filter((part) => part.kind === 'image').length, 0), 0);
+      const displaced = Math.max(0, visible + possible - retain);
+      if (displaced) {
+        let seen = 0;
+        for (const [position, entry] of exchanges.entries()) {
+          for (const value of entry.feedback) {
+            if (position === entries.length && pending.has(value.toolCallId)) {
+              omissionBytes[position]! += Math.min(displaced, pending.get(value.toolCallId)!) * encodedBytes(omittedImage(all[position]!.id, value.toolCallId, 31));
+              continue;
+            }
+            for (const [index, part] of value.content.entries()) {
+              if (part.kind !== 'image') continue;
+              if (seen < displaced) omissionBytes[position]! += encodedBytes(omittedImage(all[position]!.id, value.toolCallId, index));
+              seen++;
+            }
+          }
+        }
+      }
+    }
+    return Object.freeze({ request: projectedRequest(origin, exchanges), omissionBytes: Object.freeze(omissionBytes) });
   }
 
   /** Creation order is stable; this does not infer a cross-invocation causal order. */
@@ -317,6 +368,14 @@ function conflict(message: string): RuntimeError {
   return new RuntimeError('MODEL_EXCHANGE_CONFLICT', message);
 }
 
+function projectedRequest(origin: ModelExchangeOrigin, exchanges: readonly ModelExchange[]): ModelRequest {
+  return Object.freeze(requireModelRequest({ ...origin.request, ...(origin.catalog.tools.length === 0 ? {} : { tools: origin.catalog.tools }), exchanges }));
+}
+
+function omittedImage(exchangeId: string, callId: string, index: number) {
+  return Object.freeze({ kind: 'text' as const, text: `[Tool image omitted from active context: exchange=${exchangeId}; toolCall=${callId}; contentIndex=${index}. Original image remains in the exchange; read it explicitly if needed.]` });
+}
+
 /** Pure first-K projection. Call order, not feedback arrival order, defines latest. */
 function projectImages(entries: readonly ModelExchangeEntry[], retain: number | undefined) {
   let remaining = retain === undefined ? 0 : entries.reduce((total, entry) => total + entry.feedback.reduce((count, feedback) => count + feedback.content.filter((part) => part.kind === 'image').length, 0), 0) - retain;
@@ -330,7 +389,7 @@ function projectImages(entries: readonly ModelExchangeEntry[], retain: number | 
           const content = Object.freeze(
             result.content.map((part, index) => {
               if (part.kind !== 'image' || remaining-- <= 0) return part;
-              return Object.freeze({ kind: 'text' as const, text: `[Tool image omitted from active context: exchange=${entry.id}; toolCall=${call.id}; contentIndex=${index}. Original image remains in the exchange; read it explicitly if needed.]` });
+              return omittedImage(entry.id, call.id, index);
             }),
           );
           return Object.freeze({ ...result, content });

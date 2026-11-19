@@ -1,3 +1,5 @@
+import { readModelToolArguments } from '@weiliang0121/capix-model-provider';
+
 // 固定决策脚本，不是智能模型。每一步检查真实反馈，再决定下一步。
 // 与真实 Provider 使用相同 ModelRequest / ModelReply 和 Tool 结构。
 export class OfflineNotesProvider {
@@ -16,7 +18,7 @@ export class OfflineNotesProvider {
       if (exchange.reply.output.length !== 1 || exchange.feedback.length !== 1 || call.kind !== 'tool-call' || feedback.toolCallId !== call.id || feedback.status !== 'ok') throw new Error('Offline script received invalid or failed tool feedback');
       if (feedback.content.length !== 1 || feedback.content[0].kind !== 'text') throw new Error('Offline script requires one JSON feedback');
       const note = JSON.parse(feedback.content[0].text);
-      const args = JSON.parse(call.arguments.text);
+      const args = readModelToolArguments(call);
       if (call.name === 'readNote' && read.length < 2 && !written) {
         if (args.id !== sources[read.length].id || note.id !== args.id || typeof note.value?.text !== 'string') throw new Error('Offline script read feedback mismatch');
         read.push(note);

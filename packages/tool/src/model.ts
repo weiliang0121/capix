@@ -1,6 +1,6 @@
 import { DEFAULT_INTERACTION_TEXT_UNITS, MAX_INTERACTION_TEXT_UNITS, Interaction, type InteractionChannel, type InteractionReference, type InteractionState, type InteractionDataLimits } from '@weiliang0121/capix-interaction';
-import type { ModelReply, ModelRequest } from '@weiliang0121/capix-model-provider';
-import { requireModelReply, requireModelRequest } from '@weiliang0121/capix-model-provider';
+import type { ModelReply, ModelRequest, ToolResult } from '@weiliang0121/capix-model-provider';
+import { maximumFeedbackImages, requireModelReply, requireModelRequest } from '@weiliang0121/capix-model-provider';
 import { ModelExchangeResource, type ModelExchanges, type ExchangeReference, type ExchangePrefix } from '@weiliang0121/capix-model-exchanges';
 import { RuntimeError, stableValue } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
@@ -11,7 +11,7 @@ import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 import { z } from 'zod';
 import { codec } from './codec.js';
 import type { ToolCatalog } from './catalog.js';
-import { assertToolExchangeBytes, assertToolReplyBytes, assertToolFeedbackBytes, assertToolRequestBytes, reserveToolReply, reserveToolFeedback, type ToolByteBudgets, type ToolRequestInspection, type ToolCapacityReason } from './budget.js';
+import { assertToolExchangeBytes, assertToolHistoricalRequest, assertToolReplyBytes, assertToolFeedbackBytes, assertToolRequestBytes, reserveToolReply, reserveToolFeedback, type ToolByteBudgets, type ToolRequestInspection, type ToolCapacityReason } from './budget.js';
 import { assertToolContextText, toolContextMessage, toolContextReservation, type ToolCapacityBoundary, type ToolContextPreparation, type ToolRequestContext } from './context.js';
 
 /** Host registration contains no per-call input or mutable Tool configuration. */
@@ -86,12 +86,10 @@ function captureModelSource(source: ToolModelSource): CapturedToolModelSource {
   return Object.freeze({ source, recovery: Object.freeze({ read: Function.prototype.bind.call(read, recovery), ...(interactionLimits ? { interactionLimits } : {}) }) });
 }
 
-function request(source: ToolModelSource, input: ToolModelInput, budgets: ToolByteBudgets, context?: ToolRequestContext, expectedCapacity?: ToolCapacityReason): ModelRequest {
+function request(source: ToolModelSource, input: ToolModelInput, context?: ToolRequestContext): ModelRequest {
   const text = assertToolContextText(input.context, context);
   const base = source.exchanges.request({ origin: input.origin, exchanges: input.exchanges });
-  const value = text === undefined ? base : Object.freeze({ ...base, messages: Object.freeze([...base.messages, toolContextMessage(text)]) });
-  assertToolRequestBytes(value, budgets, source.inspection, 0, [], false, expectedCapacity);
-  return value;
+  return text === undefined ? base : Object.freeze({ ...base, messages: Object.freeze([...base.messages, toolContextMessage(text)]) });
 }
 
 export const ToolModelResource = new ResourceOffer({
@@ -118,64 +116,83 @@ export const ToolModelResource = new ResourceOffer({
       return assertToolContextText(value, input.context);
     },
     start({ source }: CapturedToolModelSource, input: { readonly prefix: ToolModelInput; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
-      const value = request(source, input.prefix, input.budgets, input.context);
+      const value = request(source, input.prefix, input.context);
+      assertToolRequestBytes(value, input.budgets, source.inspection);
       // Full snapshot accounting is linear and includes every fixed origin.
       const snapshot = source.exchanges.snapshot();
       reserveToolReply(snapshot.entries, input.budgets, snapshot.origins);
       return source.channel.start(value);
     },
-    preflight({ source }: CapturedToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly defer?: boolean; readonly feedbackReservations: readonly { readonly toolCallId: string; readonly maxBytes: number }[]; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
-      const base = request(source, { origin: input.origin, exchanges: input.exchanges }, input.budgets);
+    preflight({ source }: CapturedToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly defer?: boolean; readonly feedbackReservations: readonly { readonly toolCallId: string; readonly maxBytes: number; readonly fixed?: ToolResult }[]; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext }) {
+      const prefix = { origin: input.origin, exchanges: input.exchanges };
       const current = source.exchanges.read(input.origin, input.current, false);
       assertToolReplyBytes(current.reply, input.budgets);
-      // Validate that this is the next exchange after the exact closed prefix.
-      const ordered = source.exchanges.values(input.origin);
-      if (ordered[input.exchanges.length]?.id !== current.id) throw new Error('Tool exchange is not the next exchange in its origin');
       const calls = current.reply.output.filter((item) => item.kind === 'tool-call');
-      const reservations = new Map(input.feedbackReservations.map((item) => [item.toolCallId, item.maxBytes]));
-      if (reservations.size !== calls.length || input.feedbackReservations.length !== calls.length || calls.some((call) => !reservations.has(call.id)) || [...reservations.values()].some((limit) => !Number.isSafeInteger(limit) || limit < 1 || limit > input.budgets.maxFeedbackBytes)) throw new TypeError('Tool feedback reservations must exactly cover the fixed calls within the global limit');
+      const reservations = new Map(input.feedbackReservations.map((item) => [item.toolCallId, item]));
+      if (reservations.size !== calls.length || input.feedbackReservations.length !== calls.length || calls.some((call) => !reservations.has(call.id)) || [...reservations.values()].some(({ maxBytes }) => !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > input.budgets.maxFeedbackBytes)) throw new TypeError('Tool feedback reservations must exactly cover the fixed calls within the global limit');
       const pending = calls.filter((call) => !current.feedback.some((item) => item.toolCallId === call.id));
       const placeholders = pending.map((call) => {
-        const content: { kind: 'text'; text: string }[] = [{ kind: 'text', text: '' }];
-        const limit = reservations.get(call.id)!;
-        const result = assertToolFeedbackBytes(call.id, { status: 'ok', content }, { maxFeedbackBytes: limit }, 'reserved');
-        // Reserve node-count overhead as well as bytes before dispatching effects.
-        for (let count = 1; count < 32; count++) {
-          const candidate = [...content, { kind: 'text', text: '' }];
-          if (Buffer.byteLength(JSON.stringify({ toolCallId: call.id, status: 'ok', content: candidate })) > limit) break;
-          content.push({ kind: 'text', text: '' });
-        }
+        const { maxBytes: limit, fixed } = reservations.get(call.id)!;
+        if (fixed !== undefined) return { toolCallId: call.id, ...assertToolFeedbackBytes(call.id, fixed, { maxFeedbackBytes: limit }) };
+        // Validate only the smallest legal unknown slot. Account for additional
+        // bytes and nodes separately so a synthetic value cannot exceed a hard
+        // support limit before an otherwise admissible defer can be considered.
+        const result = assertToolFeedbackBytes(call.id, { status: 'ok', content: [{ kind: 'text', text: '' }] }, { maxFeedbackBytes: limit }, 'reserved');
         return { toolCallId: call.id, ...result };
       });
       for (const feedback of current.feedback) assertToolFeedbackBytes(feedback.toolCallId, { status: feedback.status, content: feedback.content }, input.budgets);
-      const feedbackGrowth = pending.reduce((total, call, index) => total + reservations.get(call.id)! - Buffer.byteLength(JSON.stringify(placeholders[index]), 'utf8'), 0);
+      const feedbackGrowth = pending.reduce((total, call, index) => total + reservations.get(call.id)!.maxBytes - Buffer.byteLength(JSON.stringify(placeholders[index]), 'utf8'), 0);
       const projectedExchange = { reply: current.reply, feedback: [...current.feedback, ...placeholders] };
+      const unknown = pending.map((call) => reservations.get(call.id)!).filter((slot) => slot.fixed === undefined);
+      const reference = source.exchanges.reference(current);
+      if (unknown.length > 0 && unknown.length < pending.length) {
+        // A mixed batch can still defer every uninstalled slot, including a fixed
+        // schema rejection. Validate the minimum closed exchange first, keeping
+        // installed feedback, then compare the ordinary batch's full reservation.
+        const minimum = pending.map(({ id: toolCallId }) => ({ toolCallId, status: 'ok' as const, content: [{ kind: 'text' as const, text: '' }] }));
+        const sample = source.exchanges.previewFeedback(prefix, reference, minimum);
+        const growth = minimum.reduce((sum, slot) => sum + reservations.get(slot.toolCallId)!.maxBytes - Buffer.byteLength(JSON.stringify(slot)), 0);
+        const raw = { reply: current.reply, feedback: [...current.feedback, ...minimum] };
+        for (const exchange of [raw, sample.request.exchanges!.at(-1)!]) {
+          const failure = assertToolExchangeBytes(exchange, growth, input.defer);
+          if (failure) return failure;
+        }
+      }
+      const preview = source.exchanges.previewFeedback(prefix, reference, placeholders, unknown);
+      const base = preview.request;
       const exchangeFailure = assertToolExchangeBytes(projectedExchange, feedbackGrowth, input.defer);
       if (exchangeFailure) return exchangeFailure;
       const snapshot = source.exchanges.snapshot();
       reserveToolFeedback(
         snapshot.entries,
         current,
-        pending.map((call) => reservations.get(call.id)!),
+        pending.map((call) => reservations.get(call.id)!.maxBytes),
         input.budgets,
         snapshot.origins,
       );
+      const imageOmissionBytes = preview.omissionBytes.reduce((sum, value) => sum + value, 0);
+      for (const [index, bytes] of preview.omissionBytes.entries()) {
+        if (bytes === 0 && index !== prefix.exchanges.length) continue;
+        const failure = assertToolExchangeBytes(base.exchanges![index]!, bytes + (index === prefix.exchanges.length ? feedbackGrowth : 0), input.defer);
+        if (failure) return failure;
+      }
       const emptyContext = toolContextMessage('');
       const contextBytes = Buffer.byteLength(JSON.stringify(emptyContext), 'utf8');
       // Count the message's structure too; byte growth alone cannot reserve nodes.
       const contextPlaceholder = input.context && input.context.maxBytes >= contextBytes ? emptyContext : undefined;
-      const estimate = { ...base, ...(contextPlaceholder ? { messages: Object.freeze([...base.messages, contextPlaceholder]) } : {}), exchanges: [...(base.exchanges ?? []), projectedExchange] };
-      return assertToolRequestBytes(
-        estimate,
-        input.budgets,
-        source.inspection,
-        feedbackGrowth + toolContextReservation(input.context) - (contextPlaceholder ? contextBytes + 1 : 0),
-        pending.map((call) => call.id),
-        input.defer,
-      );
+      const estimate = { ...base, ...(contextPlaceholder ? { messages: Object.freeze([...base.messages, contextPlaceholder]) } : {}) };
+      const contextGrowthBytes = contextPlaceholder ? toolContextReservation(input.context) - contextBytes - 1 : 0;
+      // Each extra text part takes three nodes and at least 26 JSON bytes
+      // including its separator. Each possible image needs one more node.
+      const additionalNodes = placeholders.reduce((sum, value) => {
+        const slot = reservations.get(value.toolCallId)!;
+        if (slot.fixed !== undefined) return sum;
+        const extraParts = Math.min(31, Math.floor((slot.maxBytes - Buffer.byteLength(JSON.stringify(value))) / 26));
+        return sum + 3 * extraParts + maximumFeedbackImages(value.toolCallId, slot.maxBytes);
+      }, 0);
+      return assertToolRequestBytes(estimate, input.budgets, source.inspection, { growth: feedbackGrowth + contextGrowthBytes + imageOmissionBytes, additionalNodes, reservation: { feedback: unknown, contextGrowthBytes, ...(contextPlaceholder ? { mutableContext: true, contextShape: 'trailing-user-text' as const } : {}), ...(imageOmissionBytes ? { imageOmissionBytes, imageOmissionByExchange: preview.omissionBytes } : {}) }, defer: input.defer });
     },
     closure({ source }: CapturedToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly feedback: readonly { readonly toolCallId: string; readonly result: import('@weiliang0121/capix-model-provider').ToolResult }[]; readonly budgets: ToolByteBudgets }) {
-      const base = source.exchanges.request({ origin: input.origin, exchanges: input.exchanges });
       const current = source.exchanges.read(input.origin, input.current, false);
       const feedback = input.feedback.map(({ toolCallId, result }) => ({ toolCallId, ...assertToolFeedbackBytes(toolCallId, result, input.budgets) }));
       const snapshot = source.exchanges.snapshot();
@@ -186,7 +203,8 @@ export const ToolModelResource = new ResourceOffer({
         input.budgets,
         snapshot.origins,
       );
-      assertToolRequestBytes({ ...base, exchanges: [...(base.exchanges ?? []), { reply: current.reply, feedback: [...current.feedback, ...feedback] }] }, input.budgets, source.inspection);
+      const preview = source.exchanges.previewFeedback({ origin: input.origin, exchanges: input.exchanges }, source.exchanges.reference(current), feedback);
+      assertToolRequestBytes(preview.request, input.budgets, source.inspection);
     },
     confirm({ source, recovery }: CapturedToolModelSource, input: { readonly reference: InteractionReference; readonly basis: ToolModelInput; readonly reply?: ModelReply; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext; readonly capacity?: ToolCapacityReason }) {
       try {
@@ -201,7 +219,10 @@ export const ToolModelResource = new ResourceOffer({
         const interaction = Interaction.restore<ModelRequest, ModelReply>(saved, { contract: { key: input.reference.contract, request: requireModelRequest, reply: requireModelReply }, ...(recovery?.interactionLimits ? { limits: recovery.interactionLimits } : {}) });
         const state = interaction.exportState();
         const received = interaction.read();
-        if (state.id !== input.reference.id || received.kind !== 'received' || !isDeepStrictEqual(state.request, request(source, input.basis, input.budgets, input.context, input.capacity))) throw new Error('Original model request or durable feedback is unavailable');
+        const historical = request(source, input.basis, input.context);
+        if (input.capacity) assertToolRequestBytes(historical, input.budgets, source.inspection, undefined, input.capacity);
+        else assertToolHistoricalRequest(historical, input.budgets);
+        if (state.id !== input.reference.id || received.kind !== 'received' || !isDeepStrictEqual(state.request, historical)) throw new Error('Original model request or durable feedback is unavailable');
         assertToolReplyBytes(received.feedback.payload, input.budgets);
         if (input.reply !== undefined && !isDeepStrictEqual(input.reply, received.feedback.payload)) throw new Error('Completed model reply differs from its durable interaction');
       } catch (cause) {

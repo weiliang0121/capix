@@ -58,6 +58,7 @@ ModelExchangeResource             ModelExchangeViewSource
 - `begin(id, basis)` 固定整个纯数据输入。同 ID、同内容只确认，不新增提交或变化；不同内容明确拒绝。没有回复的空起点也进入持久序列。`origin(ref)` 核对集合、ID 和完整起点摘要后返回固定内容。
 - `basis.request` 支持 ModelRequest 的消息与选项，不接受 `tools` 或 `exchanges`；目录统一放在 `basis.catalog`，历史由实体组织。选项保持原样，不隐含默认覆盖。空 `catalog.tools` 表达无工具模型调用，重建请求省略 `tools` 字段。
 - `catalog.digest` 和 `policyVersion` 由执行结构提供兼容依据；实体另外计算 `origin.digest`，覆盖完整初始请求和目录。构造模型请求时只将 `catalog.tools` 作为工具定义发送。摘要、策略版本及可选的 `imageContext` 留在起点中，图片策略用于投影工具反馈。目录仅接受纯数据。恢复时，执行方仍须核对当前结构与保存目录是否兼容，实体不会从函数推导执行语义。
+- `previewFeedback(prefix, reference, feedback, reservations?)` 对顺序中的下一条交换临时补全剩余反馈槽。已知结果传实际反馈，待执行的槽传空文本占位，再通过 `{ toolCallId, maxBytes }` 指定该槽完整反馈的字节上限。返回的 `request` 应用与正式请求相同的图片保留策略，`omissionBytes` 按交换给出未来图片可能引入的省略标记字节上界。预览只读，可在工具执行前反复调用。
 - `closed(origin, refs)` 要求引用属于同一起点、revision 准确、顺序为该起点最前面的 K 个交换，且每个工具反馈槽完整。允许选择较短的历史前缀以重建原请求；不能重排、跳过中间项或重复同一交换。它只确认反馈完整性，不判断当前业务能否继续。
 - `request({ origin, exchanges })` 组合起点与明确前缀，执行 Provider 的完整请求校验，包括终止原因的续接资格和整体请求限额。它不发送请求，也不授权重试；查询旧前缀不等于恢复资格成立。实体只保存接纳顺序，模型子输入与实际发送历史的因果一致性仍由调用和宿主核验。
 
@@ -72,7 +73,7 @@ ModelExchangeResource             ModelExchangeViewSource
 
 ## 持久化与恢复
 
-当前快照是 **formatVersion 2**，包含 `origins`、`entries` 和共同变化序列。旧格式、旧 `scope` 供给形状明确拒绝，不提供迁移或同义兼容 API。
+当前快照是 **formatVersion 2**，包含 `origins`、`entries` 和共同变化序列。实体调用 Provider 的公开校验器接纳和离线载入所有已支持的原生回复。Messages 的签名块与部分计数、Responses 的输出项和续轮依据、Gemini 的有序 Part 与回复身份来源均随回复固定。新发送时由适配器核对模型、绑定及输入前缀。旧格式、旧 `scope` 供给形状明确拒绝，不提供迁移或同义兼容 API。
 
 持久端口同步接收两种提交：
 
