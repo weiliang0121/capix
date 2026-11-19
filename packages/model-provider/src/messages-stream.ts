@@ -1,8 +1,8 @@
-import { validMessagesCounts } from './messages-contract.js';
+import { messagesUsageKeys, validMessagesCounts } from './messages-contract.js';
 import { parseModelJson, deliverModelConsumer, ModelProtocolIssue, ProviderError } from './error.js';
 import { acceptMessagesReply, messagesIdentity, readMessagesUsage, readMessagesBlock } from './messages-wire.js';
 import type { MessagesBinding } from './messages-history.js';
-import type { AnthropicMessagesReply, ModelControls, ModelStreamProgress } from './types.js';
+import type { AnthropicMessagesReply, AnthropicMessagesUsageCounts, ModelControls, ModelStreamProgress } from './types.js';
 import { identity, record } from './value.js';
 
 /** Anthropic emits sequential, indexed content blocks followed by cumulative message deltas. */
@@ -10,7 +10,7 @@ export class MessagesStream {
   #id?: string;
   #model?: string;
   #reason?: string;
-  #usage: Record<string, unknown> = {};
+  #usage: AnthropicMessagesUsageCounts = {};
   #blocks: Record<string, unknown>[] = [];
   #active?: ReturnType<typeof readMessagesBlock>;
   #partial: string[] = [];
@@ -41,9 +41,9 @@ export class MessagesStream {
         if (!record(message) || message.type !== 'message' || message.role !== 'assistant' || !Array.isArray(message.content) || message.content.length || message.stop_reason != null || message.error != null) throw new ModelProtocolIssue('ENVELOPE', 'invalid-envelope');
         this.#id = messagesIdentity(message.id, 'id');
         this.#model = messagesIdentity(message.model, 'model');
-        this.mergeUsage(message.usage);
         // Initial output counts precede generation and cannot establish the final total.
-        delete this.#usage.output_tokens;
+        const { output_tokens: _initialOutput, ...inputUsage } = readMessagesUsage(message.usage);
+        this.#usage = inputUsage;
         return false;
       }
       case 'content_block_start': {
@@ -109,8 +109,15 @@ export class MessagesStream {
   }
 
   private mergeUsage(usage: unknown): void {
-    Object.assign(this.#usage, readMessagesUsage(usage));
-    if (!validMessagesCounts(this.#usage)) throw new ModelProtocolIssue('ENVELOPE', 'invalid-usage');
+    const counts = readMessagesUsage(usage);
+    for (const key of messagesUsageKeys) {
+      const previous = this.#usage[key];
+      const next = counts[key];
+      if (previous !== undefined && next !== undefined && next < previous) throw new ModelProtocolIssue('ENVELOPE', 'invalid-usage');
+    }
+    const merged = { ...this.#usage, ...counts };
+    if (!validMessagesCounts(merged)) throw new ModelProtocolIssue('ENVELOPE', 'invalid-usage');
+    this.#usage = merged;
   }
 
   private blockDelta(block: ReturnType<typeof readMessagesBlock>, delta: Record<string, unknown>): void {

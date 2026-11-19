@@ -190,7 +190,7 @@ export const ToolModelResource = new ResourceOffer({
         const extraParts = Math.min(31, Math.floor((slot.maxBytes - Buffer.byteLength(JSON.stringify(value))) / 26));
         return sum + 3 * extraParts + maximumFeedbackImages(value.toolCallId, slot.maxBytes);
       }, 0);
-      return assertToolRequestBytes(estimate, input.budgets, source.inspection, { growth: feedbackGrowth + contextGrowthBytes + imageOmissionBytes, additionalNodes, reservation: { feedback: unknown, contextGrowthBytes, ...(contextPlaceholder ? { mutableContext: true } : {}), ...(imageOmissionBytes ? { imageOmissionBytes, imageOmissionByExchange: preview.omissionBytes } : {}) }, defer: input.defer });
+      return assertToolRequestBytes(estimate, input.budgets, source.inspection, { growth: feedbackGrowth + contextGrowthBytes + imageOmissionBytes, additionalNodes, reservation: { feedback: unknown, contextGrowthBytes, ...(contextPlaceholder ? { mutableContext: true, contextShape: 'trailing-user-text' as const } : {}), ...(imageOmissionBytes ? { imageOmissionBytes, imageOmissionByExchange: preview.omissionBytes } : {}) }, defer: input.defer });
     },
     closure({ source }: CapturedToolModelSource, input: ExchangePrefix & { readonly current: ExchangeReference; readonly feedback: readonly { readonly toolCallId: string; readonly result: import('@weiliang0121/capix-model-provider').ToolResult }[]; readonly budgets: ToolByteBudgets }) {
       const current = source.exchanges.read(input.origin, input.current, false);

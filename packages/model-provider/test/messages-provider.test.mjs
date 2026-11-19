@@ -344,6 +344,7 @@ test('nullable cumulative counters preserve observations and missing counts neve
   delete stop.usage;
   reply = await model(async () => sse(onlyInitialUsage)).complete({ ...request, stream: true });
   assert.equal(reply.usage, null);
+  assert.deepEqual(reply.native.partialUsage, { input_tokens: 12, cache_read_input_tokens: 3, cache_creation_input_tokens: 5 });
 });
 
 test('Messages admits default direct callers and empty citations, and requires final signatures', async () => {
@@ -383,7 +384,7 @@ test('signed history fixes the system, tools and each preceding message while al
     return Response.json(toolReply);
   });
   const image = { kind: 'image', mimeType: 'image/jpeg', data: '/9j/AP/Z' };
-  const initial = { ...request, tools: [{ ...request.tools[0], parameters: { type: 'object', properties: { z: { type: 'string' }, a: { type: 'string' } } } }], messages: [request.messages[0], { role: 'user', content: [image, { kind: 'text', text: '查询' }] }] };
+  const initial = { ...request, tools: [{ ...request.tools[0], parameters: { type: 'object', properties: { z: { type: 'string' }, a: { type: 'string' } } } }], messages: [request.messages[0], { role: 'user', content: [image, { kind: 'text', text: '查询' }] }, { role: 'user', content: 'host context' }] };
   const first = await provider.complete(initial);
   assert.match(first.native.prefixSha256, /^[a-f0-9]{64}$/u);
   const feedback = ['first', 'second'].map((toolCallId) => ({ toolCallId, status: 'ok', content: [image] }));
@@ -405,6 +406,7 @@ test('signed history fixes the system, tools and each preceding message while al
   const reservation = { feedback: [], contextGrowthBytes: 0 };
   assert.doesNotThrow(() => assertModelContinuation(last, reservation));
   assert.throws(() => assertModelContinuation(last, { ...reservation, mutableContext: true }), { code: 'REQUEST' });
+  assert.throws(() => assertModelContinuation(last, { ...reservation, mutableContext: true, contextShape: 'trailing-user-text' }), { code: 'REQUEST' });
   assert.throws(() => assertModelContinuation(last, { ...reservation, imageOmissionBytes: 1, imageOmissionByExchange: [1, 0] }), { code: 'REQUEST' });
   assert.doesNotThrow(() => assertModelContinuation(last, { ...reservation, imageOmissionBytes: 1, imageOmissionByExchange: [0, 1] }));
   assert.throws(() => assertModelContinuation(last, { ...reservation, imageOmissionBytes: 1, imageOmissionByExchange: [] }), /Invalid per-exchange/);
@@ -443,13 +445,24 @@ test('a manual-thinking turn can call another tool after feedback without an int
 
 test('Messages preserves the stop reason across subsequent cumulative usage deltas', async () => {
   const frames = events({ ...answer, usage });
-  frames.splice(-1, 0, { type: 'message_delta', delta: {}, usage: { output_tokens: 9 } }, { type: 'message_delta', delta: { stop_reason: null }, usage: { cache_read_input_tokens: 4, output_tokens: null } });
+  frames.splice(-1, 0, { type: 'message_delta', delta: {}, usage: { output_tokens: 9 } }, { type: 'message_delta', delta: { stop_reason: null }, usage: { cache_read_input_tokens: 4, output_tokens: null } }, { type: 'message_delta', delta: {}, usage: { input_tokens: 12, output_tokens: 9 } });
   const complete = () => model(async () => sse(frames)).complete({ ...request, stream: true });
   const reply = await complete();
   assert.deepEqual(reply.termination, { kind: 'completed', reason: 'end_turn' });
   assert.deepEqual(reply.usage, { promptTokens: 21, completionTokens: 9, totalTokens: 30, promptCacheHitTokens: 4 });
   frames.splice(-1, 0, { type: 'message_delta', delta: { stop_reason: 'max_tokens' } });
   await assert.rejects(complete(), { code: 'ENVELOPE' });
+});
+
+test('Messages rejects a decrease in any observed cumulative usage counter', async (testContext) => {
+  for (const [key, count] of Object.entries(usage)) {
+    await testContext.test(key, async () => {
+      const frames = events({ ...answer, usage });
+      frames.splice(-1, 0, { type: 'message_delta', delta: {}, usage: { [key]: null } }, { type: 'message_delta', delta: {}, usage: { [key]: count - 1 } });
+      const complete = model(async () => sse(frames)).complete({ ...request, stream: true });
+      await assert.rejects(complete, { code: 'ENVELOPE', diagnostic: { protocol: 'anthropic-messages', phase: 'stream', reason: 'invalid-usage' } });
+    });
+  }
 });
 
 test('Messages returns the finished blocks when max_tokens cuts off the final streamed tool input', async () => {

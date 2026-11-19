@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
-import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
+import { ChatCompletionsProvider, OpenAIResponsesProvider } from '@weiliang0121/capix-model-provider';
 import { Tool, ToolBudgetError, ToolModelCallLimitError } from '@weiliang0121/capix-tool';
 import { assembly, member, host, journal, input, reply, call, final } from './fixture.mjs';
 
@@ -243,7 +243,11 @@ test('actual request and provider inspection both receive the fixed context befo
 
 test('preflight reserves a larger next context before effects for both common and wire limits', async () => {
   const provider = new ChatCompletionsProvider({ endpoint: 'https://fixture.test/chat/completions', apiKey: 'fixture', model: 'fixture', fetch: () => assert.fail('inspection must not send') });
-  for (const budget of ['maxRequestBytes', 'maxWireRequestBytes'])
+  for (const [budget, limit] of [
+    ['maxRequestBytes', 1500],
+    ['maxWireRequestBytes', 1500],
+    ['maxWireRequestBytes', 2000],
+  ])
     for (const enabled of [false, true]) {
       let preparations = 0;
       let effects = 0;
@@ -251,7 +255,7 @@ test('preflight reserves a larger next context before effects for both common an
       const model = host((request) => (request.exchanges.length ? final : reply('one', [call('a', 'lookup', { key: 'a' })])));
       const options = configuration(false, {
         requestContext: { maxBytes },
-        budgets: { maxFeedbackBytes: 100, [budget]: budget === 'maxRequestBytes' ? 1500 : 2000 },
+        budgets: { maxFeedbackBytes: 100, [budget]: limit },
         tools: {
           lookup: member('lookup', () => {
             effects++;
@@ -270,15 +274,68 @@ test('preflight reserves a larger next context before effects for both common an
         inspection: provider,
       });
       try {
-        if (enabled) await assert.rejects(fixture.runner.run(input), budget === 'maxRequestBytes' ? /TOOL_REQUEST_LIMIT/ : /TOOL_WIRE_REQUEST_LIMIT/);
+        const blocked = enabled && limit === 1500;
+        if (blocked) await assert.rejects(fixture.runner.run(input), budget === 'maxRequestBytes' ? /TOOL_REQUEST_LIMIT/ : /TOOL_WIRE_REQUEST_LIMIT/);
         else assert.equal(await fixture.runner.run(input), 'finished');
-        assert.equal(model.sent.length, enabled ? 1 : 2);
-        assert.equal(preparations, enabled ? 1 : 0, 'preflight must not run selection');
-        assert.equal(effects, enabled ? 0 : 1, 'reserve the maximum next fragment before dispatch');
+        assert.equal(model.sent.length, blocked ? 1 : 2);
+        assert.equal(preparations, enabled ? model.sent.length : 0, 'preflight must not run selection');
+        assert.equal(effects, blocked ? 0 : 1, 'reserve the maximum next fragment before dispatch');
       } finally {
         await close(model);
       }
     }
+});
+
+test('a fixed Responses prompt fits at the actual continuation wire limit and one byte less prevents tool execution', async () => {
+  const toolCallId = 'lookup-1';
+  const feedback = { toolCallId, status: 'ok', content: [{ kind: 'text', text: '' }] };
+  const request = { messages: [{ role: 'user', content: 'fixed instructions '.repeat(128) }] };
+  const nextContext = 'selected "雪"';
+  let observed;
+  for (const adjustment of [undefined, 0, -1]) {
+    const bodyBytes = [];
+    let effects = 0;
+    const limit = adjustment === undefined ? 65536 : observed + adjustment;
+    const provider = new OpenAIResponsesProvider({
+      endpoint: 'https://fixture.test/v1/responses',
+      model: 'fixture',
+      apiKey: 'fixture',
+      bindingId: 'fixture',
+      maxWireRequestBytes: limit,
+      fetch: async (_url, { body }) => {
+        bodyBytes.push(Buffer.byteLength(body));
+        const first = bodyBytes.length === 1;
+        const output = first ? { type: 'function_call', id: 'fc_lookup', call_id: toolCallId, name: 'lookup', arguments: '{"key":"a"}' } : { type: 'message', id: 'msg_final', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'finished' }] };
+        return Response.json({ object: 'response', id: first ? 'resp_lookup' : 'resp_final', model: 'fixture', status: 'completed', output: [output] });
+      },
+    });
+    const model = host((request) => provider.complete(request));
+    const lookup = member('lookup', () => {
+      effects++;
+      return { text: '' };
+    });
+    const scene = assembly(configuration(false, { tools: { lookup }, requestContext: { maxBytes: bytes(message(nextContext)) }, budgets: { maxFeedbackBytes: bytes(feedback) } }), model, {
+      inspection: provider,
+      context: { prepare: (prefix) => (prefix.exchanges.length ? nextContext : undefined) },
+    });
+    try {
+      if (adjustment === -1) {
+        await assert.rejects(scene.runner.run({ request }), { code: 'TOOL_WIRE_REQUEST_LIMIT', phase: 'reserved', limit, bytes: observed });
+        assert.equal(effects, 0);
+        assert.equal(bodyBytes.length, 1);
+      } else {
+        assert.equal(await scene.runner.run({ request }), 'finished');
+        assert.equal(effects, 1);
+        assert.equal(bodyBytes.length, 2);
+        assert.deepEqual(model.sent[1].messages, [...request.messages, message(nextContext)]);
+        assert.equal(provider.inspectRequest(model.sent[1]).wireBytes, bodyBytes[1]);
+        if (adjustment === undefined) observed = bodyBytes[1];
+        else assert.equal(bodyBytes[1], limit);
+      }
+    } finally {
+      await close(model);
+    }
+  }
 });
 
 test('fixed context configuration rejects getters and invalid capacities before claiming members', () => {

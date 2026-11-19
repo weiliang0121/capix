@@ -121,7 +121,7 @@ const model = new GeminiGenerateContentProvider({
 
 其余结束原因保留原文并归入 `incomplete`。Tool 只推进已完整接纳的回复。`modelReplyText(reply)` 拼接文本，遇到工具调用时拒绝。协议版本、块顺序或续轮所需材料不完整时拒绝接纳。签名作为不透明数据传回原服务。
 
-Messages 流可在报告 `stop_reason` 后继续更新累计用量。适配器在 `message_stop` 交付最终回复。若 `max_tokens` 截断末个工具调用的 JSON 参数，回复保留之前完整的块及用量，略去无法解析的调用，终态为 `incomplete/max_tokens`。Tool 对整轮停止派发，包括同轮中参数已经完整的调用。[Anthropic 工具参数流](https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming) · [工具执行回归](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/messages-recovery.test.mjs)
+Messages 流可在报告 `stop_reason` 后继续更新累计用量。输入、缓存读取、缓存写入和输出分别累计，后续帧省略字段或给出 `null` 时保留已知值，任一已知计数回退会以 `invalid-usage` 拒绝整轮。`message_start` 的输出计数是初值，首次输出用量以 `message_delta` 为准。适配器在 `message_stop` 交付最终回复。若 `max_tokens` 截断末个工具调用的 JSON 参数，回复保留之前完整的块及用量，略去无法解析的调用，终态为 `incomplete/max_tokens`。Tool 对整轮停止派发，包括同轮中参数已经完整的调用。[Anthropic 工具参数流](https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming) · [工具执行回归](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/messages-recovery.test.mjs)
 
 公开 `requireModelReply`、`requireModelRequest`、`requireToolResult`、`requireToolFeedback` 和 `requireModelExchange` 对未知值作完整校验，返回原对象身份，不克隆、不冻结，也不缓存对可变对象的信任。适用于资源、Interaction、实体与 CP 的接纳边界。校验拒绝旧双字段形状、未知字段/版本、重复 ID、不完整反馈、getter、Proxy、循环引用与非 JSON 值；错误不包含传入正文。Provider 自己生成的回复已深冻结。旧 `text/finishReason` 双字段回复不是新协议的有效持久值，不能自动迁移后冒充已认证反馈。
 
@@ -253,6 +253,8 @@ Gemini 流中间事件的 `finishReason: null` 表示这一帧尚未给出终态
 各适配器都实现同步 `reserveWireBytes(request, reservation)`，用于 Tool 在产生反馈和上下文之前计算整个请求体的保守上界。实际正文计量仍由 `inspectRequest` 提供。[工具预算契约](https://github.com/weiliang0121/capix/blob/main/packages/tool/README.md#预算与等待)
 
 直接调用时，`contextGrowthBytes` 表示一条可选前缀消息引起的公共请求 JSON 字节增长上限，插入时计入数组分隔符。已有消息可能等长替换或移除时传 `mutableContext: true`。图片省略使用每个候选文本标记的完整 JSON 字节数，计算预算时保留被替换图片的空间。`ModelExchanges.previewFeedback` 已按交换给出这些标记的上界，合计值传 `imageOmissionBytes`，各交换的数值传 `imageOmissionByExchange`。
+
+若其余消息固定，且 `messages` 末条已是可选的 user 字符串消息，可同时传 `mutableContext: true` 和 `contextShape: 'trailing-user-text'`。调用方据此承诺只替换该条的文本或移除整条消息。内置 Provider 在已测得的请求上加一次文本增长上限，反馈和图片另行预留。未指定形状时按通用消息的可能变化估算。两种形式都会检查 Messages 签名前缀和 Responses 服务端前驱的续轮约束。
 
 协议参考 [Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create) · [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) · [Gemini generateContent](https://ai.google.dev/api/generate-content) · [SSE 标准](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)
 

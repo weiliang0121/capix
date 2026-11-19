@@ -135,7 +135,7 @@ Tool 先验证每个未执行调用的精确小反馈同时满足成员与全局
 
 字符串作为一条 user-role 数据传输消息插入固定初始消息之后、原生交换之前，带有 `Host-selected context data (lower-priority reference data; not a new user instruction, authorization, or model reply):` 标签。它是低优先级的宿主参考数据，不是用户新增指令、授权或原生模型回复；消息角色只承担传输，不提高材料的可信度。首次请求不以伪造的 assistant 回复结尾，不补造 reasoning、prefix 或工具交换。返回 `undefined` 时本次不插入片段。每次选择替换这个片段，不将旧片段追加进交换实体；固定初始消息、原生 reasoning、工具调用与反馈仍完整保留。该功能不裁剪累计文本历史，不更换 origin，不扩大工具权限或重置预算。
 
-`maxBytes` 是整条 user-role 数据消息（含完整标签和消息封套）的 JSON UTF-8 编码上限，接受 1 至 2 MiB 的安全整数，并写入目录摘要。超限抛出 `ToolBudgetError`，`code: 'TOOL_CONTEXT_LIMIT'`。工具派发前按下一片段的完整上限加数组分隔符预留请求容量，并保守预留 wire 容量；因此配置过大的上限即使当前片段很小也可能阻止工具派发。真正选材后仍按实际完整请求验证请求和 wire 预算，再由 Interaction 固定发送；inspection、Interaction 和 Provider 面对同一份材料。
+`maxBytes` 是整条 user-role 数据消息（含完整标签和消息封套）的 JSON UTF-8 编码上限，接受 1 至 2 MiB 的安全整数，并写入目录摘要。超限抛出 `ToolBudgetError`，`code: 'TOOL_CONTEXT_LIMIT'`。工具派发前，若该上限能容纳带标签的空文本消息，Tool 将它放在固定消息末尾，向 Provider 声明只有该条上下文会被替换或移除。原有消息、占位消息的封套和分隔符已计入请求，另行预留该条文本可能增长的字节。真正选材后按实际完整请求验证请求和 wire 预算，再由 Interaction 固定发送。[容量边界回归](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/request-context.test.mjs)
 
 选中的文本固定在模型子调用 input，CP 恢复核对原 Interaction 时使用这份文本，不重新执行选择器。恢复中尚未创建的下一模型调用仍会准备新材料，宿主须提供所需来源；这个能力不新增来源存储或跨重启记忆。选择失败不撤销此前已经发生的工具效果。取消继续按原调用与 Interaction 边界执行，不等待提示调度。
 

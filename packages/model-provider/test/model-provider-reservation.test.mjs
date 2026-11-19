@@ -70,3 +70,39 @@ test('one optional context message can change role, merge into the system prefix
     }
   }
 });
+
+test('a trailing user string reserves only its encoded growth across wire protocols', () => {
+  const config = { endpoint: 'https://offline.invalid/models/m:generateContent', model: 'm', apiKey: 'offline', bindingId: 'fixture' };
+  const chat = new ChatCompletionsProvider(config);
+  const providers = [chat, new AnthropicMessagesProvider({ ...config, anthropicVersion: '2023-06-01', maxTokens: 4096 }), new OpenAIResponsesProvider({ ...config, continuation: 'replay' }), new GeminiGenerateContentProvider(config)];
+  const history = [{ role: 'user', content: Array.from({ length: 32 }, () => ({ kind: 'text', text: 'x'.repeat(128) })) }];
+  const before = { messages: [...history, { role: 'user', content: 'base' }] };
+  const exact = { feedback: [], mutableContext: true, contextShape: 'trailing-user-text', contextGrowthBytes: 0 };
+  for (const provider of providers) {
+    const base = provider.inspectRequest(before);
+    const unchanged = provider.reserveWireBytes(before, exact);
+    assert.equal(unchanged, base.wireBytes);
+    assert.ok(provider.inspectRequest({ messages: history }).wireBytes < unchanged);
+    for (const content of ['same', '雪"\\\n'.repeat(256)]) {
+      const actual = provider.inspectRequest({ messages: [...history, { role: 'user', content }] });
+      const contextGrowthBytes = actual.requestBytes - base.requestBytes;
+      assert.equal(provider.reserveWireBytes(before, { ...exact, contextGrowthBytes }), actual.wireBytes);
+    }
+  }
+  assert.equal(chat.reserveWireBytes(before, { feedback: [], mutableContext: true, contextGrowthBytes: 4096 }), chat.inspectRequest(before).wireBytes + 8192);
+});
+
+test('a trailing user text declaration requires a mutable final user string', () => {
+  const chat = new ChatCompletionsProvider({ endpoint: 'https://offline.invalid', model: 'm', apiKey: 'offline' });
+  const user = { role: 'user', content: 'base' };
+  const exact = { feedback: [], mutableContext: true, contextGrowthBytes: 0, contextShape: 'trailing-user-text' };
+  for (const last of [
+    { role: 'assistant', content: 'answer' },
+    { role: 'user', content: [{ kind: 'text', text: 'same' }] },
+  ])
+    assert.throws(() => chat.reserveWireBytes({ messages: [user, last] }, exact), /Invalid trailing user text/);
+  const request = { messages: [user] };
+  const { mutableContext, ...unmarked } = exact;
+  assert.throws(() => chat.reserveWireBytes(request, unmarked), /Invalid trailing user text/);
+  assert.throws(() => chat.reserveWireBytes(request, { ...exact, contextShape: 'arbitrary' }), /Invalid trailing user text/);
+});

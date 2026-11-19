@@ -150,6 +150,8 @@ export interface ModelRequestReservation {
   readonly contextGrowthBytes: number;
   /** Set when that message can be replaced or removed even at zero byte growth. */
   readonly mutableContext?: true;
+  /** With mutableContext, only the final user string may change to another user string or be removed. All earlier messages are fixed. */
+  readonly contextShape?: 'trailing-user-text';
   /** Sum of the full common JSON byte budgets of possible image omission markers, before subtracting any displaced image bytes. */
   readonly imageOmissionBytes?: number;
   /** Per-exchange share of the image omission allowance, in request order. */

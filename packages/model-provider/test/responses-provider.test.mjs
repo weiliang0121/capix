@@ -171,6 +171,15 @@ test('Responses refuses conflicting storage and predecessor echoes', async () =>
 });
 
 for (const continuation of ['replay', 'previous-response-id']) {
+  test('Responses ' + continuation + ' checks a mutable trailing user string against its original prefix', async () => {
+    const provider = new OpenAIResponsesProvider({ ...route, continuation, fetch: async () => Response.json(reply('resp_context')) });
+    const initial = { ...first, messages: [...first.messages, { role: 'user', content: 'context' }] };
+    const request = { ...initial, exchanges: [{ reply: await provider.complete(initial), feedback }] };
+    const reservation = { feedback: [], mutableContext: true, contextShape: 'trailing-user-text', contextGrowthBytes: 0 };
+    if (continuation === 'previous-response-id') assert.throws(() => provider.reserveWireBytes(request, reservation), { code: 'REQUEST' });
+    else assert.equal(provider.reserveWireBytes(request, reservation), provider.inspectRequest(request).wireBytes);
+  });
+
   test('Responses ' + continuation + ' checks distinct item and call identities across rounds before tool execution', async () => {
     for (const duplicate of ['item', 'call', 'none']) {
       // Different identity namespaces may intentionally use the same string.

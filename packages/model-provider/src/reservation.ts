@@ -14,9 +14,13 @@ export function maximumFeedbackImages(toolCallId: string, maxBytes: number): num
 
 function feedbackGrowth(request: ModelRequest, reservation: ModelRequestReservation, perCall?: (growth: number, id: string, images: number, textParts: number) => number): number {
   requireJson(reservation);
-  shape(reservation, ['feedback', 'contextGrowthBytes'], ['imageOmissionBytes', 'imageOmissionByExchange', 'mutableContext']);
+  shape(reservation, ['feedback', 'contextGrowthBytes'], ['imageOmissionBytes', 'imageOmissionByExchange', 'mutableContext', 'contextShape']);
   if ((reservation.imageOmissionBytes !== undefined && !count(reservation.imageOmissionBytes)) || !count(reservation.contextGrowthBytes) || !Array.isArray(reservation.feedback) || reservation.feedback.length > 32) throw new TypeError('Invalid model wire reservation');
   if (reservation.mutableContext !== undefined && reservation.mutableContext !== true) throw new TypeError('Invalid mutable context reservation');
+  if (reservation.contextShape !== undefined) {
+    const last = request.messages.at(-1);
+    if (reservation.contextShape !== 'trailing-user-text' || !reservation.mutableContext || last?.role !== 'user' || typeof last.content !== 'string') throw new TypeError('Invalid trailing user text reservation');
+  }
   const omissions = reservation.imageOmissionByExchange;
   if (omissions !== undefined && (!Array.isArray(omissions) || omissions.length !== (request.exchanges?.length ?? 0) || !omissions.every(count) || omissions.reduce((sum, bytes) => sum + bytes, 0) !== (reservation.imageOmissionBytes ?? 0))) throw new TypeError('Invalid per-exchange image omission reservation');
   const placeholders = new Map(request.exchanges?.at(-1)?.feedback.map((feedback) => [feedback.toolCallId, feedback]));
@@ -92,6 +96,9 @@ function maximumContextOverhead(protocol: ContextProtocol, bytes: number, otherS
 function contextWireGrowth(protocol: ContextProtocol, request: ModelRequest, reservation: ModelRequestReservation): number {
   const growth = reservation.contextGrowthBytes;
   if (!growth && !reservation.mutableContext) return 0;
+  // Every adapter embeds this user string once. Replacement keeps its wire
+  // envelope and escaping; removing the entire message only shrinks the body.
+  if (reservation.contextShape === 'trailing-user-text') return growth;
   const systems = request.messages.filter((message) => message.role === 'system').length;
   let extra = maximumContextOverhead(protocol, growth, systems > 0);
   // The reservation identifies no particular slot. Bound inserting a new
@@ -101,7 +108,8 @@ function contextWireGrowth(protocol: ContextProtocol, request: ModelRequest, res
     const bytes = Buffer.byteLength(JSON.stringify(message)) + 1 + growth;
     extra = Math.max(extra, maximumContextOverhead(protocol, bytes, otherSystem) - contextOverhead(protocol, message, otherSystem));
   }
-  return growth + extra;
+  // Unconstrained Chat reservations historically allow twice the common growth.
+  return protocol === 'chat' ? Math.max(2 * growth, growth + extra) : growth + extra;
 }
 
 export function reserveChatWireBytes(wireBytes: number, request: ModelRequest, reservation: ModelRequestReservation): number {
@@ -115,8 +123,7 @@ export function reserveChatWireBytes(wireBytes: number, request: ModelRequest, r
     const parts = Math.max(images * 128, textParts * 26 + images * 64);
     return 2 * bytes + parts + (images ? 2 * Buffer.byteLength(JSON.stringify(id)) + 128 : 0);
   });
-  // Preserve the existing double-growth allowance used by Tool preflight.
-  const context = Math.max(2 * reservation.contextGrowthBytes, contextWireGrowth('chat', request, reservation));
+  const context = contextWireGrowth('chat', request, reservation);
   return bounded(wireBytes + growth + context + 2 * (reservation.imageOmissionBytes ?? 0));
 }
 
