@@ -2,7 +2,7 @@
 description: 从 CAPiX 的并行审阅出发，讨论一个组织如何保留成熟流程，又在例外出现时决定由谁参与、开放哪些能力、怎样接回结果。
 ---
 
-# 从capix出发，如何思考智能组织
+# 从 CAPiX 出发，如何思考智能组织
 
 CAPiX 的并行审阅示例里，有三个模块要查，却只定义了一个审阅角色。协调者用普通代码遍历模块清单，对同一个 `Group` 发起三次调用。每次审阅只看自己模块的改动。等复核角色把 API 和文档的发现放到一起，才看出一边读的是毫秒，另一边教用户传秒。[多 Agent 并行协作](../scenarios/multi-agent.md)
 
@@ -20,11 +20,12 @@ CAPiX 的并行审阅示例里，有三个模块要查，却只定义了一个�
 ---
 config:
   sequence:
-    width: 72
-    height: 36
-    actorMargin: 12
-    diagramMarginX: 6
-    messageMargin: 26
+    width: 118
+    height: 42
+    actorMargin: 42
+    diagramMarginX: 12
+    messageMargin: 32
+    wrap: false
 ---
 sequenceDiagram
     participant P as 采购流程
