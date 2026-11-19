@@ -35,7 +35,7 @@ const scenarios = {
   text: '应用场景',
   items: [
     { text: '多 Agent 并行协作', link: '/scenarios/multi-agent' },
-    { text: '从capix出发，如何思考智能组织', link: '/essays/intelligent-organization' },
+    { text: 'CAPiX 与智能组织', link: '/essays/intelligent-organization' },
   ],
 };
 const examples = {
