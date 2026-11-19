@@ -1,5 +1,12 @@
 # @weiliang0121/capix-model-exchanges
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [cbde88e]
+  - @weiliang0121/capix-model-provider@0.11.0
+
 ## 0.8.0
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # @weiliang0121/capix-tool
 
+## 0.12.1
+
+### Patch Changes
+
+- Updated dependencies [cbde88e]
+  - @weiliang0121/capix-model-provider@0.11.0
+  - @weiliang0121/capix-model-exchanges@0.8.1
+
 ## 0.12.0
 
 ### Minor Changes

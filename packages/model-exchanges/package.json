@@ -1,6 +1,6 @@
 {
   "name": "@weiliang0121/capix-model-exchanges",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": false,
   "type": "module",
   "exports": {
