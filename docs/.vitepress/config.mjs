@@ -31,11 +31,13 @@ const concepts = {
     { text: '恢复：依据与续接', link: '/concepts/recovery' },
   ],
 };
-const scenarios = {
-  text: '应用场景',
+const essays = {
+  text: '开发者手记',
   items: [
-    { text: '多 Agent 并行协作', link: '/scenarios/multi-agent' },
+    { text: '手记目录', link: '/essays/' },
+    { text: '工具循环应该在哪里结束？', link: '/essays/tool-loop-boundaries' },
     { text: 'CAPiX 与智能组织', link: '/essays/intelligent-organization' },
+    { text: '多 Agent 并行协作', link: '/scenarios/multi-agent' },
   ],
 };
 const examples = {
@@ -72,14 +74,14 @@ export default defineConfig({
       { text: 'Why CAPiX', link: '/why' },
       { text: '教程', link: '/guide/getting-started' },
       { text: '核心概念', link: '/concepts/' },
-      { text: '应用场景', link: '/scenarios/multi-agent' },
+      { text: essays.text, link: '/essays/', activeMatch: '^/(?:essays|scenarios)/' },
       { text: '参考', link: '/README' },
     ],
     sidebar: {
       '/guide/': [tutorial, reading],
       '/concepts/': [concepts, reading],
-      '/scenarios/': [scenarios, reading],
-      '/essays/': [scenarios, reading],
+      '/scenarios/': [essays, reading],
+      '/essays/': [essays, reading],
       '/examples/': [examples, reading],
       '/why': [reading, tutorial],
       '/': [

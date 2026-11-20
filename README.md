@@ -24,7 +24,9 @@ CAPiX 是一个 Agent 框架，帮助你组合已有能力，构筑自己的智�
 推荐从[构建便签助手](https://weiliang0121.github.io/capix/guide/getting-started.html)开始：先运行一个完整的工具循环，再沿同一份源码理解、拆解和扩展。示例默认离线，便签读写真实发生；接入真实模型是教程中的下一步。
 
 - [核心概念](https://weiliang0121.github.io/capix/concepts/)：是什么、怎么用、为什么这样设计。
+- 选择 Group 时，可以比较固定步骤、按状态选路和让模型连续调用工具的写法，看下一步由谁决定、父层拿到什么结果。[推进与交付的责任边界](docs/concepts/structure.md#推进与交付的责任边界)
 - [多 Agent 并行协作](docs/scenarios/multi-agent.md)演示如何并行审阅变更、限定每个 Agent 可读的材料，再汇总复核。
+- 从具体场景、失败用例和框架设计中生出的观察，收在[开发者手记](docs/essays/index.md)。
 - [按主题实践](https://weiliang0121.github.io/capix/examples/)：结构、资源、实体、输出和记录的可运行示例。
 - [参考与契约](https://weiliang0121.github.io/capix/README.html)：准确的 API、生命周期与承诺边界。
 
@@ -37,6 +39,12 @@ npm install @weiliang0121/capix-resources @weiliang0121/capix-structure @weilian
 目前处于 **0.x** 阶段，18 个包在 npm 上独立发版。各包职责见[架构与包](docs/organization.md)。安装后可在包目录阅读 README 和随包提供的 CHANGELOG.md。早期 npm 包只附 README，可到[各包目录](packages/) 按包名、版本查阅 CHANGELOG。发布批次的包名、版本与源码见 [GitHub Releases](https://github.com/weiliang0121/capix/releases)。
 
 仓库文档描述当前源码。在线文档站显示最近一次手动部署的内容，发布时间可能与源码和 npm 版本不同。
+
+## 体验 Psi
+
+Psi 是基于 CAPiX 构建的桌面工作台，用来开发和维护自己的智能体项目。你可以请开发 Agent 梳理代码、修改文件，或在允许本地执行后运行测试。开启「并行协作」后，主 Agent 还可以把任务分给子 Agent，再汇总结果。项目源码由你管理，可以用原来的编辑器继续开发。
+
+公开体验包提供 DMG 和 ZIP，适用于运行 macOS 13 或更新版本的 Apple Silicon Mac。首次使用时，在设置中连接 DeepSeek 或其他兼容 Chat Completions 的模型服务，并填写自己的 API Key。[查看 Psi 体验版与下载说明](https://github.com/weiliang0121/psi-releases/tags)
 
 ## 参与贡献
 

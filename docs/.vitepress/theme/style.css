@@ -265,21 +265,21 @@ summary:focus-visible,
   font-weight: 600;
   color: var(--vp-c-brand-1);
 }
-.home-credits {
+.home-section {
   margin-top: 64px;
   padding-top: 40px;
   border-top: 1px solid var(--vp-c-divider);
 }
-.home-credits h2 {
+.home-section h2 {
   font-size: 22px;
   margin-bottom: 16px;
 }
-.home-credits p:not(.home-eyebrow) {
+.home-section p:not(.home-eyebrow) {
   max-width: 740px;
   margin: 0 0 12px;
   text-wrap: balance;
 }
-.home-credits a {
+.home-section a {
   color: var(--vp-c-text-1);
   text-decoration: underline;
   text-underline-offset: 4px;

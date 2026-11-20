@@ -6,15 +6,36 @@ import { test } from 'node:test';
 import site from '../../docs/.vitepress/config.mjs';
 import { checkPackageReadme, checkReference } from '../../scripts/docs/check.mjs';
 
-test('the multi-agent scenario is directly reachable from the site and imports its runnable example', async () => {
-  const route = '/scenarios/multi-agent';
-  const docs = new URL('../../docs/', import.meta.url);
-  const [home, scenario] = await Promise.all([readFile(new URL('index.md', docs), 'utf8'), readFile(new URL('scenarios/multi-agent.md', docs), 'utf8')]);
-  assert.ok(
-    site.themeConfig.nav.some(({ link }) => link === route),
-    'The top-level navigation must link directly to the multi-agent scenario',
-  );
-  assert.match(home, /(?:\]\(|\bhref=["']|^\s*link:\s*["']?)\.?\/scenarios\/multi-agent(?=[\s)"']|$)/m, 'The home page must link directly to the multi-agent scenario');
+const docs = new URL('../../docs/', import.meta.url);
+
+test('the home page and top-level navigation lead to the developer journal and its articles', async () => {
+  const [home, journal] = await Promise.all([readFile(new URL('index.md', docs), 'utf8'), readFile(new URL('essays/index.md', docs), 'utf8')]);
+  const entry = site.themeConfig.nav.find(({ text }) => text === '开发者手记');
+  assert.equal(entry?.link, '/essays/');
+  assert.match(home, /^\s+text: 开发者手记\n\s+link: \/essays\/$/m);
+  const activeMatch = new RegExp(entry.activeMatch);
+  assert.match('/essays/', activeMatch);
+  assert.doesNotMatch('/guide/getting-started', activeMatch);
+
+  const articlePaths = ['essays/tool-loop-boundaries', 'essays/intelligent-organization', 'scenarios/multi-agent'];
+  for (const path of articlePaths) {
+    await readFile(new URL(`${path}.md`, docs), 'utf8');
+    const relativeLink = path.startsWith('essays/') ? `./${path.slice('essays/'.length)}.md` : `../${path}.md`;
+    assert.ok(journal.includes(`](${relativeLink})`), `The journal must link to /${path}`);
+    assert.match(`/${path}`, activeMatch);
+  }
+
+  for (const section of ['/essays/', '/scenarios/']) {
+    const group = site.themeConfig.sidebar[section]?.find(({ text }) => text === '开发者手记');
+    const links = group?.items.map(({ link }) => link);
+    for (const route of ['/essays/', ...articlePaths.map((path) => `/${path}`)]) {
+      assert.ok(links?.includes(route), `The ${section} sidebar must link to ${route}`);
+    }
+  }
+});
+
+test('the multi-agent scenario imports its runnable example', async () => {
+  const scenario = await readFile(new URL('scenarios/multi-agent.md', docs), 'utf8');
   assert.match(scenario, /^<<<[ \t]+\.\.\/\.\.\/examples\/parallel-review\.mjs(?=[\s#{]|$)/m, 'The scenario must import source from its runnable example');
 });
 

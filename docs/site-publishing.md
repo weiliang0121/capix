@@ -21,6 +21,8 @@ CAPIX_DOCS_BASE=/capix/ pnpm docs:preview
 
 打开预览命令给出的地址并访问 `/capix/`。产物位于 `docs/.vitepress/dist`，不提交到 Git。子路径通过 `CAPIX_DOCS_BASE` 设置，遵循 [VitePress 的 base 配置](https://vitepress.dev/guide/deploy#setting-a-public-base-path)。
 
+编辑时可持续运行 `pnpm docs:dev` 查看改动。如果用 `pnpm docs:preview` 检查构建产物，重新运行 `pnpm docs:build` 或 `pnpm check` 后要重启预览进程。它在启动时记录静态文件名，重建后 CSS 和 JavaScript 的文件名可能已经改变。
+
 ## 首次发布
 
 以下步骤会公开发布静态站点，应在确认发布范围后执行：

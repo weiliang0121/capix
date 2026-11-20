@@ -13,8 +13,11 @@ hero:
       text: 为什么用 CAPiX
       link: /why
     - theme: alt
-      text: 多 Agent 并行协作
-      link: /scenarios/multi-agent
+      text: 开发者手记
+      link: /essays/
+    - theme: alt
+      text: 体验 Psi
+      link: https://github.com/weiliang0121/psi-releases/tags
 ---
 
 <script setup>
@@ -81,7 +84,14 @@ import CompositionVisual from './.vitepress/theme/CompositionVisual.vue';
     <a class="home-next-link" href="./why">为什么用 CAPiX <span aria-hidden="true">→</span></a>
   </div>
 
-  <section class="home-credits" aria-labelledby="creation-and-thanks">
+  <section class="home-section" aria-labelledby="psi">
+    <h2 id="psi">Psi · CAPiX 的开发工作台</h2>
+    <p>用 Psi 和开发 Agent 一起构建自己的 CAPiX 智能体。打开本地项目，先问「这个项目从哪里启动？」，再请它为一个节点补上测试。为项目开启本地执行后，还可以让它运行测试，在对话里核对改了哪些文件、测试是否通过。</p>
+    <p>体验版适用于运行 macOS 13 或更新版本的 Apple Silicon Mac。首次使用需配置自己的模型 API Key。</p>
+    <a href="https://github.com/weiliang0121/psi-releases/tags">查看 Psi 体验版与下载说明 <span aria-hidden="true">↗</span></a>
+  </section>
+
+  <section class="home-section" aria-labelledby="creation-and-thanks">
     <p class="home-eyebrow">ACKNOWLEDGEMENTS</p>
     <h2 id="creation-and-thanks">创作与致谢</h2>
     <p>CAPiX 由 <a href="https://github.com/weiliang0121">wei.liang</a> 与 Codex 共同设计和实现。</p>
