@@ -26,6 +26,8 @@ Tool Group → 已登记工具成员 → 接纳映射 → 固定反馈槽
 
 Tool 不依赖 Runtime 实现；宿主用普通 Scene、Resources、Runner 装配。完整可运行例子见 [examples/tool.mjs](../examples/tool.mjs)，作者与登记代码见 [Tool README](../packages/tool/README.md)。默认不开 CP。
 
+原生工具调用也可以用于作者自己的模型节点。若业务要自己决定何时结束，普通 Group 可以接纳模型子调用的回复，校验提议、调用登记成员，再用 ModelExchanges 将反馈与原调用 ID 配对，构造下一次请求。使用 Tool 时，这段推进、预检和预算检查由预设提供。自行编排时，作者负责相应的校验和交接。[独立编排模型与工具子调用的回归](../packages/runtime/test/model-exchange-origin.test.mjs) · [Group 的推进与交付](./concepts/structure.md#推进与交付的责任边界)
+
 ## 一份完整模型回复
 
 Provider 的 ModelReply v1 保存 id、model、有序 output、termination、usage 和原生协议补充。output 包含有序 text 或 tool-call。Chat Completions 和 Responses 工具调用保留 `{encoding:'json-text',text}` 的原文，Messages 和 Gemini 工具调用保留 `{encoding:'json-value',value}` 的 JSON 对象。Tool 通过 Provider 的公共函数 `readModelToolArguments(call)` 取得参数，再按登记成员的 Schema 校验。
@@ -36,7 +38,7 @@ Messages 的签名思考与原提示前缀绑定。带签名或遮盖块的回�
 
 Chat Completions 的 `stop`、`tool_calls`，Messages 的 `end_turn`、`stop_sequence`、`tool_use`，以及 Gemini 的 `STOP` 可被接纳为 completed。Chat 的 `content_filter`、Messages 的 `refusal`、Gemini 的提示拦截或候选过滤归入 refused。未知结束原因保留原文并归入 incomplete。协议完成不等于工具业务成功。`modelReplyText` 拒绝含工具调用的回复，也不替代非空正文、结束状态等业务检查。
 
-`ToolResult` 为 `{status:'ok'|'error',content:readonly ModelInputContent[]}`，content 接受 1–32 个文本或固定图片块；ToolFeedback 另含 toolCallId。Provider 要求每个模型调用都有准确、完整反馈，按原模型调用顺序编码关联。不能用措辞暗示错误，也不把工具结果提升为 system 指令。提示策略、结果可信度和资源授权由宿主决定。
+`ToolResult` 为 `{status:'ok'|'error',content:readonly ModelInputContent[]}`，content 接受 1–32 个文本或固定图片块。ToolFeedback 另含 toolCallId。续轮时，Provider 要求回复中的每个工具调用都有准确、完整的反馈，并按原调用顺序编码。不能用措辞暗示错误，也不把工具结果提升为 system 指令。提示策略、结果可信度和资源授权由宿主决定。
 
 公开 requireModelRequest / requireModelReply / requireToolResult / requireToolFeedback / requireModelExchange 在接纳边界完整核验，返回原对象、不冻结或缓存对可变对象的信任；Provider 生成的回复已深冻结。未知字段／版本、重复调用 ID、不完整反馈、getter、Proxy、循环和非 JSON 值拒绝，错误不含传入正文。
 
@@ -54,7 +56,9 @@ policyVersion 覆盖 Schema 之外的细化和映射语义。目录摘要还包�
 
 ModelExchanges 的起点保存初始消息、请求选项、工具定义、目录摘要、策略版本及可选图片策略。只有工具定义作为目录发送给模型，图片策略用于投影历史反馈。每次 Tool 调用创建独立起点，可共享同一实体；普通资源直接登记实体，不要求父输入 capture。目录不包含 Node、回调、执行映射或端点。origin 引用是内容身份，不能自行授权重发或扩大资源范围。
 
-模型子输入包含 `{origin,exchanges}` 引用；启用 requestContext 且宿主选出字符串时还包含固定的 `context` 文本；ToolModelResource 在发送边界重建完整请求。`closed` 核对引用归属于同一起点且为顺序前缀、反馈完整；`request` 再检查协议续接资格与整体请求限额。查询旧前缀不等于取得执行恢复许可，模型发送历史与调用关系仍须准确核验。
+模型子输入包含 `{origin,exchanges}` 引用。启用 requestContext 且宿主选出字符串时，子输入还包含固定的 `context` 文本。ToolModelResource 在发送边界重建请求。`closed` 核对引用是否构成同一起点下反馈已闭合的有序前缀，`request` 检查组装后的公共请求及其容量。发送前，Provider 按所选协议核验续轮材料和传输限制。恢复执行时还须核验原调用与发送依据。
+
+View 管理业务想读哪些材料，ModelExchanges 保存模型续轮所需的起点、回复和配对反馈。例如，展示界面可以用 View 只选最后一条交换。使用 ModelExchanges 重建续轮请求时，前面的工具调用及其反馈仍须按序纳入，即使界面只展示最后一条。工具节点也可以通过资源读取宿主提供的 View 材料，只把本次操作需要的结果映射为工具反馈。[View 的材料选择](./concepts/entities.md#view-选择要使用的材料) · [ModelExchanges 的固定起点与请求重建](../packages/model-exchanges/README.md)
 
 `requestContext: { maxBytes }` 可在固定初始消息之后、原生交换之前传递一条可替换的 user-role 数据消息。完整标签明确它是低优先级宿主参考数据，不是新的用户指令、授权或模型回复；不伪造 assistant、reasoning、prefix 或工具交换。容量按含标签与消息封套的完整 JSON UTF-8 字节计量，工具执行前还预留下一片段上限；固定起点与真实原生续接材料不变。选材、预算与冷恢复规则见 [Tool 每次请求的宿主材料](../packages/tool/README.md#每次请求的宿主材料)。
 
