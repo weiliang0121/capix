@@ -128,6 +128,8 @@ export default defineConfig({
           collapsed: true,
           items: [
             { text: '架构与包', link: '/organization' },
+            { text: '宿主能力与验证范围', link: '/host-platforms' },
+            { text: 'iOS Hermes 接入', link: '/ios-hermes' },
             { text: '契约与协议', link: '/contracts-protocol' },
             { text: 'Transcript wire', link: '/protocol' },
             { text: '测试', link: '/testing-organization-design' },

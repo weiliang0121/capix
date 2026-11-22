@@ -4,7 +4,7 @@ import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { ModelExchanges } from '@weiliang0121/capix-model-exchanges';
 import { Group } from '@weiliang0121/capix-runtime';
 import { Tool, ToolBudgetError, ToolModelCallLimitError } from '@weiliang0121/capix-tool';
-import { assembly, member, host, journal, input, reply, call, final, result } from './fixture.mjs';
+import { assembly, member, schemaWithArgumentGetter, host, journal, input, reply, call, final, result } from './fixture.mjs';
 
 for (const checkpoint of [false, true])
   test(`Tool runs two public members over multiple model steps (checkpoint=${checkpoint})`, async () => {
@@ -483,6 +483,25 @@ test('diagnostics preserve rejection of coercion, defaults, stripping and schema
       model.interactions.close();
     }
   }
+});
+
+test('Node schema comparison can read a getter before child input fixation rejects it', async (t) => {
+  let reads = 0;
+  const lookup = member('lookup', () => assert.fail('accessor argument executed'));
+  lookup.input = schemaWithArgumentGetter(() => reads++);
+  const lookupCall = call('a', 'lookup', { key: 'fixed' });
+  const model = host(() => reply('accessor', [lookupCall]));
+  t.after(async () => {
+    await model.interactions.settled();
+    model.interactions.close();
+  });
+  const fixture = assembly({ policyVersion: 'argument-getter.v1', tools: { lookup } }, model);
+
+  assert.equal(fixture.tool.checkToolCall(lookupCall).kind, 'accepted');
+  assert.equal(reads, 1);
+  await assert.rejects(fixture.runner.run(input), { name: 'StableValueError' });
+  assert.equal(model.sent.length, 1);
+  assert.deepEqual(fixture.entity.snapshot().entries[0].feedback, []);
 });
 
 test('missing fields, enum and union failures expose only static reasons and safe prefixes', async () => {

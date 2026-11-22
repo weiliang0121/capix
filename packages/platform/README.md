@@ -1,6 +1,6 @@
 # @weiliang0121/capix-platform
 
-提供 CAPiX 各包共享的宿主身份、对象检查和数据运算入口。Node.js `>=22.23.2` 自动使用 Node 原生能力。其他宿主由入口条件选择默认分支。
+提供 CAPiX 各包共享的宿主身份、对象检查和数据运算入口。完整回归在 Node.js 22.23.2 上运行，支持范围为 Node.js `>=22.23.2`。解析器按 `node` 条件自动选择原生实现。其他 JavaScript 宿主通过默认入口按需配置能力。[宿主能力与验证范围](https://github.com/weiliang0121/capix/blob/main/docs/host-platforms.md)
 
 ```sh
 npm install @weiliang0121/capix-platform
@@ -22,22 +22,4 @@ npm install @weiliang0121/capix-platform
 
 ## iOS Hermes 启动
 
-在使用 Hermes 的 Expo 应用中，通过 `npx expo install expo-crypto` 安装 UUID 提供方。使用支持并启用了 `package.json` 的 `exports` 和 `imports` 的 Metro 版本。按 React Native 的条件解析包，CAPiX 此时使用 `default` 分支。[Metro 模块解析](https://metrobundler.dev/docs/resolution/)
-
-对于使用自定义入口的应用，可将 `package.json` 的 `main` 指向下面的 `index.js`。在 `App` 模块中导入所需的 CAPiX 包并默认导出根组件。入口先配置平台，再通过动态导入加载 `App`，这样模块顶层创建 ResourceOffer 时已有 UUID 生成器。[Expo Crypto](https://docs.expo.dev/versions/latest/sdk/crypto/#cryptorandomuuid)、[Expo 自定义入口](https://docs.expo.dev/versions/latest/sdk/expo/#registerrootcomponent)
-
-```js
-import { registerRootComponent } from 'expo';
-import { randomUUID } from 'expo-crypto';
-import { createElement, lazy, Suspense } from 'react';
-import { installRandomUUID, useAuthorProvidedPlainObjects } from '@weiliang0121/capix-platform';
-
-useAuthorProvidedPlainObjects();
-installRandomUUID(randomUUID);
-
-const App = lazy(() => import('./App'));
-
-registerRootComponent(function Root() {
-  return createElement(Suspense, { fallback: null }, createElement(App));
-});
-```
+Expo 应用在业务模块求值前配置对象检查策略和安全 UUID，以支持模块顶层创建资源声明。接入指南包含 Metro 条件解析、启动顺序和 Release 模拟器的验证范围。[iOS Hermes 接入](https://github.com/weiliang0121/capix/blob/main/docs/ios-hermes.md)

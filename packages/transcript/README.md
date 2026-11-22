@@ -4,7 +4,7 @@
 
 ## 安装与入口
 
-运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
+包使用 ESM，附带 TypeScript 类型声明。完整回归在 Node.js 22.23.2 上运行，支持范围为 Node.js `>=22.23.2`。其他 JavaScript 宿主按使用的入口配置所需能力。[宿主能力与验证范围](https://github.com/weiliang0121/capix/blob/main/docs/host-platforms.md)
 
 ```sh
 npm install @weiliang0121/capix-transcript

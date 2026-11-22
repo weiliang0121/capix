@@ -5,7 +5,6 @@
 ### Patch Changes
 
 - Updated dependencies [e5adad3]
-- Updated dependencies [e5adad3]
   - @weiliang0121/capix-contracts@0.8.0
 
 ## 0.7.1

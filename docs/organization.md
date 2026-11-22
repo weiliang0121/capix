@@ -68,7 +68,7 @@ Scene、Group 和 Node 共同满足 callable 切面；组合能力来自成员�
 
 执行机制继续掌握真实关系、接纳、取消和排空。Checkpoint 的固定值检查也用于未安装 Store 的普通调用，当前 Invocation 与 Runtime 仍依赖具体 Checkpoint 实现。新的宿主实现需要分别证明构造期身份、对象接纳及异步来源，并保持已登记 Offer 的对象身份。
 
-`capix-platform` 负责宿主身份、对象检查策略和通用数据运算，`capix-platform-node` 提供 Node 原生能力。Node 自动使用原生检查。无法提供原生检查的 Hermes 等宿主可在启动时调用 `useAuthorProvidedPlainObjects()`，由作者保证 CAPiX 检查的对象及其嵌套内容和原型链没有 Proxy 或 JSI `HostObject`。Expo 应用可以用 `installRandomUUID` 提供标识生成函数。宿主设置在导入业务模块前完成。[平台启动示例](../packages/platform/README.md#ios-hermes-启动)
+`capix-platform` 提供身份生成、对象检查与通用数据运算。`capix-platform-node` 随其安装，由 `node` 条件加载原生实现。默认条件使用通用实现。创建结构或 Offer 时需要 UUID；结构构建、View 捕获和模型输入读取对象前需要对象检查策略；在子结果接纳回调中向实体作固定写入时，可以显式传入该次接纳凭据。[宿主能力与验证范围](host-platforms.md)
 
 ## 实体与资源的组合
 
@@ -80,6 +80,6 @@ Scene、Group 和 Node 共同满足 callable 切面；组合能力来自成员�
 
 ## 运行环境与验证
 
-Node.js 是完整 Runner 的基准环境。其他宿主按公开入口和启动配置分别验证。独立资源包通过 ESM 条件选择 UUID 实现，默认条件使用宿主的 Web Crypto。子调用的普通接纳与排空可以脱离 Node 的异步上下文，固定实体操作可以显式传入子结果接纳回调的凭据，在窗口内跨 `await` 核对父子身份。结构构建、View 捕获和模型请求等边界依据宿主检查策略处理对象。标准 Hermes 在配置检查策略前，遇到需要宿主判定的对象会拒绝。[运行边界](runtime-boundaries.md#宿主对象检查)和[严格对象检查实验](../scripts/platform/README.md)说明了接纳责任和验证范围。
+Node.js 是完整回归基准。其他 JavaScript 宿主按实际使用的能力接入，已验证的组合包括标准 iOS Hermes 模拟器。各环境使用的条件入口、传输方式和测试覆盖见[宿主验证范围](host-platforms.md#验证范围)。
 
 只检出本仓即可构建、测试与验证分发。测试随责任包，组合测试归真实协调者，文档使用同一份可执行示例；详见[测试](testing-organization-design.md)。取消、恢复、资源权限和外部效果的边界不能因示例简化而扩大。

@@ -1,6 +1,6 @@
 # 模型协议适配与宿主接入
 
-宿主按部署端点支持的 API 选用 Provider。同一套 harness 发送 `ModelRequest`，从 `ModelReply` 读取正文、工具调用和结束状态。CAPiX 直接实现四种 HTTP 协议，共用 Node.js 的 `fetch`。账号可以调用哪些模型、各模型在哪些端点可用，由宿主配置。[适配器与配置示例](../../packages/model-provider/README.md)
+宿主按部署端点支持的 API 选用 Provider。同一套 harness 发送 `ModelRequest`，从 `ModelReply` 读取正文、工具调用和结束状态。CAPiX 直接实现四种 HTTP 协议，共用传输实现，优先使用 Provider 配置传入的 `fetch`，省略时使用 `globalThis.fetch`。账号可以调用哪些模型、各模型在哪些端点可用，由宿主配置。[适配器与配置示例](../../packages/model-provider/README.md)
 
 ## 新端点接在哪里
 

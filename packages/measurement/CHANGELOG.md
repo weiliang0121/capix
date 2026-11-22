@@ -5,7 +5,6 @@
 ### Patch Changes
 
 - Updated dependencies [e5adad3]
-- Updated dependencies [e5adad3]
   - @weiliang0121/capix-resources@0.8.0
   - @weiliang0121/capix-transcript@0.8.0
 

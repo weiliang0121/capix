@@ -27,6 +27,22 @@ export function member(name, run, checkpoint = false) {
   });
   return { node, description: `Read ${name}`, input: z.strictObject({ key: z.string() }), result: { succeeded: (value) => result(value.text) } };
 }
+export function schemaWithArgumentGetter(onRead) {
+  const schema = z.strictObject({ key: z.string() });
+  const parse = schema.parse;
+  schema.parse = (value) => {
+    const parsed = parse(value);
+    const key = parsed.key;
+    return Object.defineProperty(parsed, 'key', {
+      enumerable: true,
+      get() {
+        onRead();
+        return key;
+      },
+    });
+  };
+  return schema;
+}
 export function host(send, states = new Map()) {
   const sent = [];
   const interactions = new Interactions().register(contract, {
