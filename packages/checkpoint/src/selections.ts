@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
 import { isEqual } from 'es-toolkit';
 import type { CheckpointCommit, CheckpointReference, CheckpointReferences, CheckpointSelectionChange, CheckpointSelectionReference, CheckpointSelectionSlots, CheckpointSelectionSnapshot, CheckpointChildRecord } from './contract.js';
 import { checkpointMetrics, encodeCheckpointData, type CheckpointValueMetrics } from './encoding.js';
@@ -32,9 +32,9 @@ export interface CheckpointSelectionPlan {
 const zero = '0'.repeat(64);
 const mask = (1n << 256n) - 1n;
 const hash = (value: unknown) =>
-  createHash('sha256')
+  createSha256()
     .update(encodeCheckpointData(canonical(value)))
-    .digest('hex');
+    .digestHex();
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value !== null && typeof value === 'object')

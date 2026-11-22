@@ -25,7 +25,7 @@ pnpm check
 
 已构建后可使用 `pnpm test:packages`、`pnpm test:repository`、`pnpm examples:check`；缺产物须失败。测试执行器支持 `node scripts/test/run.mjs --packages --list` 列出发现范围。
 
-发现规则覆盖包内及仓库的 `*.test.mjs`，类型编译入口也在相应包中；纯 worker、类型样本、benchmarks 和 dist 不当成额外测试。18 个包都需要可发现的测试入口，空范围或未声明依赖不能静默通过。
+发现规则覆盖包内及仓库的 `*.test.mjs`，类型编译入口也在相应包中；纯 worker、类型样本、benchmarks 和 dist 不当成额外测试。21 个包都需要可发现的测试入口，空范围或未声明依赖不能静默通过。
 
 ## 保留的证据
 
@@ -41,11 +41,13 @@ Store 契约与调用提交行为分别测试。内存 Store 或注入端口可�
 
 `pnpm examples:check` 实际调用示例并断言结果；仅 import 成功或工厂文件退出 0 不等于演示通过。随机身份、时间按结构和业务语义检查，不伪造稳定原始输出。
 
-`pnpm docs:check` 检查公开文档、源码引用以及 18 份包 README 的包名、Node.js 版本要求、安装命令、公开入口和仓内链接。`pnpm docs:build` 同时执行文档检查并构建站点。网站显示代码和运行说明，不自动赋予 Node 内核浏览器执行能力。公开契约的证明链接指向本仓当前测试，而非私有讨论或无法取得的实验。
+`pnpm test:platform` 使用已构建的公开包，在 Node 上检查对象识别以及 View 和模型输入对同一批被动值的接纳。Hermes 的独立宿主实验与复现命令见[平台样本](../scripts/platform/README.md)。
+
+`pnpm docs:check` 检查公开文档、源码引用以及 19 份包 README 的包名、Node.js 版本要求、安装命令、公开入口和仓内链接。`pnpm docs:build` 同时执行文档检查并构建站点。网站显示代码和运行说明，不自动赋予 Node 内核浏览器执行能力。公开契约的证明链接指向本仓当前测试，而非私有讨论或无法取得的实验。
 
 ## 分发与并发约束
 
-按顺序执行 `pnpm release:check` 和 `pnpm integration:check`。前者验证 18 个压缩发布包，后者验证 18 个候选包；均在仓库外安装并核对公开出口与消费，不发布 npm。
+按顺序执行 `pnpm release:check` 和 `pnpm integration:check`。前者验证 21 个压缩发布包，后者验证 21 个候选包；均在仓库外安装并核对公开出口与消费，不发布 npm。
 
 build、release 和 integration 会重建同一批 dist，不能与读取这些产物的测试并行。性能实验也不得与构建或测试并发。产物摘要、源码基线和测试结果分别记录，不能用源码摘要代替分发字节核验。
 

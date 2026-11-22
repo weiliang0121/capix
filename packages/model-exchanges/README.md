@@ -64,7 +64,7 @@ ModelExchangeResource             ModelExchangeViewSource
 
 ## 接纳与反馈
 
-节点申请 `ModelExchangeResource.request()`。接纳模型子结果时调用 `work.resources.exchanges.intake(origin, reply)`，接纳工具子结果时调用 `receive(origin, ref, callId, result)`。资源适配从当前 `activity.reception()` 取得准确父子来源；预检拒绝使用 `complete(origin, ref, callId, result)`，不伪造子调用。直接调用实体方法的宿主负责提供可信来源。
+节点申请 `ModelExchangeResource.request()`。接纳模型子结果时调用 `work.resources.exchanges.intake(origin, reply, permit)`，接纳工具子结果时调用 `receive(origin, ref, callId, result, permit)`。直接子调用的结果回调通过第二个参数收到该次接纳的 `permit`，资源适配从 `activity.reception(permit)` 取得准确父子来源；预检拒绝使用 `complete(origin, ref, callId, result)`，不伪造子调用。直接调用实体方法的宿主负责提供可信来源。
 
 - 实体 `intake(origin, operation, reply)` 对同一固定操作确认原回复，来源或内容冲突拒绝。工具的原始名称、调用 ID 和参数保存在完整回复中，不因反馈写入而丢失。
 - 实体 `complete(origin, ref, callId, result, operation?)` 新增反馈要求准确集合、起点、交换 ID 和当前 revision。已有槽位同内容、同来源的确认允许较旧引用，返回当前引用，不新增 sequence。

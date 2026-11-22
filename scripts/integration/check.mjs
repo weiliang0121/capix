@@ -4,10 +4,10 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { command, json, registry, root } from '../release/packages.mjs';
+import { checkPlatformImports, command, json, packages, registry, root } from '../release/packages.mjs';
 import { pack } from './pack.mjs';
 
-/** Verify the unminified 18-package candidate independently of public release artifacts. */
+/** Verify the unminified candidate distribution independently of public release artifacts. */
 export async function check() {
   let temporary;
   let candidateLock;
@@ -20,7 +20,7 @@ export async function check() {
     candidateLock = lock;
     const manifest = await json(join(output, 'manifest.json'));
     assert.deepEqual(manifest.packages, archives, 'Integration manifest does not match the packed batch');
-    assert.equal(archives.length, 18);
+    assert.deepEqual(archives.map((archive) => archive.name).sort(), (await packages()).map((entry) => entry.manifest.name).sort());
     assert.ok(
       archives.every((entry) => entry.private === false),
       'Integration candidates must be public framework packages',
@@ -43,7 +43,7 @@ export async function check() {
     const workspace = await json(join(root, 'package.json'));
     const dependencies = Object.fromEntries(archives.map((entry) => [entry.name, `file:${join(artifacts, entry.file)}`]));
     await writeFile(join(consumer, 'package.json'), JSON.stringify({ name: 'capix-integration-consumer', private: true, type: 'module', dependencies, devDependencies: { zod: workspace.devDependencies.zod, typescript: workspace.devDependencies.typescript, '@types/node': workspace.devDependencies['@types/node'] } }, null, 2) + '\n');
-    stage = 'installing all 18 candidate tarballs';
+    stage = `installing all ${archives.length} candidate tarballs`;
     command('npm', ['install', '--ignore-scripts', '--package-lock=false', '--no-audit', '--no-fund', '--prefer-online', `--registry=${registry}`, '--fetch-timeout=20000', '--fetch-retries=1'], { cwd: consumer });
     command('npm', ['ls', '--all'], { cwd: consumer, stdio: 'pipe' });
     stage = 'checking installed exports';
@@ -64,7 +64,7 @@ for (const name of ${JSON.stringify(imports)}) {
   assert.ok(fileURLToPath(import.meta.resolve(name)).startsWith(installedRoot), name + ': export escaped the isolated installation');
   await import(name);
 }
-console.log('Loaded ${imports.length} exports from 18 installed candidate tarballs');
+console.log('Loaded ${imports.length} exports from ${archives.length} installed candidate tarballs');
 `,
     );
     command(process.execPath, ['exports.mjs'], { cwd: consumer });
@@ -73,6 +73,8 @@ console.log('Loaded ${imports.length} exports from 18 installed candidate tarbal
     }
     stage = 'running the public API consumer';
     command(process.execPath, ['consumer.mjs'], { cwd: consumer });
+    stage = 'checking platform conditions in installed packages';
+    await checkPlatformImports(consumer);
     stage = 'compiling the public declaration consumer';
     command(process.execPath, ['node_modules/typescript/bin/tsc', '--ignoreConfig', '--noEmit', '--strict', '--target', 'ES2023', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--lib', 'ES2023,DOM,DOM.Iterable', '--skipLibCheck', 'false', 'consumer.ts'], { cwd: consumer });
     // Record only the candidate batch tested above, never the compressed release batch.

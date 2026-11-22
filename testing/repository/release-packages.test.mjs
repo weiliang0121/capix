@@ -33,9 +33,9 @@ async function fixture(t, toolVersion = '0.8.0') {
 test('release inventory accepts independent versions and preserves the full public package boundary', async (t) => {
   const { directory } = await fixture(t);
   const entries = await packages(directory);
-  assert.equal(entries.length, 18);
+  assert.equal(entries.length, 21);
   assert.equal(entries.find((entry) => entry.manifest.name === '@weiliang0121/capix-tool').manifest.version, '0.8.0');
-  assert.equal(entries.filter((entry) => entry.manifest.version === '0.7.0').length, 17);
+  assert.equal(entries.filter((entry) => entry.manifest.version === '0.7.0').length, entries.length - 1);
   const tool = entries.find((entry) => entry.manifest.name === '@weiliang0121/capix-tool');
   for (const dependency of Object.keys(tool.manifest.dependencies).filter((name) => name.startsWith('@weiliang0121/capix-'))) {
     assert.equal(tool.manifest.dependencies[dependency], 'workspace:*');
@@ -61,7 +61,7 @@ test('independent releases reject fixed or linked groups and inaccurate internal
   await assert.rejects(packages(directory), /target package version/);
 });
 
-test('a Tool-only changeset advances Tool alone and leaves seventeen package versions and changelogs intact', async (t) => {
+test('a Tool-only changeset advances Tool alone and leaves other package versions and changelogs intact', async (t) => {
   const { directory, entries } = await fixture(t, '0.7.0');
   const preserved = new Map();
   for (const entry of entries.filter((entry) => entry.manifest.name !== '@weiliang0121/capix-tool')) {

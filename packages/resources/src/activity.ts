@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import type { OperationOptions, OperationOutcome, OperationResult } from '@weiliang0121/capix-contracts';
 import { receiveOperation } from './operation/receive.js';
 import type { ResourceOperation } from './methods.js';

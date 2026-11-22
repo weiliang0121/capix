@@ -59,10 +59,10 @@ test('invocation boundary handles a child business failure without making techni
           },
         });
         await assert.rejects(failedChild.run(), (error) => error === unavailable);
-        return owner.children.get(failedChild).handle((error) => {
+        return owner.children.get(failedChild).handle((error, permit) => {
           received++;
           assert.equal(error, unavailable);
-          assert.deepEqual(owner.children.reception, { parentContextId: owner.context.id, childContextId: failedChild.context.id });
+          assert.deepEqual(owner.children.resolveReception(permit), { parentContextId: owner.context.id, childContextId: failedChild.context.id });
           return fallback;
         });
       },

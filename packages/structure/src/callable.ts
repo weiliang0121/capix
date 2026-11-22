@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import type { CallableKind, invocationSignature, InvocationSignature } from '@weiliang0121/capix-contracts';
 import { initializeStructureConfiguration } from './configuration.js';
 import type { CallableDescription, CallableDefinition, CallableRun, EmptyResources } from './definition/callable.js';

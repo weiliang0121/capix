@@ -10,7 +10,7 @@ import { ResourceOffer } from '@weiliang0121/capix-resources';
 function install(preset, resources = new Resources(), options = {}) {
   const scene = new Scene().add({ preset });
   scene.run = (work) => work.children.preset.invoke(work.input);
-  return new Runner(scene, resources, undefined, options).build();
+  return new Runner(scene, resources, options).build();
 }
 
 function deferred() {

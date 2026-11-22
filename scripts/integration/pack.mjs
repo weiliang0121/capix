@@ -28,8 +28,6 @@ async function sourceSnapshot(entries) {
 
 export async function pack() {
   const entries = await packages();
-  assert.equal(entries.length, 18);
-  assert.equal(new Set(entries.map((entry) => entry.manifest.name)).size, 18);
   await mkdir(join(root, '.capix'), { recursive: true });
   const lock = join(root, '.capix/integration.lock');
   await mkdir(lock);

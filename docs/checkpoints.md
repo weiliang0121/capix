@@ -47,16 +47,16 @@ Store 保持同步宿主端口，未强制放入普通业务 deps。最终交付
 
 CP 保持可选；宿主明确安装 Store，并自行提供恢复入口和业务资格核验。Runner 不扫描或自动继续历史工作，也不给过去调用补写 CP。
 
-| 入口                                                                                              | 当前行为                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CallableDefinition.checkpoint`                                                                   | 声明稳定 `key/version`、输入/输出 codec、`points` 数组；每点独立声明 name、`state` codec、引用槽位及 `check(state,facts)` 和 `resume { deps, uses, run }`。 |
-| `new Runner(scene, resources, interactions, { checkpoints: { store, observation?, feedback? } })` | 注入同步保存端口、原机制观察者及可选原始被动反馈。未安装时 `work.checkpoint` 为 undefined，原流程不变；订阅不能安装保存端口。                               |
-| `runner.observation.subscribe({ receive })`                                                       | 消费 `{ runnerId, entryId, source, fact }` 固定元数据；CP 事实使用 source: checkpoint，保留 activityId。只实时消费，不回放、不替换 Store 或严格观察。       |
-| `work.checkpoint({ point, state, refs })`                                                         | 当前运行或恢复工作阶段使用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                              |
-| `runner.resume(contextId, options)`                                                               | 核对绑定归属、当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守该 Runner 入口占用边界。                                                   |
-| `work.children.resume(saved.ref)`                                                                 | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                   |
-| `TranscriptResource.append.applyFixed({position,messages})`                                       | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                          |
-| `memoryResources().apply` 端点的 `applyFixed({position,changes})`                                 | 由已登记资源端点取得准确调用身份；整个批次与凭据由实体同次提交，重复确认不修改记忆或占用新顺序。                                                            |
+| 入口                                                                                | 当前行为                                                                                                                                                    |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CallableDefinition.checkpoint`                                                     | 声明稳定 `key/version`、输入/输出 codec、`points` 数组；每点独立声明 name、`state` codec、引用槽位及 `check(state,facts)` 和 `resume { deps, uses, run }`。 |
+| `new Runner(scene, resources, { checkpoints: { store, observation?, feedback? } })` | 注入同步保存端口、原机制观察者及可选原始被动反馈。未安装时 `work.checkpoint` 为 undefined，原流程不变；订阅不能安装保存端口。                               |
+| `runner.observation.subscribe({ receive })`                                         | 消费 `{ runnerId, entryId, source, fact }` 固定元数据；CP 事实使用 source: checkpoint，保留 activityId。只实时消费，不回放、不替换 Store 或严格观察。       |
+| `work.checkpoint({ point, state, refs })`                                           | 当前运行或恢复工作阶段使用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                              |
+| `runner.resume(contextId, options)`                                                 | 核对绑定归属、当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守该 Runner 入口占用边界。                                                   |
+| `work.children.resume(saved.ref)`                                                   | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                   |
+| `TranscriptResource.append.applyFixed({position,messages})`                         | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                          |
+| `memoryResources().apply` 端点的 `applyFixed({position,changes})`                   | 由已登记资源端点取得准确调用身份；整个批次与凭据由实体同次提交，重复确认不修改记忆或占用新顺序。                                                            |
 
 资源端点与 CP writer 保持 phase/round 访问窗口。直接子接纳通过私有异步范围关联固定操作，支持并行接纳；逸出已结束接纳的回调不能借用后续接纳身份。没有增加新的恢复编排器或通用 resume/run/accept 预设，声明共享自己的正常阶段函数，Invocation 仍处理父子运行机制。
 

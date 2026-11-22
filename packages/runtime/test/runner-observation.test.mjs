@@ -88,7 +88,7 @@ for (const stage of ['validate', 'capture']) {
         return 'value';
       })
       .register(value, (origin) => origin);
-    const runner = new Runner(scene, resources, undefined, {
+    const runner = new Runner(scene, resources, {
       validate() {
         if (stage === 'validate') throw fault;
       },
@@ -174,7 +174,7 @@ test('cancellation from attached feedback prevents formal started hooks and busi
   let runs = 0;
   let cancelOnce = true;
   const scene = new Scene({ output, run: () => ++runs });
-  const runner = new Runner(scene, new Resources(), undefined, {
+  const runner = new Runner(scene, new Resources(), {
     hooks: [callableHooks(scene, { started: () => () => void started++ })],
   }).build();
   runner.observation.subscribe({
@@ -244,7 +244,7 @@ test('requested subscribers cannot replace already fixed top-level invocation op
   const scene = new Scene({ deps: { value: value.request() }, run: (work) => work.resources.value.read() });
   const resources = new Resources();
   resources.capture(scene, (_input, fixed) => fixed.label).register(value, (label) => label);
-  const runner = new Runner(scene, resources, undefined, {
+  const runner = new Runner(scene, resources, {
     validate(fixed) {
       assert.equal(fixed.signal, original.signal);
       assert.equal(fixed.label, 'original');
@@ -337,7 +337,7 @@ test('one faulty observation subscriber cannot disable another subscriber or fut
 test('completed root output does not turn strict release failure into a successful entry', async () => {
   const events = [];
   const outputs = [];
-  const runner = new Runner(new Scene({ output, run: () => 'answer' }), new Resources(), undefined, {
+  const runner = new Runner(new Scene({ output, run: () => 'answer' }), new Resources(), {
     observations: [
       {
         failure: 'propagate',
@@ -372,7 +372,7 @@ for (const stage of ['saved', 'finishing', 'finished']) {
         return 'answer';
       },
     });
-    const runner = new Runner(scene, new Resources(), undefined, {
+    const runner = new Runner(scene, new Resources(), {
       checkpoints: {
         store,
         observation: {
@@ -437,7 +437,7 @@ test('separate recovery activities keep one context identity but distinct entry 
     },
     0,
   );
-  const runner = new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build();
+  const runner = new Runner(scene, new Resources(), { checkpoints: { store } }).build();
   const events = [];
   const outputs = [];
   runner.observation.subscribe(collect(events));

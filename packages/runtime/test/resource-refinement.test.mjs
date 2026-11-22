@@ -1,13 +1,12 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, bindChildResources, bindRecording } from '@weiliang0121/capix-runtime';
-import { Recorder, RecordBook } from '@weiliang0121/capix-records';
+import { Group, Node, bindChildResources } from '@weiliang0121/capix-runtime';
 import { ResourceAccessClosed, ResourceOffer } from '@weiliang0121/capix-resources';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 import { bindResources } from './fixtures/resources.mjs';
 
-function fixture({ recorded = false, built = true, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
+function fixture({ observed = false, built = true, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
   const counters = { capture: 0, refine: 0, describe: 0, dormant: 0 };
   const endpoints = [];
   const offer = new ResourceOffer({
@@ -66,7 +65,19 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     },
   }).add(operation);
   const definition = runtimeDefinition(execution);
-  const recorder = new Recorder(new RecordBook());
+  const resources = [];
+  const scopes = [];
+  const observation = {
+    bindInvocation(setup) {
+      scopes.push(setup.identity);
+      return {
+        observe() {},
+        resource(fact) {
+          resources.push({ ...fact, value: fact.describe() });
+        },
+      };
+    },
+  };
   const options = {
     providers: [
       offer.provide((source) => source),
@@ -77,9 +88,9 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     ],
     source: { entry: () => null, capture: () => ({ allowed: ['a', 'b', 'c'] }) },
     childResources: [bindChildResources(operation, [offer.refine(mapOperation)]), bindChildResources(attempt, [offer.refine(mapAttempt)])],
-    observations: recorded ? [bindRecording(recorder)] : undefined,
+    observations: observed ? [observation] : undefined,
   };
-  return { runtime: built ? installCallable(definition, options) : undefined, definition, options, offer, operation, attempt, counters, endpoints, recorder };
+  return { runtime: built ? installCallable(definition, options) : undefined, definition, options, offer, operation, attempt, counters, endpoints, resources, scopes };
 }
 
 test('child input refines O and A supplies without recapturing or mutating ancestors and siblings', async () => {
@@ -117,18 +128,18 @@ test('refinement is fixed during call creation, before input can change or work 
 });
 
 test('resource rejects widening before creating the child and the runtime releases occupancy', async () => {
-  const { runtime, counters, recorder } = fixture({ recorded: true });
+  const { runtime, counters, scopes } = fixture({ observed: true });
   await assert.rejects(runtime.run([{ allowed: ['a'], leaf: ['b'] }], {}), /Cannot widen access/);
   assert.equal(runtime.running, false);
   assert.equal(counters.refine, 2);
-  assert.equal([...recorder.book.values()].filter((record) => record.kind === 'attempt').length, 0);
+  assert.equal(scopes.filter((scope) => scope.kind === 'node').length, 0);
   assert.deepEqual((await runtime.run([{ allowed: ['b'], leaf: ['b'] }], {})).results[0].output, ['b']);
 });
 
 test('refined resources retain call-local bound and available observations with independent supply identities', async () => {
-  const { runtime, recorder, counters } = fixture({ recorded: true });
+  const { runtime, resources, counters } = fixture({ observed: true });
   await runtime.run([{ allowed: ['a', 'b'], leaf: ['a'] }], {});
-  const records = [...recorder.book.values()].filter((record) => record.kind === 'resource' && record.access === 'test.bounded');
+  const records = resources.filter((record) => record.access === 'test.bounded');
   const available = records.filter((record) => record.phase === 'available');
   assert.equal(available.length, 3);
   assert.deepEqual(
@@ -136,8 +147,8 @@ test('refined resources retain call-local bound and available observations with 
     [['a', 'b', 'c'], ['a', 'b'], ['a']],
   );
   assert.equal(new Set(available.map((record) => record.supplyId)).size, 3);
-  assert.equal(new Set(available.map((record) => record.parentId)).size, 3);
-  for (const record of available) assert.ok(records.some((candidate) => candidate.phase === 'bound' && candidate.supplyId === record.supplyId && candidate.parentId === record.parentId));
+  assert.equal(new Set(available.map((record) => record.contextId)).size, 3);
+  for (const record of available) assert.ok(records.some((candidate) => candidate.phase === 'bound' && candidate.supplyId === record.supplyId && candidate.contextId === record.contextId));
   assert.equal(counters.describe, 3);
 });
 

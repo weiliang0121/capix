@@ -284,3 +284,25 @@ for (const protocol of ['chat', 'messages'])
       model.interactions.close();
     }
   });
+
+test('synchronous request inspection rejects a then accessor before sending and leaves it unread', async () => {
+  let reads = 0;
+  const measured = {
+    requestBytes: 1,
+    wireBytes: 1,
+    get then() {
+      reads++;
+      return () => {};
+    },
+  };
+  const model = host(() => final);
+  const fixture = assembly({ policyVersion: 'sync-inspection', tools: { lookup: member('lookup', () => assert.fail('unexpected tool execution')) } }, model, { inspection: { inspectRequest: () => measured } });
+  try {
+    await assert.rejects(fixture.runner.run(input), /inspection must be synchronous/);
+    assert.equal(reads, 0);
+    assert.equal(model.sent.length, 0);
+  } finally {
+    await model.interactions.settled();
+    model.interactions.close();
+  }
+});

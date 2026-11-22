@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { build } from './build.mjs';
-import { banner, command, files, isDistributionFile, json, registry, releaseDirectory, root } from './packages.mjs';
+import { banner, checkPlatformImports, command, files, isDistributionFile, json, registry, releaseDirectory, root } from './packages.mjs';
 
 export async function check() {
   const entries = await build();
@@ -82,7 +82,16 @@ export async function check() {
     await writeFile(join(consumer, 'exports.mjs'), `for (const name of ${JSON.stringify(imports)}) await import(name);\nconsole.log('Loaded ${imports.length} public exports from installed tarballs');\n`);
     command(process.execPath, ['exports.mjs'], { cwd: consumer });
     command(process.execPath, ['consumer.mjs'], { cwd: consumer });
+    await checkPlatformImports(consumer);
     command(process.execPath, ['node_modules/typescript/bin/tsc', '--ignoreConfig', '--noEmit', '--strict', '--target', 'ES2023', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--lib', 'ES2023,DOM,DOM.Iterable', '--skipLibCheck', 'false', 'consumer.ts'], { cwd: consumer });
+    // Resolve transitive framework dependencies to this batch, only when npm actually needs them.
+    const kernel = join(temporary, 'kernel-consumer');
+    await mkdir(kernel);
+    const runtime = '@weiliang0121/capix-runtime';
+    await writeFile(join(kernel, 'package.json'), JSON.stringify({ name: 'kernel-consumer', private: true, type: 'module', dependencies: { [runtime]: dependencies[runtime] }, overrides: dependencies }));
+    command('npm', ['install', '--offline', '--ignore-scripts', '--package-lock=false', '--no-audit', '--no-fund', `--registry=${registry}`], { cwd: kernel });
+    await cp(join(root, 'scripts/release/fixtures/kernel.mjs'), join(kernel, 'kernel.mjs'));
+    command(process.execPath, ['kernel.mjs'], { cwd: kernel });
     await writeFile(join(releaseDirectory, 'verified.json'), JSON.stringify({ packages: archives }, null, 2) + '\n');
     console.log(`Verified ${archives.length} tarballs in an isolated consumer; artifacts: ${relative(root, releaseDirectory)}`);
     return archives;

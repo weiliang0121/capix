@@ -1,5 +1,4 @@
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
-import type { Interactions } from '@weiliang0121/capix-interaction';
 import { resourceRequests, checkResourceProviders, ResourceSupply } from '@weiliang0121/capix-resources';
 import type { ResourceProvider, ResourceIdentity, ResourceRequirements } from '@weiliang0121/capix-resources';
 import type { ResourcePlan, ResourceCaptureScope } from './resources.js';
@@ -15,15 +14,15 @@ interface InstalledScope<Options> {
 export class ResourceInstallation<Options> {
   private readonly scopes = new Map<AnyCallable, InstalledScope<Options>>();
 
-  constructor(root: ResolvedCallable, plan: ResourcePlan<Options>, interactions?: Interactions) {
+  constructor(root: ResolvedCallable, plan: ResourcePlan<Options>) {
     const captureScopes = new Map(plan.scopes.map((scope) => [scope.structure, scope]));
     const visit = (resolved: ResolvedCallable, inherited: readonly ResourceProvider<unknown>[]): void => {
       const scope = captureScopes.get(resolved.definition);
       const requested = resourceRequests(resolved.supply);
       const needed = new Set(requested.map((request) => request.offer));
-      const local = (scope?.registrations ?? []).filter((entry) => needed.has(entry.offer)).map((entry) => entry.bind(interactions));
+      const local = (scope?.registrations ?? []).filter((entry) => needed.has(entry.offer)).map((entry) => entry.bind());
       const localOffers = new Set<ResourceIdentity>(local.map((entry) => entry.offer));
-      const fixed = resolved === root ? plan.registrations.filter((entry) => needed.has(entry.offer) && !localOffers.has(entry.offer)).map((entry) => entry.bind(interactions)) : [];
+      const fixed = resolved === root ? plan.registrations.filter((entry) => needed.has(entry.offer) && !localOffers.has(entry.offer)).map((entry) => entry.bind()) : [];
       const available = [...(resolved === root ? fixed : inherited).filter((entry) => !localOffers.has(entry.offer)), ...local];
       checkResourceProviders(requested, available);
       this.scopes.set(resolved.definition, Object.freeze({ supply: resolved.supply, fixed, local, capture: local.length ? scope?.capture : undefined }));

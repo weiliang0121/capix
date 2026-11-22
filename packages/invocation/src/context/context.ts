@@ -1,5 +1,5 @@
 import type { InvocationFailure } from '../invocation/failure.js';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import type { InvocationResult } from '../invocation/result.js';
 import type { CheckpointContinuationFact } from '../checkpoint/continuation.js';
 import { stableValue, type Stable, type RuntimeErrorValue } from '@weiliang0121/capix-contracts';

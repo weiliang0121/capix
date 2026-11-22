@@ -1,4 +1,4 @@
-import { types } from 'node:util';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { SourceIdentity, SourceStamp, ViewKey } from './source.js';
 
@@ -12,7 +12,7 @@ export function data<Value>(value: Value): Value {
   const copy = (input: unknown): unknown => {
     if (input === null || input === undefined || typeof input === 'string' || typeof input === 'boolean') return input;
     if (typeof input === 'number' && Number.isFinite(input)) return input;
-    if (typeof input !== 'object' || types.isProxy(input)) throw new TypeError('View content must be passive data');
+    if (typeof input !== 'object' || isOpaqueObject(input)) throw new TypeError('View content must be passive data');
     if (visiting.has(input)) throw new TypeError('View content cannot contain cycles');
     const array = Array.isArray(input);
     const prototype: unknown = Object.getPrototypeOf(input);
@@ -70,7 +70,7 @@ export function synchronous<Value>(value: Value, label: string): Exclude<Value, 
   if (value && (typeof value === 'object' || typeof value === 'function')) {
     let current: object | null = value;
     while (current !== null) {
-      if (types.isProxy(current)) throw new TypeError(`${label} cannot use a proxy`);
+      if (isOpaqueObject(current)) throw new TypeError(`${label} cannot use a proxy`);
       const descriptor = Object.getOwnPropertyDescriptor(current, 'then');
       if (descriptor) {
         if (!('value' in descriptor)) throw new TypeError(`${label} cannot use a then accessor`);

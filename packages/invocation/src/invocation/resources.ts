@@ -19,7 +19,7 @@ export function attachInvocationResources<Input, Output, Context extends Invocat
     failures: invocationResourceFailures,
     signal: invocation.context.signal,
     round: () => invocation.context.progress.round,
-    reception: () => invocation.children.reception,
+    reception: (permit) => invocation.children.resolveReception(permit),
     nextSequence: () => invocation.nextResourceSequence(),
     validate: () => invocation.requireActive(),
     observation: invocation.observation?.resource,

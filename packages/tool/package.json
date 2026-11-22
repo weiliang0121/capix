@@ -15,14 +15,15 @@
     "test": "node ../../scripts/test/run.mjs --package ."
   },
   "dependencies": {
-    "@weiliang0121/capix-contracts": "workspace:*",
     "@weiliang0121/capix-checkpoint": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
     "@weiliang0121/capix-diagnostics": "workspace:*",
-    "@weiliang0121/capix-structure": "workspace:*",
-    "@weiliang0121/capix-resources": "workspace:*",
     "@weiliang0121/capix-interaction": "workspace:*",
-    "@weiliang0121/capix-model-provider": "workspace:*",
     "@weiliang0121/capix-model-exchanges": "workspace:*",
+    "@weiliang0121/capix-model-provider": "workspace:*",
+    "@weiliang0121/capix-platform": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-structure": "workspace:*",
     "zod": "4.6.5"
   },
   "description": "A native model tool-calling Group preset for CAPiX.",

@@ -7,6 +7,6 @@ export class RuntimeError extends Error {
     options?: ErrorOptions,
   ) {
     super(message, options);
-    this.name = new.target.name;
+    this.name = new.target === RuntimeError ? 'RuntimeError' : new.target.name;
   }
 }

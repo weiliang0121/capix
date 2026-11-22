@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Interactions, InvocationCancelled, Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
+import { callableHooks, InvocationCancelled, Node, Resources, Runner, Scene } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
+import { CallableBinder, CallableBuilder, callableConstruction } from '@weiliang0121/capix-runtime/construction';
+import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 const contract = {
@@ -85,8 +88,14 @@ test('Runner connects resource to registered interaction during build without cr
       return { text: `${request.text}:reply` };
     },
   });
-  const resources = new Resources().registerInteraction(offer, contract);
-  const runner = new Runner(scene(offer), resources, interactions).build();
+  let bindings = 0;
+  const resources = new Resources().registerBinding(offer, () => {
+    bindings++;
+    return interactions.bind(contract);
+  });
+  assert.equal(bindings, 0);
+  const runner = new Runner(scene(offer), resources).build();
+  assert.equal(bindings, 1);
   assert.equal(sends, 0);
   assert.equal(endpoints.length, 0);
   assert.equal(interactions.active, false);
@@ -99,17 +108,18 @@ test('Runner connects resource to registered interaction during build without cr
   assert.notEqual(endpoints[0], endpoints[1]);
   assert.throws(() => endpoints[0].read(first.ref));
   assert.equal(sends, 2);
+  assert.equal(bindings, 1);
   await interactions.settled();
   interactions.close();
 });
 
 test('required interaction dependency fails before build installation and can be corrected without dispatch', async () => {
   const offer = resource();
-  const resources = new Resources().registerInteraction(offer, contract);
-  const root = scene(offer);
-  assert.throws(() => new Runner(root, resources).build(), /requires Interactions/);
   const interactions = new Interactions();
-  const runner = new Runner(root, resources, interactions);
+  const resources = new Resources().registerBinding(offer, () => interactions.bind(contract));
+  const root = scene(offer);
+  assert.throws(() => new Runner(root, new Resources()).build(), /Expected one resource provider/);
+  const runner = new Runner(root, resources);
   assert.throws(() => runner.build(), { code: 'INTERACTION_NOT_REGISTERED' });
   let sends = 0;
   interactions.register(contract, {
@@ -124,8 +134,132 @@ test('required interaction dependency fails before build installation and can be
   assert.equal(sends, 1);
 });
 
+test('build rejects a different contract with the same key and rejects an asynchronous supply', () => {
+  const offer = resource();
+  const root = scene(offer);
+  const interactions = new Interactions().register(contract, { send: () => assert.fail('unexpected dispatch') });
+  const resources = new Resources().registerBinding(offer, () => interactions.bind({ ...contract }));
+  assert.throws(() => new Runner(root, resources).build(), { code: 'INTERACTION_CONTRACT_IDENTITY' });
+  const asynchronous = new Resources().registerBinding(offer, async () => interactions.bind(contract));
+  assert.throws(() => new Runner(root, asynchronous).build(), /Resource binding must be synchronous/);
+});
+
+test('Runner, CallableBuilder and CallableBinder reject former argument positions before installing a supply', () => {
+  class HostWithOptions extends Interactions {
+    get active() {
+      assert.fail('legacy host detection must not read active');
+    }
+    validate() {
+      assert.fail('legacy host must not supply validation');
+    }
+  }
+  const offer = resource();
+  const root = scene(offer);
+  const resources = new Resources().registerBinding(offer, () => assert.fail('legacy arguments must fail before resolving supplies'));
+  const construct = (...args) => new Runner(...args);
+  const builder = new CallableBuilder();
+  const binder = new CallableBinder();
+  for (const create of [construct, builder.build.bind(builder), binder.bind.bind(binder)]) {
+    assert.throws(() => create(root, resources, new Interactions()), { name: 'TypeError', message: /remove the Interactions argument/ });
+    assert.throws(() => create(root, resources, new HostWithOptions()), { name: 'TypeError', message: /remove the Interactions argument/ });
+    assert.throws(() => create(root, resources, new Interactions(), {}), { name: 'TypeError', message: /pass any options directly after resources/ });
+    assert.throws(() => create(root, resources, {}, undefined), TypeError);
+    assert.throws(() => create(root, resources, undefined, { validate: () => assert.fail('lost validation') }), /resources, options/);
+    for (const invalid of [null, [], 'options', 1, false]) assert.throws(() => create(root, resources, invalid), TypeError);
+  }
+});
+
+test('removing the former host argument reuses a channel already supplied through Resources and keeps optional validation', async () => {
+  const offer = resource();
+  const interactions = new Interactions().register(contract, { send: (request) => request });
+  const resources = new Resources().register(offer, interactions.bind(contract));
+  let validations = 0;
+  const options = {
+    validate() {
+      validations++;
+    },
+  };
+  for (const args of [[], [options]]) {
+    const root = scene(offer);
+    assert.throws(() => new Runner(root, resources, interactions, ...args), TypeError);
+    const runner = new Runner(root, resources, ...args).build();
+    assert.equal((await runner.run({ text: 'existing channel' })).result.feedback.payload.text, 'existing channel');
+  }
+  assert.equal(validations, 1);
+  await interactions.settled();
+  interactions.close();
+});
+
+test('inherited validation and hook methods retain their receiver through each construction entry', async () => {
+  class Options {
+    calls = [];
+    constructor(root) {
+      this.root = root;
+    }
+    validate() {
+      this.calls.push('validate');
+    }
+    get hooks() {
+      return [
+        callableHooks(this.root, {
+          validate: () => {
+            this.calls.push('hook');
+          },
+        }),
+      ];
+    }
+  }
+  const resources = new Resources();
+  for (const entry of ['runner', 'builder', 'binder']) {
+    const root = new Scene({ run: () => null });
+    const options = new Options(root);
+    if (entry === 'runner') {
+      await new Runner(root, resources, options).build().run(null);
+    } else {
+      const calls = entry === 'builder' ? callableConstruction(new CallableBuilder().build(root, resources, options)).calls : new CallableBinder().bind(root, resources, options).calls;
+      calls.begin({}).prepare(root, null, false);
+    }
+    assert.deepEqual(options.calls, ['validate', 'hook']);
+  }
+});
+
+test('construction accepts empty instances and callable options with an ordinary bind method', async () => {
+  class EmptyOptions {}
+
+  const resources = new Resources();
+  let validations = 0;
+  const callable = Object.assign(() => assert.fail('configuration must not be called'), {
+    validate() {
+      assert.equal(this, callable);
+      validations++;
+    },
+  });
+  for (const options of [new EmptyOptions(), callable]) {
+    const scene = () => new Scene({ run: () => null });
+    assert.equal(await new Runner(scene(), resources, options).build().run(null), null);
+    const root = scene();
+    callableConstruction(new CallableBuilder().build(root, resources, options))
+      .calls.begin({})
+      .prepare(root, null, false);
+    const bound = scene();
+    new CallableBinder().bind(bound, resources, options).calls.begin({}).prepare(bound, null, false);
+  }
+  assert.equal(validations, 3);
+});
+
+test('Runner reads checkpoint configuration supplied by a prototype getter', () => {
+  const store = new MemoryCheckpointStore();
+  class Options {
+    get checkpoints() {
+      return { store };
+    }
+  }
+  const runner = new Runner(new Scene({ run: () => null }), new Resources(), new Options());
+  assert.equal(runner.checkpointStore, store);
+});
+
 test('unused interaction resource registration does not require an interaction host', async () => {
-  const resources = new Resources().registerInteraction(resource(), contract);
+  const resources = new Resources().registerBinding(resource(), () => assert.fail('unused binding'));
   const root = new Scene({ run: (work) => work.input });
   const runner = new Runner(root, resources).build();
   assert.equal(await runner.run('no interaction requested'), 'no interaction requested');
@@ -142,7 +276,10 @@ test('A1 wait expiry releases Runner while the exchange continues; A2 uses a fre
       return feedback.promise;
     },
   });
-  const runner = new Runner(scene(offer), new Resources().registerInteraction(offer, contract), interactions).build();
+  const runner = new Runner(
+    scene(offer),
+    new Resources().registerBinding(offer, () => interactions.bind(contract)),
+  ).build();
   const first = await runner.run({ text: 'input', waitMs: 0 });
   assert.equal(first.result.kind, 'wait-expired');
   assert.equal(runner.isRunning, false);
@@ -170,7 +307,10 @@ test('A1 cancellation ends only its wait, and a later invocation reads the saved
     },
   });
   const root = scene(offer, (ref, endpoint) => entered.resolve({ ref, endpoint }));
-  const runner = new Runner(root, new Resources().registerInteraction(offer, contract), interactions).build();
+  const runner = new Runner(
+    root,
+    new Resources().registerBinding(offer, () => interactions.bind(contract)),
+  ).build();
   const control = new AbortController();
   const first = runner.run({ text: 'input' }, { signal: control.signal });
   const rejected = assert.rejects(first, { code: 'INVOCATION_CANCELLED' });
@@ -203,13 +343,13 @@ test('new Runner and interaction host read persisted feedback through a new reso
     },
   };
   const offer = resource();
-  const resources = new Resources().registerInteraction(offer, contract);
+  const supplies = (host) => new Resources().registerBinding(offer, () => host.bind(contract));
   const original = new Interactions().register(contract, { send: (request) => request, persistence });
-  const first = await new Runner(scene(offer), resources, original).build().run({ text: 'retained' });
+  const first = await new Runner(scene(offer), supplies(original)).build().run({ text: 'retained' });
   await original.settled();
   original.close();
   const restored = new Interactions().register(contract, { send: () => assert.fail('read resent request'), persistence });
-  const second = await new Runner(scene(offer), resources, restored).build().run({ ref: first.ref, read: true });
+  const second = await new Runner(scene(offer), supplies(restored)).build().run({ ref: first.ref, read: true });
   assert.equal(second.result.feedback.payload.text, 'retained');
   assert.equal(stored.size, 1);
 });

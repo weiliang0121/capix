@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import type { CheckpointCommit, CheckpointValueBlock, CheckpointValueReference, CheckpointChildRecord, CheckpointChild, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointDelivery, CheckpointReferences, CheckpointPublication, CheckpointSelectionChange, CheckpointSelectionSnapshot } from './contract.js';
@@ -50,7 +51,7 @@ export interface CheckpointCommitPlan {
   readonly selections: readonly CheckpointSelectionPlan[];
 }
 
-const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
+const hash = (value: string): string => createSha256().update(value).digestHex();
 const blockEvidence = new WeakMap<object, { readonly body: string; readonly metrics: CheckpointValueMetrics }>();
 
 export function createCheckpointValueBlock(id: string, value: unknown): CheckpointValueBlock {
@@ -89,7 +90,7 @@ export function cloneCheckpointCommit(value: CheckpointCommit): CheckpointCommit
   for (const reference of headReferences(fixed)) checkReference(reference);
   if (isCheckpointSelectionSlots(fixed.references)) checkpointSelectionReferences(fixed.references);
   const selectionChanges = properties.selectionChanges ? Object.freeze(dataArray(properties.selectionChanges.value).map(cloneSelectionChange)) : undefined;
-  if (selectionChanges && (selectionChanges.reduce((total, change) => total + (change.append?.length ?? 0) + (change.remove?.length ?? 0) + 1, 0) > 100000 || Buffer.byteLength(encodeCheckpointData(selectionChanges)) > CHECKPOINT_MAX_BYTES)) throw new Error('Checkpoint selection delta exceeds its limits');
+  if (selectionChanges && (selectionChanges.reduce((total, change) => total + (change.append?.length ?? 0) + (change.remove?.length ?? 0) + 1, 0) > 100000 || utf8ByteLength(encodeCheckpointData(selectionChanges)) > CHECKPOINT_MAX_BYTES)) throw new Error('Checkpoint selection delta exceeds its limits');
   const skeleton = logicalImage(fixed, [], () => null);
   cloneCheckpointImage({ ...skeleton, references: {} });
   return Object.freeze({ ...fixed, values: Object.freeze(values), children, ...(selectionChanges ? { selectionChanges } : {}) });

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock, type InvocationControls } from '@weiliang0121/capix-invocation';
 import { bindDriverObservation } from '../binding/observation.js';

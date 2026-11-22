@@ -25,7 +25,7 @@ test('Runner child output uses the exact registered port, preserves final identi
       return call.accept();
     },
   }).add(child);
-  const runner = new Runner(scene, new Resources(), undefined, {
+  const runner = new Runner(scene, new Resources(), {
     hooks: [
       callableHooks(child, {
         output: () => ({
@@ -76,7 +76,7 @@ test('a failing Runner output consumer is isolated from the real result', async 
       return result;
     },
   });
-  const runner = new Runner(scene, new Resources(), undefined, {
+  const runner = new Runner(scene, new Resources(), {
     hooks: [
       callableHooks(scene, {
         output: () => ({

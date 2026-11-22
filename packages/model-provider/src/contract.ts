@@ -1,3 +1,4 @@
+import { decodeBase64 } from '@weiliang0121/capix-platform/bytes';
 import { nativeReplyProtocol } from './native-reply.js';
 import type { ChatCompletionsReply, AnthropicMessagesReply, GeminiGenerateContentReply, OpenAIResponsesReply, ModelUsage, ModelOutput, ModelExchange, ModelReply, ModelRequest, ModelToolCall, ToolFeedback, ToolResult } from './types.js';
 import { count, identity, maximumModelExchangeBytes, maximumModelRequestBytes, record, requireJson, shape, toolLimit } from './value.js';
@@ -86,11 +87,17 @@ function checkInputContent(value: unknown): void {
   }
   shape(value, ['kind', 'mimeType', 'data']);
   if (value.kind !== 'image' || !['image/png', 'image/jpeg', 'image/webp'].includes(value.mimeType as string) || typeof value.data !== 'string' || !value.data.length || value.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(value.data)) throw new TypeError('Invalid model image encoding');
-  const bytes = Buffer.from(value.data, 'base64');
-  if (bytes.toString('base64') !== value.data) throw new TypeError('Invalid model image encoding');
-  const png = bytes.length >= 45 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) && bytes.readUInt32BE(8) === 13 && bytes.toString('latin1', 12, 16) === 'IHDR' && bytes.readUInt32BE(16) > 0 && bytes.readUInt32BE(20) > 0 && bytes.subarray(-12).equals(Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]));
+  let bytes: Uint8Array;
+  try {
+    bytes = decodeBase64(value.data);
+  } catch {
+    throw new TypeError('Invalid model image encoding');
+  }
+  const fields = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const fourCC = (offset: number) => String.fromCharCode(...bytes.subarray(offset, offset + 4));
+  const png = bytes.length >= 45 && fields.getUint32(0) === 0x89504e47 && fields.getUint32(4) === 0x0d0a1a0a && fields.getUint32(8) === 13 && fourCC(12) === 'IHDR' && fields.getUint32(16) > 0 && fields.getUint32(20) > 0 && fields.getUint32(bytes.length - 12) === 0 && fourCC(bytes.length - 8) === 'IEND' && fields.getUint32(bytes.length - 4) === 0xae426082;
   const jpeg = bytes.length >= 6 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 && bytes[bytes.length - 2] === 255 && bytes[bytes.length - 1] === 217;
-  const webp = bytes.length >= 20 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.readUInt32LE(4) === bytes.length - 8 && bytes.toString('latin1', 8, 12) === 'WEBP' && ['VP8 ', 'VP8L', 'VP8X'].includes(bytes.toString('latin1', 12, 16)) && bytes.readUInt32LE(16) > 0 && bytes.readUInt32LE(16) <= bytes.length - 20;
+  const webp = bytes.length >= 20 && fourCC(0) === 'RIFF' && fields.getUint32(4, true) === bytes.length - 8 && fourCC(8) === 'WEBP' && ['VP8 ', 'VP8L', 'VP8X'].includes(fourCC(12)) && fields.getUint32(16, true) > 0 && fields.getUint32(16, true) <= bytes.length - 20;
   if (!(value.mimeType === 'image/png' ? png : value.mimeType === 'image/jpeg' ? jpeg : webp)) throw new TypeError('Model image does not match its declared format');
 }
 function toolName(value: unknown): asserts value is string {

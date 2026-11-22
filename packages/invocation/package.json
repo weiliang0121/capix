@@ -3,6 +3,12 @@
   "version": "0.7.1",
   "private": false,
   "type": "module",
+  "imports": {
+    "#reception-scope": {
+      "node": "./dist/invocation/reception-scope.node.js",
+      "default": "./dist/invocation/reception-scope.js"
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -19,12 +25,13 @@
     "test": "node ../../scripts/test/run.mjs --package ."
   },
   "dependencies": {
-    "@weiliang0121/capix-contracts": "workspace:*",
-    "@weiliang0121/capix-resources": "workspace:*",
     "@weiliang0121/capix-changes": "workspace:*",
     "@weiliang0121/capix-checkpoint": "workspace:*",
-    "es-toolkit": "1.52.0",
-    "@weiliang0121/capix-diagnostics": "workspace:*"
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-diagnostics": "workspace:*",
+    "@weiliang0121/capix-platform": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "es-toolkit": "1.52.0"
   },
   "description": "Invocation lifecycle, child relations, reception, output, and checkpoint activity for CAPiX.",
   "license": "MIT",

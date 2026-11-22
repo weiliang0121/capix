@@ -1,4 +1,4 @@
-import { types } from 'node:util';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 
 const configuration = Symbol('callable-configuration');
 
@@ -15,7 +15,7 @@ export function initializeStructureConfiguration(structure: object): void {
 }
 
 function state(structure: object): StructureConfiguration {
-  if (types.isProxy(structure)) throw new TypeError('Callable structures cannot be proxies');
+  if (isOpaqueObject(structure)) throw new TypeError('Callable structures cannot be proxies');
   if (!Object.hasOwn(structure, configuration)) throw new TypeError('Callable configuration is not initialized');
   return (structure as ConfigurableStructure)[configuration];
 }

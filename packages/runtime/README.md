@@ -10,15 +10,30 @@
 npm install @weiliang0121/capix-runtime
 ```
 
-- `@weiliang0121/capix-runtime` 提供 `Runner`、场景装配用的 `Resources`、结构声明、交互和运行观测入口。
+- `@weiliang0121/capix-runtime` 提供 `Runner`、场景装配用的 `Resources`、结构声明和运行观测入口。
 - `@weiliang0121/capix-runtime/construction` 提供定制宿主使用的底层结构构建、调用与子关系接线。
-- `@weiliang0121/capix-runtime/recording` 提供可选记录预设和观测安装。记录实体及数据契约由 `@weiliang0121/capix-records` 提供。
+
+调用记录预设现由独立包 `@weiliang0121/capix-recording` 提供。原先从 Runtime 导入的 `bindRecording` 等符号改从该包根入口导入。
 
 ## 用法
 
 从 Runtime 根入口导入 `Runner` 和 `Resources`，用 `new Runner(scene, resources).build()` 固定场景配置、成员与资源接线，再用 `await runner.run(input)` 发起一次独立调用并等待最终结果。字典示例把 `'hello'` 翻译为 `'你好'`，未登记的词原样返回。[字典资源工厂](https://github.com/weiliang0121/capix/blob/main/examples/dictionary.mjs) · [Runner 示例](https://github.com/weiliang0121/capix/blob/main/examples/runner.mjs)
 
-`build()` 返回同一个 Runner。按次资源捕获和 Invocation 建立在 `run()` 中发生。运行期间可通过 `runner.isRunning` 查询占用状态；运行结果在调用退出和收尾完成后交付。运行观测使用 `@weiliang0121/capix-invocation/events` 的进度词汇；可选内容记录通过 `@weiliang0121/capix-records/data` 的公开契约和 records 的领域适配接入。
+`build()` 返回同一个 Runner。按次资源捕获和 Invocation 建立在 `run()` 中发生。运行期间可通过 `runner.isRunning` 查询占用状态；运行结果在调用退出和收尾完成后交付。运行观测使用 `@weiliang0121/capix-invocation/events` 的进度词汇；可选记录预设通过 Runner 的 `observations` 安装。
+
+### 迁移旧版交互装配
+
+宿主从 `@weiliang0121/capix-interaction` 导入 `Interactions`，继续负责登记交互实现和管理渠道。若资源已通过 `resources.register(offer, channel)` 或其他已登记的资源提供渠道，保留原登记，只改 Runner 调用。
+
+| 旧调用                                                | 当前调用                                |
+| ----------------------------------------------------- | --------------------------------------- |
+| `new Runner(scene, resources, interactions)`          | `new Runner(scene, resources)`          |
+| `new Runner(scene, resources, interactions, options)` | `new Runner(scene, resources, options)` |
+| `new Runner(scene, resources, undefined, options)`    | `new Runner(scene, resources, options)` |
+
+若原来使用 `resources.registerInteraction(offer, contract)` 依赖 Runner 传入宿主，将这项登记改为 `resources.registerBinding(offer, () => interactions.bind(contract))`。构建时仅对场景实际申请的供给调用同步工厂。
+
+底层 `CallableBuilder.build(structure, resources, options?)` 和 `CallableBinder.bind(structure, resources, options?)` 同样将配置放在第三位。三者均支持通过配置对象的原型提供 `validate` 和 `hooks`。如果现有对象兼有完整的交互宿主接口和构建配置，请将配置提取为独立对象再传入。
 
 ## 契约与版本记录
 

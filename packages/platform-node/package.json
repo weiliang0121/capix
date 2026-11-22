@@ -1,0 +1,45 @@
+{
+  "name": "@weiliang0121/capix-platform-node",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./equal": {
+      "types": "./dist/equal.d.ts",
+      "import": "./dist/equal.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node ../../scripts/test/run.mjs --package ."
+  },
+  "description": "Node.js host primitives for CAPiX.",
+  "license": "MIT",
+  "author": "wei.liang (https://github.com/weiliang0121)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weiliang0121/capix.git",
+    "directory": "packages/platform-node"
+  },
+  "engines": {
+    "node": ">=22.23.2"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
+}

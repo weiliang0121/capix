@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
-import { isDeepStrictEqual } from 'node:util';
-import { isProxy } from 'node:util/types';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
+import { equalData } from '@weiliang0121/capix-platform/equal';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { publishFact, type ChangeCapture, type EventConsumer } from '@weiliang0121/capix-changes';
@@ -60,7 +60,7 @@ export class ModelExchanges {
       const digest = exchangeOriginDigest(basis);
       const previous = this.#origins.get(id);
       if (previous) {
-        if (previous.digest !== digest || !isDeepStrictEqual(previous.request, basis.request) || !isDeepStrictEqual(previous.catalog, basis.catalog)) throw conflict('Origin differs from its fixed basis');
+        if (previous.digest !== digest || !equalData(previous.request, basis.request) || !equalData(previous.catalog, basis.catalog)) throw conflict('Origin differs from its fixed basis');
         return this.originReference(previous);
       }
       if (this.#entries.has(id)) throw conflict('Origin identity already belongs to an exchange');
@@ -99,7 +99,7 @@ export class ModelExchanges {
       const previous = this.#operations.get(key);
       if (previous) {
         const entry = this.#entries.get(previous.id)!;
-        if (previous.callId !== undefined || entry.origin !== origin.id || !isDeepStrictEqual(entry.reply, reply)) throw conflict('Intake differs from its fixed operation');
+        if (previous.callId !== undefined || entry.origin !== origin.id || !equalData(entry.reply, reply)) throw conflict('Intake differs from its fixed operation');
         return this.reference(entry);
       }
       const sequence = this.nextSequence();
@@ -121,7 +121,7 @@ export class ModelExchanges {
       const existing = previous.feedback.find((item) => item.toolCallId === toolCallId);
       if (existing) {
         const original = previous.receptions.find((item) => item.callId === toolCallId)?.operation;
-        if (!isDeepStrictEqual(existing, feedback) || !isDeepStrictEqual(original, operation)) throw conflict('Feedback differs from its fixed slot');
+        if (!equalData(existing, feedback) || !equalData(original, operation)) throw conflict('Feedback differs from its fixed slot');
         return this.reference(previous);
       }
       // Confirmation precedes the current-revision requirement; it never permits a new stale write.
@@ -146,7 +146,7 @@ export class ModelExchanges {
   /** Ordered first K exchanges with complete feedback slots; not permission to continue. */
   closed(originReference: ExchangeOriginReference, references: readonly ExchangeReference[]): readonly ModelExchangeEntry[] {
     const origin = this.origin(originReference);
-    if (!Array.isArray(references) || isProxy(references) || references.length > this.#entryLimit) throw new TypeError('Invalid exchange reference list');
+    if (!Array.isArray(references) || isOpaqueObject(references) || references.length > this.#entryLimit) throw new TypeError('Invalid exchange reference list');
     const accepted = capture(references);
     if (!Array.isArray(accepted)) throw new TypeError('Invalid exchange reference list');
     const ordered = this.#originEntries.get(origin.id)!;

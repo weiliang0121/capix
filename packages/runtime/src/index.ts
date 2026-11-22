@@ -14,9 +14,6 @@ export * from './binding/resources.js';
 export { Resources, CapturedResources } from './resource/resources.js';
 export * from './initializer.js';
 
-// Independent external interactions; waiting invocations do not own delivery or retained feedback.
-export * from '@weiliang0121/capix-interaction';
-
 // Business-facing context and invocation views, results and shared time.
 export { invocationContextView, invocationView, childInvocationView, Clock, InvocationCancelled, isInvocationCancelled } from '@weiliang0121/capix-invocation';
 export type { InvocationContextView, CallableContextView, ContextViewOf, ContextViewResources, ContextFactsOf, InvocationRelationView, InvocationView, ChildInvocationView, InvocationViewSource, InvocationProgress, InvocationResult, InvocationFailure, InvocationPhase } from '@weiliang0121/capix-invocation';
@@ -28,9 +25,8 @@ export type { InvocationRelationIdentity, InvocationDescription, InvocationRelat
 export type { EventConsumer } from '@weiliang0121/capix-changes';
 export type { DriverFact, DriverObserver } from './observation/driver.js';
 
-// Explicit public subpaths also remain available from the grouped root surface.
+// Low-level construction is also available from the grouped root surface.
 export * from './construction.js';
-export * from './recording.js';
 
 // Shared diagnostics and runtime error conversion.
 export { RuntimeError } from '@weiliang0121/capix-contracts';

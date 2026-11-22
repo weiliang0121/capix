@@ -97,7 +97,7 @@ const store = {
   },
   finish: (...args) => memory.finish(...args),
 };
-const runner = new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build();
+const runner = new Runner(scene, new Resources(), { checkpoints: { store } }).build();
 const result = mode === 'seed' ? await runner.run(null) : await runner.resume(contextId);
 const head = memory.read(contextId);
 process.stdout.write(

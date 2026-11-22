@@ -195,7 +195,11 @@ test('invalid values and async codecs invalidate preview without leaking rejecte
     () => {
       throw new Error('invalid');
     },
-    () => Promise.reject(new Error('async codec')),
+    () => {
+      const result = Promise.reject(new Error('async codec'));
+      Object.defineProperty(result, 'catch', { get: () => assert.fail('read an overridden catch') });
+      return result;
+    },
     () => ({ method() {} }),
   ]) {
     const progress = new InteractionProgress('a', decode);

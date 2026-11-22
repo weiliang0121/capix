@@ -69,7 +69,7 @@ const contract = { key: 'app.model.v1', request: requireModelRequest, reply: req
 const interactions = new Interactions().register(contract, { send: (request) => provider.complete(request) });
 const exchanges = new ModelExchanges();
 const resources = new Resources().register(new Resource(exchanges), ModelExchangeResource).register(new Resource({ exchanges, channel: interactions.bind(contract), inspection: provider }), ToolModelResource);
-const runner = new Runner(scene, resources, interactions).build();
+const runner = new Runner(scene, resources).build();
 const text = await runner.run({ request: { messages: [{ role: 'user', content: 'Translate hello.' }] } });
 ```
 

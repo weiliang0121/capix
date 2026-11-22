@@ -1,3 +1,4 @@
+import type { ChildReceptionPermit } from '@weiliang0121/capix-contracts';
 import { TranscriptFacts } from './event.js';
 import { Transcript } from './transcript.js';
 import type { Message, TranscriptRangeLocator } from './types.js';
@@ -65,12 +66,12 @@ export const TranscriptResource = Object.freeze({
       const transcript = source instanceof Transcript ? source : source.transcript;
       const progress = source instanceof Transcript || !source.progress ? undefined : new ProgressChannel(source.progress);
       return Object.freeze({
-        applyFixed(input: { readonly position: string; readonly messages: readonly Message[] }) {
+        applyFixed(input: { readonly position: string; readonly messages: readonly Message[] }, permit?: ChildReceptionPermit) {
           return activity.runSync('applyFixed', { input: () => ({ position: input.position, count: input.messages.length }), output: (receipt) => receipt }, (operation) =>
             transcript.applyFixed(
               {
                 contract: { key: 'transcript.append', version: 1 },
-                operation: { ...activity.reception(), position: input.position },
+                operation: { ...activity.reception(permit), position: input.position },
                 transcriptId: transcript.id,
                 messages: input.messages,
               },

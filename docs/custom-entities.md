@@ -47,7 +47,7 @@ const source = createViewSource({
 
 这是实际公开 API。key、summary 和 value 分别推导，进入 View 后仍可按 `entry.source` 区分准确类型；输出深只读。`ViewSourceData<T>` 表达被动只读内容，不是额外的稳定值认证或持久 codec。
 
-适配器固定身份和方法入口，对 key、重复项和被动数据进行检查；读取前后核对版本，把结果隔离为冻结内容。回调必须同步，Promise／thenable、访问器、Proxy 和活对象正文会被拒绝。合法的 `undefined` 正文或摘要保留，不能用它表示缺项。
+适配器固定身份和方法入口，对 key、重复项和被动数据进行检查；读取前后核对版本，把结果隔离为冻结内容。回调必须同步，Promise／thenable、访问器和活对象正文会被拒绝。合法的 `undefined` 正文或摘要保留，不能用它表示缺项。原生检查拒绝 Proxy，采用作者保证模式时由宿主提供无代理的对象。[宿主对象检查](runtime-boundaries.md#宿主对象检查)
 
 作者仍负责三件事：
 
@@ -100,7 +100,7 @@ return state;
 ## 验证与能力边界
 
 - View 包测试覆盖同步约束、类型负例、版本变化与重入、缺项、undefined、被动内容和局部读取。
-- [Runtime 组合回归](../packages/runtime/test/entity-chain.test.mjs) 覆盖普通可变业务状态、追加材料和 Memory；CP／记录四种开关组合都通过相同资源和真实调用路径。验证旧值不变、过期依据拒绝、准确操作关联、窗口关闭和显式恢复不重复效果。
+- [Runtime 组合回归](../packages/recording/test/entity-chain.test.mjs) 覆盖普通可变业务状态、追加材料和 Memory；CP／记录四种开关组合都通过相同资源和真实调用路径。验证旧值不变、过期依据拒绝、准确操作关联、窗口关闭和显式恢复不重复效果。
 - [仓库外消费](../scripts/release/fixtures/consumer.mjs)与[类型消费](../scripts/release/fixtures/consumer.ts)直接安装公开包验证上述接缝，不导入仓库测试夹具或外部项目源码。
 
 现有可复用能力包括 `stableValue` 的被动数据固定、`createViewSource` 的同步读取与版本核验，以及资源窗口和类型化事实转交。实体的版本生成、条件更新、持久提交及固定写入确认仍由各自实现负责；当前没有通用版本容器或实体更新 helper。示例中的 Plan／Notes 写入代码是业务实现，不是已经交付的通用更新 API。

@@ -1,7 +1,7 @@
 import { isArray } from 'es-toolkit/compat';
-import { isNativeError, isProxy } from 'node:util/types';
+import { isKnownNativeError, isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { zipObject } from 'es-toolkit/array';
-import { isError, isString, isUndefined } from 'es-toolkit/predicate';
+import { isString, isUndefined } from 'es-toolkit/predicate';
 import type { RuntimeErrorDetail, RuntimeErrorValue } from '@weiliang0121/capix-contracts';
 import { ErrorTraversal, formatLimits } from './traversal.js';
 import { formatDetail, formatText } from './detail.js';
@@ -18,10 +18,10 @@ const nativeStackFormatter = Object.getOwnPropertyDescriptor(Error, 'prepareStac
 export function formatError(error: unknown, traversal: ErrorTraversal, depth = 0): RuntimeErrorValue {
   if (!traversal.consume(depth)) return { code: 'ERROR_TRUNCATED', message: '[Truncated: error conversion limit]' };
   if (error === null || typeof error !== 'object') return formatThrownValue(error, traversal, depth);
-  if (isProxy(error)) return { code: 'UNREADABLE_ERROR', message: '[Uninspectable thrown object]' };
+  if (isOpaqueObject(error)) return { code: 'UNREADABLE_ERROR', message: '[Uninspectable thrown object]' };
   if (traversal.contains(error)) return { code: 'CIRCULAR_ERROR', message: '[Circular error reference]' };
   try {
-    if (!isNativeError(error) && !isError(error)) return formatThrownValue(error, traversal, depth);
+    if (!isKnownNativeError(error)) return formatThrownValue(error, traversal, depth);
     return traversal.within(error, () => formatFields(readFields(error), traversal, depth));
   } catch {
     return { code: 'UNREADABLE_ERROR', message: '[Uninspectable thrown object]' };
@@ -56,7 +56,7 @@ function formatContent(value: unknown, traversal: ErrorTraversal, depth: number)
 }
 
 function formatMembers(members: unknown, traversal: ErrorTraversal, depth: number): RuntimeErrorValue[] {
-  if (isProxy(members) || !isArray(members)) return [{ code: 'UNREADABLE_ERROR', message: '[Unreadable aggregate members]' }];
+  if (isOpaqueObject(members) || !isArray(members)) return [{ code: 'UNREADABLE_ERROR', message: '[Unreadable aggregate members]' }];
   const errors: RuntimeErrorValue[] = [];
   for (let i = 0; i < Math.min(members.length, formatLimits.entries); i++) errors.push(formatError(readProperty(members, String(i)), traversal, depth));
   if (members.length > formatLimits.entries) errors.push({ code: 'ERROR_TRUNCATED', message: '[Truncated: aggregate member limit]' });
@@ -67,7 +67,7 @@ function readProperty(value: object, key: string): unknown {
   try {
     let current: object | null = value;
     for (let depth = 0; current && depth <= formatLimits.depth; depth++) {
-      if (isProxy(current)) return '[Unreadable property]';
+      if (isOpaqueObject(current)) return '[Unreadable property]';
       const descriptor = Object.getOwnPropertyDescriptor(current, key);
       if (descriptor) {
         if ('value' in descriptor) return descriptor.value;
@@ -92,7 +92,7 @@ function readProperty(value: object, key: string): unknown {
 function safeErrorText(value: object, key: 'name' | 'message'): boolean {
   let current: object | null = value;
   for (let depth = 0; current && depth <= formatLimits.depth; depth++) {
-    if (isProxy(current)) return false;
+    if (isOpaqueObject(current)) return false;
     const descriptor = Object.getOwnPropertyDescriptor(current, key);
     if (descriptor) return 'value' in descriptor && (typeof descriptor.value === 'string' || descriptor.value === undefined);
     current = Object.getPrototypeOf(current);

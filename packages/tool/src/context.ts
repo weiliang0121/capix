@@ -1,4 +1,5 @@
-import { types } from 'node:util';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import type { ExchangePrefix, ExchangeOriginReference, ExchangeReference } from '@weiliang0121/capix-model-exchanges';
 import type { ModelMessage } from '@weiliang0121/capix-model-provider';
 import { ToolBudgetError, type ToolCapacityReason } from './budget.js';
@@ -22,7 +23,7 @@ export interface ToolContextPreparation {
 }
 
 export function requireToolRequestContext(value: unknown): ToolRequestContext {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value) || Object.getOwnPropertySymbols(value).length) throw new TypeError('Tool request context must contain a fixed byte capacity');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || isOpaqueObject(value) || Object.getOwnPropertySymbols(value).length) throw new TypeError('Tool request context must contain a fixed byte capacity');
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Object.keys(descriptors).length !== 1 || !descriptors.maxBytes || !descriptors.maxBytes.enumerable || !('value' in descriptors.maxBytes)) throw new TypeError('Tool request context must contain only an own maxBytes data property');
   const maxBytes = descriptors.maxBytes.value;
@@ -38,7 +39,7 @@ export function assertToolContextText(value: unknown, policy: ToolRequestContext
   if (value === undefined) return undefined;
   if (!policy) throw new TypeError('Tool request context is not enabled');
   if (typeof value !== 'string') throw new TypeError('Tool request context preparation must synchronously return text or undefined');
-  const bytes = Buffer.byteLength(JSON.stringify(toolContextMessage(value)), 'utf8');
+  const bytes = utf8ByteLength(JSON.stringify(toolContextMessage(value)));
   if (bytes > policy.maxBytes) throw new ToolBudgetError('TOOL_CONTEXT_LIMIT', bytes, policy.maxBytes);
   return value;
 }

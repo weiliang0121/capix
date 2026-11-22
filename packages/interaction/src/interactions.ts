@@ -1,4 +1,4 @@
-import { isPromise } from 'node:util/types';
+import { isKnownPromise } from '@weiliang0121/capix-platform/inspection';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
 import { interactionDataLimits, isNonBlankString } from './value.js';
@@ -230,8 +230,8 @@ class RegisteredInteractions<Request, Reply, Delta> {
       let saved: InteractionState | undefined;
       try {
         saved = this.#read?.(ref.id);
-        if (isPromise(saved)) {
-          void saved.catch(() => undefined);
+        if (isKnownPromise(saved)) {
+          void Promise.prototype.then.call(saved, undefined, () => undefined);
           throw new TypeError('Interaction persistence reads must be synchronous');
         }
       } catch (cause) {

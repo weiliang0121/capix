@@ -162,7 +162,7 @@ test('explicit checkpoint resume returns saved material without rereading or res
         return material;
       },
     });
-    return new Runner(scene, content.resources, undefined, { checkpoints: { store } }).build();
+    return new Runner(scene, content.resources, { checkpoints: { store } }).build();
   }
   const first = assemble(capturingStore);
   const delivered = await first.run(null);

@@ -24,7 +24,7 @@ pnpm release:check
 pnpm integration:check
 ```
 
-按顺序运行：`release:check` 验证 18 个公开包的压缩发布物，`integration:check` 验证全部 18 个包的候选分发。两者都重建 tarball、在临时仓库外消费者中验证安装和公开出口，可能访问 npm registry，不会发布 npm；不要与读取 dist 的测试并行。CAPiX 的正式验收由本仓完成，不要求检出其他项目。外部消费者的实验不代替框架回归，也不构成贡献者必须完成的隐藏门槛。
+按顺序运行：`release:check` 验证 21 个公开包的压缩发布物，`integration:check` 验证全部 21 个包的候选分发。两者都重建 tarball、在临时仓库外消费者中验证安装和公开出口，可能访问 npm registry，不会发布 npm；不要与读取 dist 的测试并行。CAPiX 的正式验收由本仓完成，不要求检出其他项目。外部消费者的实验不代替框架回归，也不构成贡献者必须完成的隐藏门槛。
 
 ## 测试归属
 
@@ -79,7 +79,7 @@ pnpm docs:build
 
 ## Changesets 与发布
 
-修改需要发布的行为、公开契约或分发物时运行 `pnpm changeset`，选择实际修改的公开包和 bump 类型，说明用户可观察到的变化。18 个公开包各自独立发版，不使用 fixed 或 linked 版本组；Changesets 按实际变更与必要依赖更新生成本次版本计划，不要求所有包共同升号。各包 CHANGELOG 维护依赖兼容性、破坏性契约变化与迁移要求；package.json 和打包后的准确依赖版本仍须与这些说明一致。文档站、示例和外部装配不属于公开包发布清单。仅贡献说明、历史材料或不影响发布产物的仓库整理通常无需 changeset，PR 中说明判断即可。
+修改需要发布的行为、公开契约或分发物时运行 `pnpm changeset`，选择实际修改的公开包和 bump 类型，说明用户可观察到的变化。21 个公开包各自独立发版，不使用 fixed 或 linked 版本组；Changesets 按实际变更与必要依赖更新生成本次版本计划，不要求所有包共同升号。各包 CHANGELOG 维护依赖兼容性、破坏性契约变化与迁移要求；package.json 和打包后的准确依赖版本仍须与这些说明一致。文档站、示例和外部装配不属于公开包发布清单。仅贡献说明、历史材料或不影响发布产物的仓库整理通常无需 changeset，PR 中说明判断即可。
 
 版本 PR 合入 main 后，Publish release 在准确提交上准备本批产物。维护者在 GitHub 的 npm Environment 明确批准上传，registry 核验完成后创建批次 tag 和 GitHub Release。见 [npm 发布](docs/npm-publishing.md)。
 

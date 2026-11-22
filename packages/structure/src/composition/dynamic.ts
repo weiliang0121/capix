@@ -1,4 +1,4 @@
-import { types } from 'node:util';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { Group } from '../group.js';
 import type { MemberInput } from './input.js';
 import type { ChildCallable } from '../definition/children.js';
@@ -29,7 +29,7 @@ export class Dynamic<const Options extends NamedMembers, Decision extends ChildC
 
   constructor(configuration: DynamicConfiguration<Options, Decision>) {
     super();
-    if (!configuration || typeof configuration !== 'object' || types.isProxy(configuration)) throw new TypeError('Dynamic configuration must be an object');
+    if (!configuration || typeof configuration !== 'object' || isOpaqueObject(configuration)) throw new TypeError('Dynamic configuration must be an object');
     const options = snapshotOptions(configuration.options);
     const decision: ChildCallable = configuration.decide;
     const maxSteps = checkMaxSteps(configuration.maxSteps ?? 8);
@@ -60,7 +60,7 @@ function checkMaxSteps(value: number): number {
 }
 
 function snapshotOptions(options: NamedMembers): ReadonlyMap<string, ChildCallable> {
-  if (!options || typeof options !== 'object' || Array.isArray(options) || types.isProxy(options)) throw new TypeError('Dynamic options must be an object');
+  if (!options || typeof options !== 'object' || Array.isArray(options) || isOpaqueObject(options)) throw new TypeError('Dynamic options must be an object');
   if (Object.getOwnPropertySymbols(options).length) throw new TypeError('Dynamic option names must be strings');
   const entries: [string, ChildCallable][] = [];
   for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(options))) {

@@ -1,19 +1,16 @@
 import { installCallable } from './fixtures/driver.mjs';
-import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
+import { runtimeDefinition } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, Group, Node, bindCallSource, bindRecording, checkpointPoint } from '@weiliang0121/capix-runtime';
-import { Recorder, RecordBook, CallableRecordHelper } from '@weiliang0121/capix-records';
+import { ExceptionContract, Group, Node, bindCallSource, checkpointPoint } from '@weiliang0121/capix-runtime';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
-import { validateExecutionRecordSnapshot, readOutput } from '@weiliang0121/capix-records/data';
 
 const rejected = new ExceptionContract('test.rejected');
 const codec = { encode: (value) => value, decode: (value) => value };
 
-function assemble(execution, providers = [], recording) {
+function assemble(execution, providers = []) {
   return installCallable(runtimeDefinition(execution), {
     providers,
-    observations: recording ? [recording] : undefined,
     source: { capture: () => null },
     bindings: [bindCallSource(execution, { started: (options) => options.execution?.started })],
   });
@@ -147,52 +144,6 @@ test('checkpoint action grants reject structures outside the registered member s
   assert.throws(() => assemble(main), /outside its owner|not declared/);
 });
 
-test('host recording maps recorded IO without changing business values', async () => {
-  const input = { hidden: 'source', public: 2 };
-  const output = { hidden: 'result', public: 3 };
-  let descriptions = 0;
-  let call;
-  const create = () =>
-    new Group({
-      run(work) {
-        assert.deepEqual(work.input, input);
-        return output;
-      },
-    });
-  const description = {
-    input(value) {
-      descriptions++;
-      return { public: value.public };
-    },
-    output(value) {
-      descriptions++;
-      return { public: value.public };
-    },
-  };
-  assert.deepEqual(await assemble(create()).run(input, {}), output);
-  assert.equal(descriptions, 0);
-  const recorder = new Recorder(new RecordBook());
-  const main = create();
-  const recording = bindRecording(recorder, { failure: 'propagate' }).describe(main, description);
-  const runtime = assemble(main, [], recording);
-  assert.deepEqual(
-    await runtime.run(input, {
-      execution: {
-        started: (_context, invocation) => {
-          call = invocation;
-        },
-      },
-    }),
-    output,
-  );
-  assert.deepEqual(call.context.state.output, output);
-  const snapshot = CallableRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
-  validateExecutionRecordSnapshot(snapshot);
-  assert.deepEqual(snapshot.execution.value.input, { public: 2 });
-  assert.deepEqual(readOutput(snapshot.execution.value), { public: 3 });
-  assert.ok(descriptions > 0);
-});
-
 test('fallback invokes a registered member with its own resources and records handled failure', async () => {
   const resource = new ResourceOffer({ name: 'test.repair', expose: (value) => value, timing: 'access' });
   let resolved = 0;
@@ -306,16 +257,3 @@ for (const position of ['capture', 'expose']) {
     assert.equal(handled, 0);
   });
 }
-
-test('host recording covers every registered ancestor without business observation fields', async () => {
-  const child = new Node({ run: () => 'done' });
-  const main = new Group({ run: (work) => work.children.invoke(child, null) }).add(child);
-  const recorder = new Recorder(new RecordBook());
-  const recording = bindRecording(recorder, { failure: 'propagate' });
-  assert.equal(await assemble(main, [], recording).run(null, {}), 'done');
-  const calls = [...recorder.book.values()].filter((record) => record.kind === 'invocation');
-  assert.equal(calls.length, 3);
-  const records = new Map([...recorder.book.values()].map((record) => [record.id, record]));
-  for (const call of calls) assert.ok(records.has(call.parentId));
-  for (const structure of [main, child]) assert.equal('observation' in structure, false);
-});

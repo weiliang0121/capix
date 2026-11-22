@@ -18,8 +18,9 @@ test('checkpoint values and storage expose independent value and storage-adapter
   const dependencies = Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies });
   assert.deepEqual(
     dependencies.filter((name) => name.startsWith('@capix/') || name.startsWith('@weiliang0121/capix-')),
-    ['@weiliang0121/capix-contracts'],
+    ['@weiliang0121/capix-contracts', '@weiliang0121/capix-platform'],
   );
+  const imports = new Set(['@weiliang0121/capix-contracts', '@weiliang0121/capix-platform/bytes', '@weiliang0121/capix-platform/hash']);
   async function inspect(path) {
     for (const entry of await readdir(path, { withFileTypes: true })) {
       const file = resolve(path, entry.name);
@@ -28,7 +29,7 @@ test('checkpoint values and storage expose independent value and storage-adapter
         const source = await readFile(file, 'utf8');
         for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
           const specifier = match[2];
-          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.equal(specifier, '@weiliang0121/capix-contracts', `${file} cannot import ${specifier}`);
+          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.ok(imports.has(specifier), `${file} cannot import ${specifier}`);
           if (specifier.startsWith('.')) assert.ok(!relative(directory, resolve(dirname(file), specifier)).startsWith('..'), `${file} crosses its package boundary`);
         }
       }

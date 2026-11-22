@@ -75,11 +75,11 @@ function createDeliveryReview() {
 第二处决定是**哪些材料真的可读，以及意见交还给谁**。这里的 `presets` 和 `host` 是 Psi 的业务伪代码。Master 发出核验委托后，宿主挑出这笔采购获准披露的交付记录，接好验收人的反馈通道，再用同一个 `deliveryRead` 登记只读材料。核验人收到的材料里没有报价。
 
 ```js
-const { deliveryRecords, resources, interactions } = await host.prepareReview(task);
+const { deliveryRecords, resources } = await host.prepareReview(task);
 resources.register(deliveryRead, deliveryRecords);
 
 const scene = new Scene(createDeliveryReview());
-const worker = new Runner(scene, resources, interactions).build();
+const worker = new Runner(scene, resources).build();
 const opinion = await worker.run(task.question);
 await host.deliver(task.replyTo, opinion);
 ```

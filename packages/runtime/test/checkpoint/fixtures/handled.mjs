@@ -84,7 +84,7 @@ export function harness(store, counters, { failDuringHandling = false, reopen = 
       return value.iso;
     },
   }).add(primary, backup);
-  return new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build();
+  return new Runner(scene, new Resources(), { checkpoints: { store } }).build();
 }
 
 export async function capture(options) {

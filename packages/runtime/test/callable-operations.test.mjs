@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Node, Scene, Resources, Runner, InvocationCancelled, callableHooks } from '@weiliang0121/capix-runtime';
 function setup(scene, capabilities = {}) {
-  return new Runner(scene, new Resources(), undefined, capabilities).build();
+  return new Runner(scene, new Resources(), capabilities).build();
 }
 function observation(facts, businesses = []) {
   return {
@@ -333,7 +333,7 @@ test('source deltas, parent replacement and final result stay distinct during fa
     },
   }).add(primary, backup);
   const resources = new Resources();
-  const runner = new Runner(scene, resources, undefined, {
+  const runner = new Runner(scene, resources, {
     hooks: [
       callableHooks(scene, {
         output: () => ({

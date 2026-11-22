@@ -188,7 +188,7 @@ Scene 树已经表达整体处理与整体输出。不另建任意节点输出�
 
 ```ts
 // 当前 API；display/updatePreview 是宿主自己的呈现函数。
-const runner = new Runner(scene, resources, interactions).build();
+const runner = new Runner(scene, resources).build();
 
 const unsubscribe = runner.output.subscribe({
   receive(event) {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { copyFile, readdir, readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -27,8 +27,20 @@ export async function json(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
+/** Exercise the alternate package-import targets from the files actually installed. */
+export async function checkPlatformImports(consumer) {
+  const fixtures = ['resources/test/portable-identity.test.mjs', 'invocation/test/portable-reception.test.mjs'];
+  const files = [];
+  for (const fixture of fixtures) {
+    const target = join(consumer, basename(fixture));
+    await copyFile(join(root, 'packages', fixture), target);
+    files.push(target);
+  }
+  command(process.execPath, ['--test', ...files], { cwd: consumer });
+}
+
 export async function packages(workspaceRoot = root) {
-  const directories = ['packages/contracts', 'packages/protocol', 'packages/changes', 'packages/checkpoint', 'packages/diagnostics', 'packages/interaction', 'packages/invocation', 'packages/measurement', 'packages/memory', 'packages/model-exchanges', 'packages/model-provider', 'packages/records', 'packages/resources', 'packages/runtime', 'packages/structure', 'packages/tool', 'packages/transcript', 'packages/view'];
+  const directories = ['packages/contracts', 'packages/protocol', 'packages/platform', 'packages/platform-node', 'packages/changes', 'packages/checkpoint', 'packages/diagnostics', 'packages/interaction', 'packages/invocation', 'packages/measurement', 'packages/memory', 'packages/model-exchanges', 'packages/model-provider', 'packages/recording', 'packages/records', 'packages/resources', 'packages/runtime', 'packages/structure', 'packages/tool', 'packages/transcript', 'packages/view'];
   const result = await Promise.all(directories.map(async (directory) => ({ directory, path: join(workspaceRoot, directory), manifest: await json(join(workspaceRoot, directory, 'package.json')) })));
   const byName = new Map(result.map((entry) => [entry.manifest.name, entry]));
   assert.equal(byName.size, result.length, 'Duplicate release package names');

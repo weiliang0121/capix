@@ -53,10 +53,10 @@ async function entry(mode, run, events, output) {
       return receipt;
     }
   })();
-  await new Runner(scene(true), resources, undefined, { checkpoints: { store: journal } }).build().run(null);
+  await new Runner(scene(true), resources, { checkpoints: { store: journal } }).build().run(null);
   const store = new MemoryCheckpointStore();
   const saved = store.save(structuredClone(journal.image), 0);
-  const runner = new Runner(scene(), resources, undefined, { checkpoints: { store } }).build();
+  const runner = new Runner(scene(), resources, { checkpoints: { store } }).build();
   return { runner, start: () => runner.resume(saved.contextId) };
 }
 

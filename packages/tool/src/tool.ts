@@ -1,6 +1,8 @@
-import { randomUUID } from 'node:crypto';
-import { types } from 'node:util';
-import { isDeepStrictEqual as equal } from 'node:util';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
+import { equalData as equal } from '@weiliang0121/capix-platform/equal';
+import type { ChildReceptionPermit } from '@weiliang0121/capix-contracts';
 import { z } from 'zod';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
 import { maximumModelExchangeBytes, maximumModelWireRequestBytes, modelReplyText, requireModelRequest, type ModelToolCall } from '@weiliang0121/capix-model-provider';
@@ -252,7 +254,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       }
     }
     async function receiveModel(work: Work, state: State, refs: Refs, child: ChildCall<typeof completion>): Promise<string> {
-      const result = { succeeded: ({ reply }: ToolCompletion) => work.resources.exchanges.intake(state.origin, assertToolReplyBytes(reply, budgets)) };
+      const result = { succeeded: ({ reply }: ToolCompletion, permit: ChildReceptionPermit) => work.resources.exchanges.intake(state.origin, assertToolReplyBytes(reply, budgets), permit) };
       const received = recoverable ? await child.invoke({ reception: modelReception, result }) : await child.invoke({ result });
       const next: State = { ...state, current: received.reference, cursor: 0, active: null };
       save(work, 'processing', next, refs);
@@ -288,18 +290,18 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
       const entry = tools.get(active.name);
       if (!entry) throw new Error('Tool is not registered');
       const result = {
-        succeeded: async (value: unknown) => {
+        succeeded: async (value: unknown, permit: ChildReceptionPermit) => {
           if (entry.registration.maxOutputBytes !== undefined) assertToolOutputBytes(value, entry.registration.maxOutputBytes);
           const mapped = assertToolFeedbackBytes(active.callId, await entry.registration.result.succeeded(value), { maxFeedbackBytes: entry.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes });
-          return work.resources.exchanges.receive(state.origin, reference, active.callId, mapped);
+          return work.resources.exchanges.receive(state.origin, reference, active.callId, mapped, permit);
         },
         ...(entry.registration.result.failed
           ? {
-              failed: async (failure: unknown) => {
+              failed: async (failure: unknown, permit: ChildReceptionPermit) => {
                 // This preset stops on its own budget failures. This is not a new
                 // kernel error category and a matching business code is not enough.
                 if (failure instanceof ToolBudgetError) throw failure;
-                return work.resources.exchanges.receive(state.origin, reference, active.callId, assertToolFeedbackBytes(active.callId, await entry.registration.result.failed!(failure), { maxFeedbackBytes: entry.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }));
+                return work.resources.exchanges.receive(state.origin, reference, active.callId, assertToolFeedbackBytes(active.callId, await entry.registration.result.failed!(failure), { maxFeedbackBytes: entry.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes }), permit);
               },
             }
           : {}),
@@ -410,7 +412,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
         const maxBytes = tools.get(call.name)?.registration.maxFeedbackBytes ?? budgets.maxFeedbackBytes;
         if (selected.kind === 'accepted') return { toolCallId: call.id, maxBytes };
         assertToolFeedbackBytes(call.id, selected.result, { maxFeedbackBytes: maxBytes });
-        return { toolCallId: call.id, maxBytes: Buffer.byteLength(JSON.stringify({ toolCallId: call.id, ...selected.result }), 'utf8'), fixed: selected.result };
+        return { toolCallId: call.id, maxBytes: utf8ByteLength(JSON.stringify({ toolCallId: call.id, ...selected.result })), fixed: selected.result };
       });
       return work.resources.model.preflight({ feedbackReservations, origin: state.origin, exchanges: state.exchanges, current, budgets, defer, ...(requestContext ? { context: requestContext } : {}) });
     }
@@ -495,7 +497,7 @@ export class Tool<const Definitions extends Readonly<Record<string, ChildCallabl
 }
 
 function snapshotConfiguration<Definitions extends Readonly<Record<string, ChildCallable>>>(value: ToolConfiguration<Definitions>): ToolConfiguration<Definitions> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value)) throw new TypeError('Tool configuration must be a data object');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || isOpaqueObject(value)) throw new TypeError('Tool configuration must be a data object');
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some((key) => !['tools', 'policyVersion', 'checkpoint', 'maxModelCalls', 'waitMs', 'budgets', 'imageContext', 'requestContext', 'capacityPolicy'].includes(key))) throw new TypeError('Unknown Tool configuration field');
   const result: Record<string, unknown> = {};
@@ -511,7 +513,7 @@ function snapshotConfiguration<Definitions extends Readonly<Record<string, Child
   if (result.requestContext !== undefined) result.requestContext = requireToolRequestContext(result.requestContext);
   if (result.budgets !== undefined) {
     const budgets = result.budgets;
-    if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets) || types.isProxy(budgets) || Object.getOwnPropertySymbols(budgets).length) throw new TypeError('Tool budgets must be a data object');
+    if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets) || isOpaqueObject(budgets) || Object.getOwnPropertySymbols(budgets).length) throw new TypeError('Tool budgets must be a data object');
     const snapshot: Record<string, unknown> = {};
     for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(budgets))) {
       if (!['maxReplyBytes', 'maxFeedbackBytes', 'maxRequestBytes', 'maxWireRequestBytes', 'maxCollectionBytes'].includes(key) || !descriptor.enumerable || !('value' in descriptor)) throw new TypeError('Tool budgets must contain known data properties');

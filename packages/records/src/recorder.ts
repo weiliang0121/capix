@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { performance } from 'node:perf_hooks';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import type { RecordChangeEvent, RecordMutation } from './data/index.js';
 import type { ChangeCapture } from '@weiliang0121/capix-changes';
 import { captureChange } from '@weiliang0121/capix-changes';
@@ -38,7 +37,7 @@ export class Recorder {
     readonly book: RecordBook,
     options: RecorderOptions = {},
   ) {
-    this.clock = options.clock ?? { now: () => new Date().toISOString(), tick: () => performance.now() };
+    this.clock = options.clock ?? { now: () => new Date().toISOString(), tick: () => globalThis.performance.now() };
     this.changes = options.changes;
     this.tree = new RecordTree(book);
   }

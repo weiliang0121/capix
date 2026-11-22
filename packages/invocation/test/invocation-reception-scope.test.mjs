@@ -41,6 +41,7 @@ test('nested owners retain their own active reception through asynchronous work'
     await second.accept(async () => {
       expectReception(outer, first);
       expectReception(inner, second);
+      assert.throws(() => inner.children.resolveReception(Symbol()), /active direct-child reception permit/);
       expectUnavailable(unrelated);
       await Promise.resolve();
       expectReception(outer, first);

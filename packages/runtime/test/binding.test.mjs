@@ -1,10 +1,9 @@
 import { ResourceAccessClosed } from '@weiliang0121/capix-resources';
 import { installCallable } from './fixtures/driver.mjs';
-import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
+import { runtimeDefinition } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, Driver, bindCallSource, bindRecording } from '@weiliang0121/capix-runtime';
-import { Recorder, RecordBook } from '@weiliang0121/capix-records';
+import { Group, Node, Driver, bindCallSource } from '@weiliang0121/capix-runtime';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
 import { buildCallableFromSource, callableConstruction } from '@weiliang0121/capix-runtime/construction';
 
@@ -48,19 +47,25 @@ class Main extends Group {
     return child.accept();
   }
 }
-function bind(main, source, options = {}) {
+function bind(main, source, observations) {
   const definition = runtimeDefinition(main);
-  const observations = options.recorder ? [bindRecording(options.recorder, { failure: 'propagate' })] : undefined;
   return installCallable(definition, { observations, providers: [resource.provide((value) => value)], source: { capture: () => source() }, bindings: [bindCallSource(main, { started: (options) => options.execution?.started })] });
 }
 
 test('independent structure instances have stable identities and separate per-call state', async () => {
   const definition = new Main();
   let value = 'left';
-  const firstRecorder = new Recorder(new RecordBook());
-  const secondRecorder = new Recorder(new RecordBook());
-  const first = bind(definition, () => value, { recorder: firstRecorder });
-  const second = bind(new Main(), () => 'right', { recorder: secondRecorder });
+  const scopes = new Map();
+  const observations = [
+    {
+      bindInvocation(setup) {
+        scopes.set(setup.identity.contextId, setup);
+        return { observe() {} };
+      },
+    },
+  ];
+  const first = bind(definition, () => value, observations);
+  const second = bind(new Main(), () => 'right', observations);
   const calls = [];
   const callbacks = {
     started: (_context, invocation) => {
@@ -74,13 +79,13 @@ test('independent structure instances have stable identities and separate per-ca
   value = 'next';
   assert.equal(await first.run('two', { execution: callbacks }), 'two:next');
   assert.equal(await second.run('three', { execution: callbacks }), 'three:right');
-  const identity = (call, recorder = firstRecorder) => recordedCall(recorder, call.children.values()[0].invocation).structureId;
+  const identity = (call) => scopes.get(call.children.values()[0].invocation.context.id).description.id;
   assert.equal(identity(calls[0]), identity(calls[1]));
-  assert.notEqual(identity(calls[0]), identity(calls[2], secondRecorder));
+  assert.notEqual(identity(calls[0]), identity(calls[2]));
   assert.notEqual(calls[0].context.id, calls[1].context.id);
-  const parent = firstRecorder.book.get(recordedCall(firstRecorder, calls[0]).parentId);
-  assert.equal(parent.kind, 'invocation');
-  assert.equal(firstRecorder.book.get(parent.parentId).kind, 'runtime');
+  const parent = scopes.get(calls[0].identity.parentContextId);
+  assert.equal(parent.identity.kind, 'scene');
+  assert.equal(parent.identity.parentContextId, undefined);
   assert.equal(first.running, false);
 });
 

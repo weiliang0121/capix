@@ -1,3 +1,4 @@
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
 import type { CheckpointValue } from '@weiliang0121/capix-contracts';
 
 export interface CheckpointValueMetrics {
@@ -7,7 +8,7 @@ export interface CheckpointValueMetrics {
 }
 
 const format = 'capix.checkpoint.value@1';
-export const checkpointEncodingOverhead = Buffer.byteLength(JSON.stringify({ format, value: null })) - 4;
+export const checkpointEncodingOverhead = utf8ByteLength(JSON.stringify({ format, value: null })) - 4;
 
 /** V6 escapes value strings beginning with ~, reserving ~0 for negative zero. */
 export function encodeCheckpointData(value: unknown): string {
@@ -32,13 +33,13 @@ export function checkpointMetrics(value: unknown, reference?: (value: object) =>
     for (let i = 0; i < values.length; i++) {
       const [key, entry] = values[i]!;
       const measured = checkpointMetrics(entry, reference);
-      bytes += measured.bytes + (i ? 1 : 0) + (key === undefined ? 0 : Buffer.byteLength(JSON.stringify(key)) + 1);
+      bytes += measured.bytes + (i ? 1 : 0) + (key === undefined ? 0 : utf8ByteLength(JSON.stringify(key)) + 1);
       nodes += measured.nodes;
       depth = Math.max(depth, measured.depth + 1);
     }
     return { bytes, nodes, depth };
   }
-  return { bytes: Buffer.byteLength(JSON.stringify(encode(value))), nodes: 1, depth: 0 };
+  return { bytes: utf8ByteLength(JSON.stringify(encode(value))), nodes: 1, depth: 0 };
 }
 
 function encode(value: unknown): unknown {

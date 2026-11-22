@@ -1,4 +1,4 @@
-import type { Stable } from '@weiliang0121/capix-contracts';
+import type { ChildReceptionPermit, Stable } from '@weiliang0121/capix-contracts';
 // Stable facts cross public call boundaries, while capability endpoints retain
 // their own operational contracts. These functions are compile-only fixtures.
 import { Node, Scene, Group, Sequence, Dynamic, checkpointPoint, reception, childReference } from '@weiliang0121/capix-structure';
@@ -41,18 +41,25 @@ const point = checkpointPoint<'group', Payload, Payload>()({
   },
   resume: { run: (_work, state) => state },
 });
+declare function verifyPermit(permit: ChildReceptionPermit): void;
+// @ts-expect-error only an issued child reception permit is accepted.
+verifyPermit(Symbol());
 const branch = new Group<Payload, Payload>().add({ leaf });
 branch.run = async (work) => {
   const call = work.children.create(leaf, work.input);
   const returned = await call.run();
   // @ts-expect-error raw child run delivery is stable before reception.
   returned.items[0]!.text = 'changed';
-  const accepted = await call.accept(intake, (value) => value);
+  const accepted = await call.accept(intake, (value, permit) => {
+    verifyPermit(permit);
+    return value;
+  });
   // @ts-expect-error explicit reception delivery remains stable.
   accepted.items.push({ text: 'changed' });
   const selected = await work.children.leaf.invoke(work.input, {
     result: {
-      succeeded(value) {
+      succeeded(value, permit) {
+        verifyPermit(permit);
         // @ts-expect-error reception callback consumes a stable child delivery.
         value.items.push({ text: 'changed' });
         return { values: value.items };

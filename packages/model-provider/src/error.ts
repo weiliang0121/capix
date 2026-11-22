@@ -62,7 +62,7 @@ export class ModelEmissionFailure {
 
 /** Concurrent cancellation does not relabel an independently thrown failure. */
 export function isRequestCancellation(error: unknown, signal: AbortSignal): boolean {
-  return signal.aborted && (error === signal.reason || (error instanceof DOMException && error.name === 'AbortError'));
+  return signal.aborted && (error === signal.reason || (typeof DOMException === 'function' && error instanceof DOMException && error.name === 'AbortError'));
 }
 
 /** Internal transport provenance is never inferred from a caller supplied ProviderError. */

@@ -58,9 +58,11 @@ const result = await runner.run('hello'); // 你好
 
 `runner.build()` 提前解算全树，检查资源供给、成员、输出和 CP，完整成功后将固定接线及调用构造能力安装到原结构。固定函数入口、配置容器和成员位置，保留业务 receiver 及闭包；没有 BoundCallable 或第二棵结构树。build 不捕获本次资源、不执行业务、不创建 Context。
 
-成功后配置字段不可赋值、成员不可新增、不可再次 build；失败不发布部分运行能力，允许修正后重建。构建期间拒绝 add/重入，检查解释字段是否被宿主回调修改；Proxy 结构和不能固定的字段也被拒绝。业务不能把单次输入、Work、资源端点或进度存在共享结构字段。需要改变结构或供应规则时建立新结构，仍可复用原有独立实体。
+成功后配置字段不可赋值、成员不可新增、不可再次 build；失败不发布部分运行能力，允许修正后重建。构建期间拒绝 add/重入，检查解释字段是否被宿主回调修改，拒绝不能固定的字段。原生检查拒绝 Proxy 结构，采用作者保证模式时由宿主提供无代理的结构与配置。[宿主对象检查](runtime-boundaries.md#宿主对象检查)
 
-宿主使用 `new Runner(scene, resources, interactions?, options?).build()`，build 返回原 Runner。`runner.run(input, options?)` 创建一次调用，`runner.resume(contextId, options?)` 进入明确恢复点；`runner.isRunning` 表示这个 Runner 的入口占用。普通运行只执行一次 run；业务的循环或备用来源由 run 显式组织，每次子调用都有新身份。
+业务不能把单次输入、Work、资源端点或进度存在共享结构字段。需要改变结构或供应规则时建立新结构，仍可复用原有独立实体。
+
+宿主使用 `new Runner(scene, resources, options?).build()`，build 返回原 Runner。`runner.run(input, options?)` 创建一次调用，`runner.resume(contextId, options?)` 进入明确恢复点；`runner.isRunning` 表示这个 Runner 的入口占用。普通运行只执行一次 run；业务的循环或备用来源由 run 显式组织，每次子调用都有新身份。
 
 Runner 自身提供输出消费与当前运行控制，不要求宿主建立另一个 Run 对象：
 

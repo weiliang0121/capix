@@ -7,9 +7,10 @@ import * as invocationEvents from '@weiliang0121/capix-invocation/events';
 import * as protocol from '@weiliang0121/capix-protocol';
 import * as structure from '@weiliang0121/capix-structure';
 import * as structureConstruction from '@weiliang0121/capix-structure/construction';
+import * as interaction from '@weiliang0121/capix-interaction';
 import * as runtime from '@weiliang0121/capix-runtime';
 import * as construction from '@weiliang0121/capix-runtime/construction';
-import * as recording from '@weiliang0121/capix-runtime/recording';
+import * as recording from '@weiliang0121/capix-recording';
 import { Resource, ResourceOffer, ResourceAccessClosed } from '@weiliang0121/capix-resources';
 import { receiveOperation } from '@weiliang0121/capix-resources/operation';
 import { FactType, publishFact } from '@weiliang0121/capix-changes';
@@ -32,10 +33,11 @@ const { PersistenceError } = diagnostics;
 for (const entry of [diagnostics, invocation, runtime]) assert.equal(entry.RuntimeError, RuntimeError);
 for (const entry of [invocation, runtime]) assert.equal(entry.PersistenceError, PersistenceError);
 for (const name of ['Scene', 'Group', 'Node', 'Callable']) assert.equal(runtime[name], structure[name]);
-for (const entry of [construction, recording]) {
-  assert.ok(Object.keys(entry).length > 0);
-  for (const [name, value] of Object.entries(entry)) assert.equal(runtime[name], value, `runtime/${name} identity`);
-}
+assert.ok(Object.keys(construction).length > 0);
+for (const [name, value] of Object.entries(construction)) assert.equal(runtime[name], value, `runtime/${name} identity`);
+assert.equal(typeof recording.bindRecording, 'function');
+assert.ok(!('bindRecording' in runtime));
+assert.ok(!('Interactions' in runtime));
 assert.equal(construction.Invocation, invocation.Invocation);
 assert.equal(invocation.invocationProcessStages, invocationEvents.invocationProcessStages);
 assert.equal(invocation.invocationProcessActions, invocationEvents.invocationProcessActions);
@@ -159,7 +161,7 @@ function checkpointRunner(store) {
       return { answer };
     },
   });
-  return new Runner(root, new Resources(), undefined, { checkpoints: { store } }).build();
+  return new Runner(root, new Resources(), { checkpoints: { store } }).build();
 }
 const originalStore = new CaptureStore();
 const original = checkpointRunner(originalStore);
@@ -247,7 +249,7 @@ const provider = new AnthropicMessagesProvider({
   },
 });
 const exchanges = new ModelExchanges();
-const interactions = new runtime.Interactions().register(modelContract, {
+const interactions = new interaction.Interactions().register(modelContract, {
   send(request) {
     modelRequests.push(structuredClone(request));
     return provider.complete(request);
@@ -284,7 +286,7 @@ const toolResources = new Resources().register(new Resource(exchanges), ModelExc
   }),
   ToolModelResource,
 );
-const toolRunner = new Runner(toolScene, toolResources, interactions).build();
+const toolRunner = new Runner(toolScene, toolResources).build();
 assert.equal(exchanges.sequence, 0);
 assert.equal(modelRequests.length, 0);
 assert.equal(await toolRunner.run({ request: { messages: [{ role: 'user', content: 'Translate hello' }] } }), 'translated:hello');
@@ -322,7 +324,7 @@ const sample = new ResourceOffer({
   },
 });
 const sampleScene = new Scene({ deps: { sample: sample.request() }, run: (work) => work.resources.sample.read(work.input) });
-const sampleRunner = new Runner(sampleScene, new Resources().register(new Resource(null), sample), undefined, {
+const sampleRunner = new Runner(sampleScene, new Resources().register(new Resource(null), sample), {
   observations: [
     {
       failure: 'propagate',
@@ -342,7 +344,7 @@ assert.deepEqual(delivered, ['typed-fact']);
 const transcript = new Transcript();
 const recorder = new Recorder(new RecordBook());
 const transcriptScene = new Scene({ deps: { messages: TranscriptResource.append.request() }, run: (work) => work.resources.messages.append([{ role: 'user', content: work.input }]) });
-const transcriptRunner = new Runner(transcriptScene, new Resources().register(new Resource(transcript), TranscriptResource.append), undefined, { observations: [runtime.bindRecording(recorder, { failure: 'propagate' })] }).build();
+const transcriptRunner = new Runner(transcriptScene, new Resources().register(new Resource(transcript), TranscriptResource.append), { observations: [recording.bindRecording(recorder, { failure: 'propagate' })] }).build();
 const transcriptResult = await transcriptRunner.run('recorded');
 assert.ok([...recorder.book.values()].some((record) => record.kind === 'transcript' && record.contextId));
 // Read and validate actual recorded output through the independent data entry.

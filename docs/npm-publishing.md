@@ -4,9 +4,9 @@ CAPiX 采用 MIT。发布包包含编译后的 ESM JavaScript、类型声明、R
 
 ## 范围与版本
 
-公开范围为 `packages/` 中的 18 个 `@weiliang0121/capix-*` 包，包含 `capix-tool`，由 `scripts/release/packages.mjs` 显式列举。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包使用 Changesets 独立发版，不设置 fixed 或 linked 版本组。内部依赖使用 `workspace:*`，打包时转换为依赖目标各自的准确版本，包之间可以使用不同版本号。
+公开范围为 `packages/` 中的 21 个 `@weiliang0121/capix-*` 包，包含 `capix-tool`，由 `scripts/release/packages.mjs` 显式列举。根包仍为私有。文档站、示例和具体应用不属于公开包分发批次。公开包使用 Changesets 独立发版，不设置 fixed 或 linked 版本组。内部依赖使用 `workspace:*`，打包时转换为依赖目标各自的准确版本，包之间可以使用不同版本号。
 
-各包 CHANGELOG 负责说明自身变更、依赖兼容性和迁移要求；package.json 与实际 tarball 仍是安装器使用的依赖事实，不能只写兼容说明而保留错误的机器依赖。上层包使用新依赖版本时按实际需要更新版本和说明，无依赖关系的包不共同升号。例如 Tool 新增能力可单独发布 `0.8.0`，继续依赖已有的其他包 `0.7.0`。完整清单验证仍覆盖 18 包；上传只处理本次计划中尚未发布的准确包名和版本。
+各包 CHANGELOG 负责说明自身变更、依赖兼容性和迁移要求；package.json 与实际 tarball 仍是安装器使用的依赖事实，不能只写兼容说明而保留错误的机器依赖。上层包使用新依赖版本时按实际需要更新版本和说明，无依赖关系的包不共同升号。例如 Tool 新增能力可单独发布 `0.8.0`，继续依赖已有的其他包 `0.7.0`。完整清单验证覆盖全部公开包；上传只处理本次计划中尚未发布的准确包名和版本。
 
 公开包统一使用 `@weiliang0121/capix-<职责>`，其中 Runner 所在包仍为 `@weiliang0121/capix-runtime`。包边界与职责见[架构与包](organization.md#包的所有者)。私有包不在 npm 发布清单；不要从其他项目取得 npm 凭证。
 
@@ -39,7 +39,7 @@ Changesets 根据实际变更创建 `changeset-release/main` 版本 PR。维护�
 ### npm 与 GitHub 一次性设置
 
 - 在 GitHub 仓库的 **Settings → Environments → npm** 登记维护者为 required reviewer，部署分支限定为 `main`。单维护者仓库需要允许维护者批准自己触发的部署。设置完成后，版本 PR 合并负责准备，环境批准负责授权写入 npm。
-- 包维护者在 npm 上为每个待发布的公开包配置 GitHub Actions **Trusted Publisher**。Organization or user 选 `weiliang0121`，Repository 为 `capix`，Workflow filename 为 `publish.yml`，Environment 为 `npm`，授权该 workflow 直接 publish。包可在各自下次发布前完成配置。现有 18 包已在 registry 注册；新增包需先确认包名、归属及 npm 对首次发布的要求。详见 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)。
+- 包维护者在 npm 上为每个待发布的公开包配置 GitHub Actions **Trusted Publisher**。Organization or user 选 `weiliang0121`，Repository 为 `capix`，Workflow filename 为 `publish.yml`，Environment 为 `npm`，授权该 workflow 直接 publish。包可在各自下次发布前完成配置。此前发布的 18 包已在 registry 注册；新增包需先确认包名、归属及 npm 对首次发布的要求。详见 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)。
 - 普通 CI 与准备阶段只读取仓库。上传 job 使用 `id-token: write`，公告 job 使用 `contents: write`，Actions 工作流固定到完整提交 SHA。本流程使用 GitHub-hosted runner，公开包的 provenance 关联到此次工作流和发布提交。
 
 ### 中途失败与重跑
@@ -54,7 +54,7 @@ Changesets 根据实际变更创建 `changeset-release/main` 版本 PR。维护�
 
 ## 候选分发
 
-`pnpm integration:pack` 干净构建 18 个公开包，生成 `.capix/integration` tarball 批次，不发布 npm。manifest 记录源码提交、dirty 状态、源文件摘要和每个产物的 SHA256；文件白名单包含包清单、编译产物、声明、README、CHANGELOG 与许可。
+`pnpm integration:pack` 干净构建 21 个公开包，生成 `.capix/integration` tarball 批次，不发布 npm。manifest 记录源码提交、dirty 状态、源文件摘要和每个产物的 SHA256；文件白名单包含包清单、编译产物、声明、README、CHANGELOG 与许可。
 
 `pnpm integration:check` 在仓库外临时消费者中安装这批包，核对依赖、公开出口、运行结果和类型。消费方若要接入候选，须按准确 manifest 校验完整批次并维护自己的锁文件，不能混用不同源码批次的同版本包，也不能绕过公开出口读取私有 src/dist。
 

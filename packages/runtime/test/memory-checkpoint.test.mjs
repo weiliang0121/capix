@@ -68,7 +68,7 @@ test('memory resources and Node delivery preserve typed metadata with checkpoint
     const node = new Node({ deps: { memories: offers.read.request() }, checkpoint, run: (work) => work.resources.memories.read(work.input) });
     const scene = new Scene({ run: (work) => work.children.invoke(node, work.input) }).add(node);
     const capabilities = enabled ? { checkpoints: { store: new MemoryCheckpointStore() } } : {};
-    const result = await new Runner(scene, resources, undefined, capabilities).build().run(id);
+    const result = await new Runner(scene, resources, capabilities).build().run(id);
     assert.equal(result.id, id);
     assert.deepEqual(result.basis, { memoriesId: memories.id, sequence: 1 });
     assertMetadata(result.value);
@@ -162,7 +162,7 @@ test('cold checkpoint material and exact fixed request confirm the original effe
         return state;
       },
     }).add(node);
-    return new Runner(scene, resources, undefined, { checkpoints: { store: checkpointStore } }).build();
+    return new Runner(scene, resources, { checkpoints: { store: checkpointStore } }).build();
   }
   const first = await assemble(memories, capturing).run(null);
   assert.equal(first.material.value.content, 'original');

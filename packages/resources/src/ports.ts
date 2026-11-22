@@ -1,3 +1,4 @@
+import type { ChildReceptionPermit } from '@weiliang0121/capix-contracts';
 import type { ResourceEventConsumer, ResourceObservation, ResourceFact } from './facts.js';
 import { synchronous } from './internal/synchronous.js';
 
@@ -13,7 +14,7 @@ export interface ResourceOwner {
   readonly contextId: string;
   readonly failures: ResourceFailurePolicy;
   readonly signal?: AbortSignal;
-  readonly reception?: () => Readonly<{ parentContextId: string; childContextId: string }>;
+  readonly reception?: (permit?: ChildReceptionPermit) => Readonly<{ parentContextId: string; childContextId: string }>;
   readonly nextSequence?: () => number;
   readonly observation?: ResourceEventConsumer<ResourceObservation>;
   readonly facts?: ResourceEventConsumer<ResourceFact>;
@@ -50,7 +51,7 @@ export function captureResourceOwner(owner?: ResourceOwner): ResourceOwner | und
           synchronous(error(failure, allowException), 'Resource failure reporting');
         }
       : undefined,
-    reception: reception ? () => synchronous(reception(), 'Resource reception provenance') : undefined,
+    reception: reception ? (permit?: ChildReceptionPermit) => synchronous(reception(permit), 'Resource reception provenance') : undefined,
     nextSequence: nextSequence ? () => synchronous(nextSequence(), 'Resource observation sequence') : undefined,
     observation: captureConsumer(owner.observation),
     facts: captureConsumer(owner.facts),

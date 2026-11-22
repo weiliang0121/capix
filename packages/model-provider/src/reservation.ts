@@ -1,14 +1,15 @@
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
 import type { ModelMessage, ModelRequest, ModelRequestReservation } from './types.js';
 import { count, requireJson, shape } from './value.js';
 
 // The shortest admitted image is a six-byte JPEG (eight padded base64
 // characters). PNG and WebP need longer headers even after MIME encoding.
-const minimumImageBytes = Buffer.byteLength(JSON.stringify({ kind: 'image', mimeType: 'image/jpeg', data: '/9j/AP/Z' }));
+const minimumImageBytes = utf8ByteLength(JSON.stringify({ kind: 'image', mimeType: 'image/jpeg', data: '/9j/AP/Z' }));
 
 /** Maximum image parts fitting one complete common feedback, including identity and commas. */
 export function maximumFeedbackImages(toolCallId: string, maxBytes: number): number {
   if (typeof toolCallId !== 'string' || !toolCallId.length || toolCallId.length > 256 || !count(maxBytes)) throw new TypeError('Invalid feedback image budget');
-  const envelope = Buffer.byteLength(JSON.stringify({ toolCallId, status: 'ok', content: [] }));
+  const envelope = utf8ByteLength(JSON.stringify({ toolCallId, status: 'ok', content: [] }));
   return Math.max(0, Math.min(32, Math.floor((maxBytes - envelope + 1) / (minimumImageBytes + 1))));
 }
 
@@ -31,7 +32,7 @@ function feedbackGrowth(request: ModelRequest, reservation: ModelRequestReservat
     const placeholder = placeholders.get(slot.toolCallId);
     if (!placeholder || placeholder.status !== 'ok' || placeholder.content.some((part) => part.kind !== 'text' || part.text !== '')) throw new TypeError('A model feedback reservation requires a distinct empty placeholder');
     placeholders.delete(slot.toolCallId);
-    const growth = slot.maxBytes - Buffer.byteLength(JSON.stringify(placeholder));
+    const growth = slot.maxBytes - utf8ByteLength(JSON.stringify(placeholder));
     if (growth < 0) throw new RangeError('Feedback reservation is smaller than its placeholder');
     if (perCall) total += perCall(growth, slot.toolCallId, maximumFeedbackImages(slot.toolCallId, slot.maxBytes), placeholder.content.length);
   }
@@ -105,7 +106,7 @@ function contextWireGrowth(protocol: ContextProtocol, request: ModelRequest, res
   // message or replacing any one admitted message, even at zero common growth.
   for (const message of request.messages) {
     const otherSystem = systems > (message.role === 'system' ? 1 : 0);
-    const bytes = Buffer.byteLength(JSON.stringify(message)) + 1 + growth;
+    const bytes = utf8ByteLength(JSON.stringify(message)) + 1 + growth;
     extra = Math.max(extra, maximumContextOverhead(protocol, bytes, otherSystem) - contextOverhead(protocol, message, otherSystem));
   }
   // Unconstrained Chat reservations historically allow twice the common growth.
@@ -121,7 +122,7 @@ export function reserveChatWireBytes(wireBytes: number, request: ModelRequest, r
     // cost at most 64 bytes beyond twice its common bytes (largest index 31).
     // The existing 128-byte allowance per image covers both terms for full batches.
     const parts = Math.max(images * 128, textParts * 26 + images * 64);
-    return 2 * bytes + parts + (images ? 2 * Buffer.byteLength(JSON.stringify(id)) + 128 : 0);
+    return 2 * bytes + parts + (images ? 2 * utf8ByteLength(JSON.stringify(id)) + 128 : 0);
   });
   const context = contextWireGrowth('chat', request, reservation);
   return bounded(wireBytes + growth + context + 2 * (reservation.imageOmissionBytes ?? 0));

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
 import { ModelProtocolIssue, ProviderError } from './error.js';
 import { identity } from './value.js';
 import type { ModelExchange, ModelInputContent, ModelRequest, ModelRequestReservation, OpenAIResponsesReply } from './types.js';
@@ -53,10 +53,10 @@ function feedbackItems({ reply, feedback }: ModelExchange) {
 /** Only a stored response claims that its original input is still the current input. */
 export function responsesPrefixProof(requestDigest: string, reply: OpenAIResponsesReply): string {
   const { bindingId, model, continuation, previousResponseId } = reply.native;
-  return createHash('sha256')
+  return createSha256()
     .update('capix.openai-responses.reply.v1\n')
     .update(JSON.stringify([bindingId, model, continuation, previousResponseId, continuation === 'previous-response-id' ? requestDigest : null, reply.id, reply.model, [reply.termination.kind, reply.termination.reason], outputItems(reply, 'proof-v1')]))
-    .digest('hex');
+    .digestHex();
 }
 
 function isResponses(reply: ModelExchange['reply']): reply is OpenAIResponsesReply {
@@ -72,7 +72,7 @@ function addHistoryIdentity(ids: Set<string>, id: string): void {
 function projectHistory(request: ModelRequest, binding: ResponsesBinding) {
   const stored = binding.continuation === 'previous-response-id';
   let input: unknown[] = request.messages.map((message) => ({ role: message.role, content: typeof message.content === 'string' ? message.content : message.content.map(inputPart) }));
-  const prefix = createHash('sha256').update('capix.openai-responses.input.v1\n');
+  const prefix = createSha256().update('capix.openai-responses.input.v1\n');
   const append = (item: unknown) => prefix.update(JSON.stringify(item)).update('\n');
   if (stored) for (const item of input) append(item);
   let previousResponseId: string | null = null;
@@ -91,7 +91,7 @@ function projectHistory(request: ModelRequest, binding: ResponsesBinding) {
       checkResponsesCallId(item.id);
       addHistoryIdentity(callIds, item.id);
     }
-    if (native.prefixSha256 !== responsesPrefixProof(prefix.copy().digest('hex'), reply)) throw new TypeError('Responses history disagrees with its original reply');
+    if (native.prefixSha256 !== responsesPrefixProof(prefix.copy().digestHex(), reply)) throw new TypeError('Responses history disagrees with its original reply');
     const feedback = feedbackItems(exchange);
     if (stored) {
       append(native.prefixSha256);
@@ -103,7 +103,7 @@ function projectHistory(request: ModelRequest, binding: ResponsesBinding) {
       input.push(...outputItems(reply, 'replay'), ...feedback);
     }
   }
-  return { input, source: { ...binding, previousResponseId, prefixSha256: prefix.digest('hex') } };
+  return { input, source: { ...binding, previousResponseId, prefixSha256: prefix.digestHex() } };
 }
 
 export function assertResponsesReservation(request: ModelRequest, reservation: ModelRequestReservation): void {

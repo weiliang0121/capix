@@ -1,4 +1,5 @@
-import { isPromise } from 'node:util/types';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { isKnownPromise } from '@weiliang0121/capix-platform/inspection';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import { captureInteractionValue, isNonBlankString } from '../value.js';
@@ -92,15 +93,15 @@ export class InteractionProgress<Delta> {
     this.#publishing = true;
     try {
       const decoded = this.#decode(captureInteractionValue(value));
-      if (isPromise(decoded)) {
-        void decoded.catch(() => undefined);
+      if (isKnownPromise(decoded)) {
+        void Promise.prototype.then.call(decoded, undefined, () => undefined);
         throw new TypeError('Progress data contract must be synchronous');
       }
       const captured = captureInteractionValue(decoded);
       // A contract may synchronously close or invalidate its owner. Never revive it.
       if (this.#unavailable) return this.#unavailable;
       if (this.#sealed) return Object.freeze({ kind: 'sealed' });
-      const bytes = Buffer.byteLength(JSON.stringify(captured), 'utf8');
+      const bytes = utf8ByteLength(JSON.stringify(captured));
       if (bytes > this.#limits.maxBytes - this.#bytes || this.#items.length >= this.#limits.maxEntries || !this.#budget.reserveBytes(bytes)) return this.invalidate('capacity');
       this.#bytes += bytes;
       const cursor = position(this.interactionId, ++this.#head);

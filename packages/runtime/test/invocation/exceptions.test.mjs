@@ -8,7 +8,7 @@ import { ExceptionContract } from '@weiliang0121/capix-invocation';
 
 import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
-const runtime = (scene, options = {}, resources = new Resources()) => new Runner(scene, resources, undefined, options).build();
+const runtime = (scene, options = {}, resources = new Resources()) => new Runner(scene, resources, options).build();
 
 test('a local result receiver handles ordinary and typed domain errors without raises declarations', async () => {
   const contract = new ExceptionContract('DOMAIN_REJECTED');

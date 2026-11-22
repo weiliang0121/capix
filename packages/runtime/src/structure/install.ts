@@ -1,4 +1,4 @@
-import { types } from 'node:util';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { BoundChildren } from '../binding/children/bound.js';
 import { InvocationWorkBinding } from '../binding/work.js';
@@ -72,7 +72,7 @@ export function installCallable<Structure extends AnyCallable, Options>(structur
 function checkTree(root: AnyCallable): readonly AnyCallable[] {
   const seen = new Set<AnyCallable>();
   const visit = (structure: AnyCallable, parent?: AnyCallable): void => {
-    if (types.isProxy(structure)) throw new TypeError('Callable structures cannot be proxies');
+    if (isOpaqueObject(structure)) throw new TypeError('Callable structures cannot be proxies');
     if (!(structure instanceof Callable)) throw new TypeError('Callable structure must be a Scene, Group or Node');
     assertStructureConfigurable(structure);
     if (!Object.isExtensible(structure)) throw new Error('Callable structure must allow construction before build');

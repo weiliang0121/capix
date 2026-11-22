@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
 import { ProviderError } from './error.js';
 import type { AnthropicMessagesBlock, AnthropicMessagesConfiguration, ModelExchange, ModelInputContent, ModelRequest, ModelRequestReservation } from './types.js';
 import { record } from './value.js';
@@ -16,12 +16,12 @@ function canonical(value: unknown): unknown {
 
 /** Include the fixed assistant layout: a later thinking block can follow text or a call within the same message. */
 export function signedPrefix(requestPrefix: string, blocks: readonly AnthropicMessagesBlock[], output: ModelExchange['reply']['output']): string {
-  return createHash('sha256')
+  return createSha256()
     .update('capix.anthropic-messages.signed.v1\n')
     .update(requestPrefix)
     .update('\n')
     .update(JSON.stringify(canonical({ blocks, output })))
-    .digest('hex');
+    .digestHex();
 }
 
 export type MessagesBinding = Pick<AnthropicMessagesConfiguration, 'bindingId' | 'model' | 'anthropicVersion'>;
@@ -71,19 +71,19 @@ export function projectMessagesHistory(request: ModelRequest, binding: MessagesB
   });
   // Newlines frame UTF-8 JSON records unambiguously. Copy the incremental
   // state at each signed boundary without rehashing earlier messages.
-  const prefix = createHash('sha256').update('capix.anthropic-messages.prefix.v1\n');
+  const prefix = createSha256().update('capix.anthropic-messages.prefix.v1\n');
   const append = (value: unknown) => prefix.update(JSON.stringify(value)).update('\n');
   append({ system, tools: tools ?? [] });
   for (const message of messages) append(message);
   for (const exchange of request.exchanges ?? []) {
     const native = exchange.reply.native;
-    if (native.format === 'anthropic-messages' && native.prefixSha256 !== undefined && native.prefixSha256 !== signedPrefix(prefix.copy().digest('hex'), native.blocks, exchange.reply.output)) throw new TypeError('Signed Messages history requires its original conversation prefix');
+    if (native.format === 'anthropic-messages' && native.prefixSha256 !== undefined && native.prefixSha256 !== signedPrefix(prefix.copy().digestHex(), native.blocks, exchange.reply.output)) throw new TypeError('Signed Messages history requires its original conversation prefix');
     for (const message of encodeExchange(exchange, binding)) {
       messages.push(message);
       append(message);
     }
   }
-  return { system, tools, messages, prefixSha256: prefix.digest('hex') };
+  return { system, tools, messages, prefixSha256: prefix.digestHex() };
 }
 
 /** Validate fixed history and any proposed growth against the saved signed prefix. */

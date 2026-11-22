@@ -1,10 +1,12 @@
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
 import { DEFAULT_INTERACTION_TEXT_UNITS, MAX_INTERACTION_TEXT_UNITS, Interaction, type InteractionChannel, type InteractionReference, type InteractionState, type InteractionDataLimits } from '@weiliang0121/capix-interaction';
 import type { ModelReply, ModelRequest, ToolResult } from '@weiliang0121/capix-model-provider';
 import { maximumFeedbackImages, requireModelReply, requireModelRequest } from '@weiliang0121/capix-model-provider';
 import { ModelExchangeResource, type ModelExchanges, type ExchangeReference, type ExchangePrefix } from '@weiliang0121/capix-model-exchanges';
 import { RuntimeError, stableValue } from '@weiliang0121/capix-contracts';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';
-import { isDeepStrictEqual, types } from 'node:util';
+import { isOpaqueObject, isKnownPromise } from '@weiliang0121/capix-platform/inspection';
+import { equalData } from '@weiliang0121/capix-platform/equal';
 import { ResourceOffer, ResourcePortError, type ResourceOperation, type ResourcesOf } from '@weiliang0121/capix-resources';
 import { Node, checkpointPoint, type NodeWork, type ResumeWork } from '@weiliang0121/capix-structure';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
@@ -46,7 +48,7 @@ export interface ToolModelInput extends ExchangePrefix {
 function recoveryField(value: object, key: string): PropertyDescriptor | undefined {
   let current: object | null = value;
   while (current !== null) {
-    if (types.isProxy(current)) throw new TypeError('Tool recovery configuration must not contain proxies');
+    if (isOpaqueObject(current)) throw new TypeError('Tool recovery configuration must not contain proxies');
     const field = Object.getOwnPropertyDescriptor(current, key);
     if (field) {
       if (!('value' in field)) throw new TypeError('Tool recovery configuration must use data properties');
@@ -66,13 +68,13 @@ export interface CapturedToolModelSource {
 function captureModelSource(source: ToolModelSource): CapturedToolModelSource {
   const recovery = recoveryField(source, 'recovery')?.value;
   if (recovery === undefined) return Object.freeze({ source });
-  if (!recovery || typeof recovery !== 'object' || Array.isArray(recovery) || types.isProxy(recovery)) throw new TypeError('Tool recovery requires a host read capability');
+  if (!recovery || typeof recovery !== 'object' || Array.isArray(recovery) || isOpaqueObject(recovery)) throw new TypeError('Tool recovery requires a host read capability');
   const read = recoveryField(recovery, 'read')?.value;
-  if (typeof read !== 'function' || types.isProxy(read)) throw new TypeError('Tool recovery requires a host read capability');
+  if (typeof read !== 'function' || isOpaqueObject(read)) throw new TypeError('Tool recovery requires a host read capability');
   const configured = recoveryField(recovery, 'interactionLimits')?.value;
   let interactionLimits: InteractionDataLimits | undefined;
   if (configured !== undefined) {
-    if (!configured || typeof configured !== 'object' || Array.isArray(configured) || types.isProxy(configured)) throw new TypeError('Tool recovery limits must be plain data');
+    if (!configured || typeof configured !== 'object' || Array.isArray(configured) || isOpaqueObject(configured)) throw new TypeError('Tool recovery limits must be plain data');
     const prototype = Object.getPrototypeOf(configured);
     if (prototype !== Object.prototype && prototype !== null) throw new TypeError('Tool recovery limits must be plain data');
     const fields = Object.getOwnPropertyDescriptors(configured);
@@ -97,19 +99,19 @@ export const ToolModelResource = new ResourceOffer({
   capture: captureModelSource,
   methods: {
     prepare({ source }: CapturedToolModelSource, input: { readonly prefix: ExchangePrefix; readonly context: ToolRequestContext; readonly boundary?: ToolCapacityBoundary }) {
-      if (types.isProxy(source)) throw new TypeError('Tool request context requires a host preparation capability');
+      if (isOpaqueObject(source)) throw new TypeError('Tool request context requires a host preparation capability');
       const prefix = stableValue(input.prefix);
       const closed = source.exchanges.closed(prefix.origin, prefix.exchanges);
       if (source.exchanges.values(prefix.origin).length !== closed.length) throw new TypeError('Tool request preparation requires the complete closed origin prefix');
       const field = Object.getOwnPropertyDescriptor(source, 'context');
       if (!field || !field.enumerable || !('value' in field)) throw new TypeError('Tool request context requires an own host preparation capability');
       const capability = field.value;
-      if (!capability || typeof capability !== 'object' || Array.isArray(capability) || types.isProxy(capability) || Object.getOwnPropertySymbols(capability).length) throw new TypeError('Tool request context requires a host preparation capability');
+      if (!capability || typeof capability !== 'object' || Array.isArray(capability) || isOpaqueObject(capability) || Object.getOwnPropertySymbols(capability).length) throw new TypeError('Tool request context requires a host preparation capability');
       const descriptors = Object.getOwnPropertyDescriptors(capability);
       const prepare = descriptors.prepare;
-      if (Object.keys(descriptors).length !== 1 || !prepare || !prepare.enumerable || !('value' in prepare) || typeof prepare.value !== 'function' || types.isProxy(prepare.value)) throw new TypeError('Tool context preparation must be an own synchronous method');
+      if (Object.keys(descriptors).length !== 1 || !prepare || !prepare.enumerable || !('value' in prepare) || typeof prepare.value !== 'function' || isOpaqueObject(prepare.value)) throw new TypeError('Tool context preparation must be an own synchronous method');
       const value: unknown = Reflect.apply(prepare.value, capability, [prefix, input.boundary === undefined ? undefined : stableValue(input.boundary)]);
-      if (types.isPromise(value)) {
+      if (isKnownPromise(value)) {
         void Promise.prototype.then.call(value, undefined, () => undefined);
         throw new TypeError('Tool request context preparation must be synchronous');
       }
@@ -141,7 +143,7 @@ export const ToolModelResource = new ResourceOffer({
         return { toolCallId: call.id, ...result };
       });
       for (const feedback of current.feedback) assertToolFeedbackBytes(feedback.toolCallId, { status: feedback.status, content: feedback.content }, input.budgets);
-      const feedbackGrowth = pending.reduce((total, call, index) => total + reservations.get(call.id)!.maxBytes - Buffer.byteLength(JSON.stringify(placeholders[index]), 'utf8'), 0);
+      const feedbackGrowth = pending.reduce((total, call, index) => total + reservations.get(call.id)!.maxBytes - utf8ByteLength(JSON.stringify(placeholders[index])), 0);
       const projectedExchange = { reply: current.reply, feedback: [...current.feedback, ...placeholders] };
       const unknown = pending.map((call) => reservations.get(call.id)!).filter((slot) => slot.fixed === undefined);
       const reference = source.exchanges.reference(current);
@@ -151,7 +153,7 @@ export const ToolModelResource = new ResourceOffer({
         // installed feedback, then compare the ordinary batch's full reservation.
         const minimum = pending.map(({ id: toolCallId }) => ({ toolCallId, status: 'ok' as const, content: [{ kind: 'text' as const, text: '' }] }));
         const sample = source.exchanges.previewFeedback(prefix, reference, minimum);
-        const growth = minimum.reduce((sum, slot) => sum + reservations.get(slot.toolCallId)!.maxBytes - Buffer.byteLength(JSON.stringify(slot)), 0);
+        const growth = minimum.reduce((sum, slot) => sum + reservations.get(slot.toolCallId)!.maxBytes - utf8ByteLength(JSON.stringify(slot)), 0);
         const raw = { reply: current.reply, feedback: [...current.feedback, ...minimum] };
         for (const exchange of [raw, sample.request.exchanges!.at(-1)!]) {
           const failure = assertToolExchangeBytes(exchange, growth, input.defer);
@@ -177,7 +179,7 @@ export const ToolModelResource = new ResourceOffer({
         if (failure) return failure;
       }
       const emptyContext = toolContextMessage('');
-      const contextBytes = Buffer.byteLength(JSON.stringify(emptyContext), 'utf8');
+      const contextBytes = utf8ByteLength(JSON.stringify(emptyContext));
       // Count the message's structure too; byte growth alone cannot reserve nodes.
       const contextPlaceholder = input.context && input.context.maxBytes >= contextBytes ? emptyContext : undefined;
       const estimate = { ...base, ...(contextPlaceholder ? { messages: Object.freeze([...base.messages, contextPlaceholder]) } : {}) };
@@ -187,7 +189,7 @@ export const ToolModelResource = new ResourceOffer({
       const additionalNodes = placeholders.reduce((sum, value) => {
         const slot = reservations.get(value.toolCallId)!;
         if (slot.fixed !== undefined) return sum;
-        const extraParts = Math.min(31, Math.floor((slot.maxBytes - Buffer.byteLength(JSON.stringify(value))) / 26));
+        const extraParts = Math.min(31, Math.floor((slot.maxBytes - utf8ByteLength(JSON.stringify(value))) / 26));
         return sum + 3 * extraParts + maximumFeedbackImages(value.toolCallId, slot.maxBytes);
       }, 0);
       return assertToolRequestBytes(estimate, input.budgets, source.inspection, { growth: feedbackGrowth + contextGrowthBytes + imageOmissionBytes, additionalNodes, reservation: { feedback: unknown, contextGrowthBytes, ...(contextPlaceholder ? { mutableContext: true, contextShape: 'trailing-user-text' as const } : {}), ...(imageOmissionBytes ? { imageOmissionBytes, imageOmissionByExchange: preview.omissionBytes } : {}) }, defer: input.defer });
@@ -199,7 +201,7 @@ export const ToolModelResource = new ResourceOffer({
       reserveToolFeedback(
         snapshot.entries,
         current,
-        feedback.map((value) => Buffer.byteLength(JSON.stringify(value))),
+        feedback.map((value) => utf8ByteLength(JSON.stringify(value))),
         input.budgets,
         snapshot.origins,
       );
@@ -209,7 +211,7 @@ export const ToolModelResource = new ResourceOffer({
     confirm({ source, recovery }: CapturedToolModelSource, input: { readonly reference: InteractionReference; readonly basis: ToolModelInput; readonly reply?: ModelReply; readonly budgets: ToolByteBudgets; readonly context?: ToolRequestContext; readonly capacity?: ToolCapacityReason }) {
       try {
         const saved = recovery?.read(input.reference.id);
-        if (types.isPromise(saved)) {
+        if (isKnownPromise(saved)) {
           void Promise.prototype.then.call(saved, undefined, () => undefined);
           throw new TypeError('Tool interaction recovery read must be synchronous');
         }
@@ -222,9 +224,9 @@ export const ToolModelResource = new ResourceOffer({
         const historical = request(source, input.basis, input.context);
         if (input.capacity) assertToolRequestBytes(historical, input.budgets, source.inspection, undefined, input.capacity);
         else assertToolHistoricalRequest(historical, input.budgets);
-        if (state.id !== input.reference.id || received.kind !== 'received' || !isDeepStrictEqual(state.request, historical)) throw new Error('Original model request or durable feedback is unavailable');
+        if (state.id !== input.reference.id || received.kind !== 'received' || !equalData(state.request, historical)) throw new Error('Original model request or durable feedback is unavailable');
         assertToolReplyBytes(received.feedback.payload, input.budgets);
-        if (input.reply !== undefined && !isDeepStrictEqual(input.reply, received.feedback.payload)) throw new Error('Completed model reply differs from its durable interaction');
+        if (input.reply !== undefined && !equalData(input.reply, received.feedback.payload)) throw new Error('Completed model reply differs from its durable interaction');
       } catch (cause) {
         if (cause instanceof PersistenceError) throw cause;
         throw new ResourcePortError('Tool recovery requires exact original model request and durable feedback; it will not resend', { cause: new RuntimeError('CHECKPOINT_CONTENT_CHANGED', 'Saved model interaction does not match the fixed request', undefined, { cause }) });
@@ -286,7 +288,7 @@ export function createToolCompletion(checkpoint: boolean, catalog: ToolCatalog, 
   function verify(work: Work): void {
     const origin = work.resources.exchanges.origin(work.input.origin);
     assertToolContextText(work.input.context, context);
-    if (origin.catalog.digest !== catalog.digest || origin.catalog.policyVersion !== catalog.policyVersion || !isDeepStrictEqual(origin.catalog.tools, catalog.tools) || !isDeepStrictEqual(origin.catalog.imageContext, catalog.imageContext)) throw new ResourcePortError('Tool catalog differs from the fixed model origin', { cause: new RuntimeError('CHECKPOINT_CONTENT_CHANGED', 'Tool catalog differs from the fixed model origin') });
+    if (origin.catalog.digest !== catalog.digest || origin.catalog.policyVersion !== catalog.policyVersion || !equalData(origin.catalog.tools, catalog.tools) || !equalData(origin.catalog.imageContext, catalog.imageContext)) throw new ResourcePortError('Tool catalog differs from the fixed model origin', { cause: new RuntimeError('CHECKPOINT_CONTENT_CHANGED', 'Tool catalog differs from the fixed model origin') });
   }
   const point = checkpointPoint<'node', ToolModelInput, ToolCompletion>();
   const completed = point({

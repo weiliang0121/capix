@@ -385,9 +385,9 @@ test('fixed content writes still require actual parent reception and retain exac
     run: async function (work) {
       const call = work.children.create(child, work.input);
       await call.run();
-      return call.accept((content) => {
-        const first = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-        assert.equal(work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }), first);
+      return call.accept((content, permit) => {
+        const first = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit);
+        assert.equal(work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit), first);
         return first;
       });
     },
@@ -451,7 +451,7 @@ test('Runner restoration opens fresh resource endpoints and preserves fixed inpu
     });
     const resources = new Resources();
     resources.capture(scene, (_input, options) => options.snapshot).register(snapshot, (value) => value);
-    return new Runner(scene, resources, undefined, { checkpoints: { store } }).build();
+    return new Runner(scene, resources, { checkpoints: { store } }).build();
   };
   class Capture extends MemoryCheckpointStore {
     save(image, revision) {
@@ -481,7 +481,7 @@ test('a saved returned child is accepted through new resource access without rer
         return 'durable answer';
       },
     });
-    const receive = (work, call) => call.accept((content) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }));
+    const receive = (work, call) => call.accept((content, permit) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit));
     const point = checkpointPoint()({
       name: 'returned',
       state: codec,
@@ -506,7 +506,7 @@ test('a saved returned child is accepted through new resource access without rer
     scene.add(answer);
     const resources = new Resources();
     resources.register(TranscriptResource.append, transcript);
-    return new Runner(scene, resources, undefined, { checkpoints: { store } }).build();
+    return new Runner(scene, resources, { checkpoints: { store } }).build();
   };
   class Capture extends MemoryCheckpointStore {
     save(image, revision) {

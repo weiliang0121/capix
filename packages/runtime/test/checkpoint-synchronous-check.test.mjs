@@ -77,7 +77,7 @@ for (const [name, invalidCheck] of invalidChecks) {
       },
       { saved: () => advanced++ },
     );
-    const runner = new Runner(scene, new Resources(), undefined, { checkpoints: { store: port } }).build();
+    const runner = new Runner(scene, new Resources(), { checkpoints: { store: port } }).build();
     await assert.rejects(runner.run({ query: 'input' }), /synchron|thenable|asynchron/i);
     assert.equal(checks, 1);
     assert.equal(advanced, 0);
@@ -97,7 +97,7 @@ for (const [name, invalidCheck] of invalidChecks) {
       },
       finish: (id, revision, delivery) => journal.finish(id, revision, delivery),
     };
-    await new Runner(structure(), new Resources(), undefined, { checkpoints: { store: seedPort } }).build().run({ query: 'input' });
+    await new Runner(structure(), new Resources(), { checkpoints: { store: seedPort } }).build().run({ query: 'input' });
     const { port, store, counts } = countedStore();
     store.save(structuredClone(savedImage), 0);
     const id = savedImage.frame.owner.contextId;
@@ -111,7 +111,7 @@ for (const [name, invalidCheck] of invalidChecks) {
       },
       { resumed: () => resumed++ },
     );
-    const runner = new Runner(scene, new Resources(), undefined, { checkpoints: { store: port } }).build();
+    const runner = new Runner(scene, new Resources(), { checkpoints: { store: port } }).build();
     await assert.rejects(runner.resume(id), /synchron|thenable|asynchron/i);
     assert.equal(checks, 1);
     assert.equal(resumed, 0);

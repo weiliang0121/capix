@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-test('Runtime exports preserve the independent interaction and shared persistence error identities', async () => {
-  const interaction = await import('@weiliang0121/capix-interaction');
+test('Runtime keeps Interaction independent and shares persistence error identity', async () => {
   const diagnostics = await import('@weiliang0121/capix-diagnostics');
   const invocation = await import('@weiliang0121/capix-invocation');
   const runtime = await import('@weiliang0121/capix-runtime');
-  assert.equal(runtime.Interaction, interaction.Interaction);
-  assert.equal(runtime.Interactions, interaction.Interactions);
+  assert.equal('Interaction' in runtime, false);
+  assert.equal('Interactions' in runtime, false);
   assert.equal(runtime.PersistenceError, diagnostics.PersistenceError);
   assert.equal(invocation.PersistenceError, diagnostics.PersistenceError);
   assert.equal(runtime.RuntimeErrorHelper, diagnostics.RuntimeErrorHelper);
@@ -80,7 +79,10 @@ test('real interaction persistence failures remain protected through resource re
             return 'cannot mask a persistence failure';
           },
         });
-        const runner = new Runner(scene, new Resources().registerInteraction(offer, contract), exchanges).build();
+        const runner = new Runner(
+          scene,
+          new Resources().registerBinding(offer, () => exchanges.bind(contract)),
+        ).build();
         await assert.rejects(runner.run(null), (error) => {
           assert.ok(error instanceof PersistenceError);
           assert.equal(error, sourceFailure);

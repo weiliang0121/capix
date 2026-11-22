@@ -149,7 +149,7 @@ test('a newer latest observed just before upload stops the previously eligible p
 });
 
 test('an exact internal dependency outside the batch must exist before upload or release confirmation', async (t) => {
-  const { directory, manifest, workspace } = await fixture(t, ['contracts', 'structure']);
+  const { directory, manifest, workspace } = await fixture(t, ['contracts', 'platform-node', 'platform', 'structure']);
   const dependency = workspace.get('@weiliang0121/capix-resources');
   const url = `${registry}/${encodeURIComponent(dependency.name)}`;
   for (const mode of ['publish', 'verify']) {

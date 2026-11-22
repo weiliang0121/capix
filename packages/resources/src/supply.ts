@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { Initializer } from './internal/initializer.js';
 import { applyResourceRefinement, isResourceRefinement, type ResourceRefinement } from './offer.js';
 import type { ResourceEndpointDefinition, ResourceProvider } from './provider.js';
