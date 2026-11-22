@@ -1,5 +1,14 @@
 # @weiliang0121/capix-changes
 
+## 0.7.2
+
+### Patch Changes
+
+- e5adad3: CAPiX 自带错误的 `name` 在 Metro 等构建工具压缩类名后仍保持稳定，诊断继续使用原有错误名。应用自定义的派生错误仍沿用自身的类名。
+- Updated dependencies [e5adad3]
+- Updated dependencies [e5adad3]
+  - @weiliang0121/capix-contracts@0.8.0
+
 ## 0.7.1
 
 ### Patch Changes
