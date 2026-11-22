@@ -4,13 +4,17 @@
 
 ## 安装与入口
 
-桌面运行基线为 Node.js `>=22.23.2`。在 iOS Hermes 的 Expo 应用中，先配置[宿主入口](https://github.com/weiliang0121/capix/blob/main/packages/platform/README.md#ios-hermes-启动)，再把 `import { fetch } from 'expo/fetch'` 导入的函数传给适配器的 `fetch` 选项。JSON 和 SSE 的响应读取都需要可读取的 `Response.body`。这一组合已通过本机 HTTP 服务验证。包使用 ESM，附带 TypeScript 类型声明。本页描述所在源码版本。npm 0.9.1 提供 Chat Completions；选择含其他适配器的版本时，可按包名核对[发布记录](https://github.com/weiliang0121/capix/releases)。
+包使用 ESM，附带 TypeScript 类型声明。完整回归在 Node.js 22.23.2 上运行，支持范围为 Node.js `>=22.23.2`。其他 JavaScript 宿主按使用的入口配置所需能力。[宿主能力与验证范围](https://github.com/weiliang0121/capix/blob/main/docs/host-platforms.md)
+
+适配器优先使用配置传入的 `fetch`，省略时使用 `globalThis.fetch`。JSON 和 SSE 都需要可读取的 `Response.body`。[iOS Hermes 接入](https://github.com/weiliang0121/capix/blob/main/docs/ios-hermes.md)
 
 ```sh
 npm install @weiliang0121/capix-model-provider
 ```
 
 - `@weiliang0121/capix-model-provider` 提供四种协议适配器、请求与回复校验、工具参数读取及传输错误类型。
+
+本页描述当前源码版本。npm 0.9.1 提供 Chat Completions，其他协议适配器的可用版本见[发布记录](https://github.com/weiliang0121/capix/releases)。
 
 ## 按部署端点选择适配器
 

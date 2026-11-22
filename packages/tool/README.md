@@ -4,7 +4,7 @@ Tool 将登记的 Node 或 Group 作为模型可选择的工具，串行执行�
 
 ## 安装与入口
 
-运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
+包使用 ESM，附带 TypeScript 类型声明。完整回归在 Node.js 22.23.2 上运行，支持范围为 Node.js `>=22.23.2`。其他 JavaScript 宿主按使用的入口配置所需能力。[宿主能力与验证范围](https://github.com/weiliang0121/capix/blob/main/docs/host-platforms.md)
 
 ```sh
 npm install @weiliang0121/capix-tool
@@ -43,6 +43,8 @@ const scene = new Scene(answer);
 ```
 
 `tools` 的键同时是模型工具名和成员选择名，不再逐项调用 `tool()` 工厂或重复 `add`。`input` 必须与成员输入类型匹配，成功映射参数从成员输出推导为 `Stable<Output>`。提前定义登记项时可用 `satisfies ToolMember<typeof lookup>` 保持类型检查。
+
+参数 Schema 应返回与原始参数等值的普通数据对象，嵌套字段也使用数据属性。自定义解析结果带 getter 时，Node 的预检可能读取 getter 并通过，随后在固定子调用输入时失败。通用入口在预检时就拒绝访问器。两条路径均在工具执行前终止。[参数接纳契约](https://github.com/weiliang0121/capix/blob/main/docs/native-tool-integration.md)
 
 参数 Schema 只校验，不做默认填充、转换或移除字段。非法 JSON、未知工具和 Schema 不匹配形成明确错误反馈，不创建工具子调用。Schema 自身故障及改变参数的解析结果会终止推进。工具的普通业务失败只有提供 `result.failed` 才转成反馈；取消、CP、资源持久化等受保护故障不进入业务失败映射。映射必须纯、无副作用；允许异步，但恢复可能重新执行尚未保存接纳的映射。
 

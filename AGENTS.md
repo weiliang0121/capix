@@ -17,6 +17,7 @@ CAPiX 是可组合、可观测的 Agent 框架。仓库维护框架包、可复�
 
 | 所有者                                   | 职责                                                                    |
 | ---------------------------------------- | ----------------------------------------------------------------------- |
+| platform / platform-node                 | 宿主能力入口与通用数据运算；按 Node 条件加载原生实现                    |
 | contracts / protocol                     | 共同进程内契约与唯一 RuntimeError；Transcript wire 的编码形状和单帧接纳 |
 | resources / changes                      | 资源登记、固定绑定、受控操作；类型化领域事实捕获与转交                  |
 | structure                                | Callable、Scene/Group/Node、成员与作者声明、Sequence/Dynamic            |

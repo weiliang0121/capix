@@ -1,6 +1,6 @@
 # @weiliang0121/capix-platform-node
 
-提供 Node.js `>=22.23.2` 的原生平台实现。CAPiX 在 Node 和 Electron 主进程的 Node 条件下自动选择此实现。
+提供 Node.js `>=22.23.2` 的原生平台实现。CAPiX 在 Node 和 Electron 主进程的 Node 条件下自动选择此实现。其他 JavaScript 宿主从 `@weiliang0121/capix-platform` 接入。[宿主能力与验证范围](https://github.com/weiliang0121/capix/blob/main/docs/host-platforms.md)
 
 ```sh
 npm install @weiliang0121/capix-platform-node

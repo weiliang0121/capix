@@ -4,7 +4,7 @@
 
 ## 安装与入口
 
-运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。
+包使用 ESM，附带 TypeScript 类型声明。完整回归在 Node.js 22.23.2 上运行，支持范围为 Node.js `>=22.23.2`。其他 JavaScript 宿主按使用的入口配置所需能力。[宿主能力与验证范围](https://github.com/weiliang0121/capix/blob/main/docs/host-platforms.md)
 
 独立资源包也可以由支持 ESM 条件解析的宿主加载。Node 条件使用内置 UUID 生成器，默认条件使用宿主的 `globalThis.crypto.randomUUID()`。宿主应在创建第一个 `ResourceOffer` 前提供该方法；资源声明、供给和每次操作分别生成身份。
 

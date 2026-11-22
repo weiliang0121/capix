@@ -4,15 +4,10 @@
 
 ### Minor Changes
 
-- e5adad3: 将自动记录观测安装拆为独立包。请从 `@weiliang0121/capix-recording` 导入 `bindRecording` 等记录预设，从 `@weiliang0121/capix-interaction` 导入交互实体。
-
-  Runner 的签名为 `new Runner(scene, resources, options?)`。从旧调用中删除第三位的 `interactions` 或 `undefined` 占位，将原第四位的配置移到第三位。原来只传了场景、资源与交互宿主的调用现在只传场景和资源。低层 CallableBuilder.build 与 CallableBinder.bind 同样将配置移到第三位。保留已通过普通资源供给的渠道。原 `resources.registerInteraction(offer, contract)` 登记改为 `resources.registerBinding(offer, () => interactions.bind(contract))` 按实际申请在构建时绑定。普通两参数运行继续可用。
+- e5adad3: 从 Runtime 拆出记录观测预设。原根入口和 recording 子路径下的 `bindRecording` 等导入改为 `@weiliang0121/capix-recording`。在 Runner 的 `observations` 配置中显式安装预设。Runner 配置的位置与资源绑定迁移见 [Runtime 变更记录](https://github.com/weiliang0121/capix/blob/main/packages/runtime/CHANGELOG.md)。
 
 ### Patch Changes
 
-- Updated dependencies [e5adad3]
-- Updated dependencies [e5adad3]
-- Updated dependencies [e5adad3]
 - Updated dependencies [e5adad3]
   - @weiliang0121/capix-contracts@0.8.0
   - @weiliang0121/capix-invocation@0.8.0

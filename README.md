@@ -30,7 +30,7 @@ CAPiX 是一个 Agent 框架，帮助你组合已有能力，构筑自己的智�
 - [按主题实践](https://weiliang0121.github.io/capix/examples/)：结构、资源、实体、输出和记录的可运行示例。
 - [参考与契约](https://weiliang0121.github.io/capix/README.html)：准确的 API、生命周期与承诺边界。
 
-已发布的基础包可从 npm 安装，运行环境为 **Node.js 22.23.2 或更新版本**：
+基础包可以从 npm 安装。Node.js 22.23.2 是框架的完整回归基准，包声明支持 Node.js 22.23.2 及以上版本。其他 JavaScript 宿主可按所用能力接入，已验证的组合包括标准 iOS Hermes 模拟器。[宿主能力与验证范围](docs/host-platforms.md)
 
 ```sh
 npm install @weiliang0121/capix-resources @weiliang0121/capix-structure @weiliang0121/capix-runtime

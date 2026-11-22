@@ -77,7 +77,7 @@ const rows = await runFeatureMatrix();
 console.log(JSON.stringify(rows, null, 2));
 ```
 
-In an iOS Expo/Hermes app with `expo-crypto`, use a Metro version that supports package `exports` and `imports` with the React Native resolution conditions. The CAPiX package imports select their `default` targets on iOS. Configure CAPiX before the fixture or any other CAPiX consumer is evaluated. The dynamic import runs after configuration so that checks and Offer UUID allocation during module initialization use the configured platform. Call `runCapixMatrix()` from the app. [iOS app entry example](../../packages/platform/README.md#ios-hermes-启动), [Metro module resolution](https://metrobundler.dev/docs/resolution/)
+In an iOS Expo/Hermes app with `expo-crypto`, use a Metro version that supports package `exports` and `imports` with the React Native resolution conditions. The CAPiX package imports select their `default` targets on iOS. Configure CAPiX before the fixture or any other CAPiX consumer is evaluated. The dynamic import runs after configuration so that checks and Offer UUID allocation during module initialization use the configured platform. Call `runCapixMatrix()` from the app. [iOS app entry example](../../docs/ios-hermes.md), [Metro module resolution](https://metrobundler.dev/docs/resolution/)
 
 ```js
 import { randomUUID } from 'expo-crypto';
