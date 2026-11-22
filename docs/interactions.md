@@ -6,7 +6,7 @@
 
 `@weiliang0121/capix-interaction` 提供 Interaction、Interactions 及请求、反馈、持久与观察契约；不依赖 Runtime、Invocation、结构、资源或 Recorder。共享 PersistenceError 由 diagnostics 提供，错误是否可以业务降级仍由 invocation 决定。
 
-Runtime 根据结构固定申请和资源接线。`new Runner(scene, resources, interactions, capabilities).build()` 可接受独立 Interactions；`Resources.registerInteraction` 在构建时取得准确契约通道并兑现资源供给，不发送请求，也不取得交互实体所有权。业务只使用当前窗口的资源端点，不能复用已经结束的 Work 端点。
+宿主从 `@weiliang0121/capix-interaction` 创建 Interactions，用 `resources.registerBinding(offer, () => interactions.bind(contract))` 供给渠道。Runner 在 build 时为实际申请的 Offer 取得准确契约通道。发送、持久反馈和关闭仍归宿主管理，业务通过当前调用窗口内的资源端点访问渠道。
 
 ## 固定契约与一次发送
 
@@ -25,7 +25,9 @@ const status = await channel.wait(reference, { waitMs: 1000 });
 
 注册按准确契约对象匹配，key 也必须唯一。bind 不创建请求；同 key 的另一个对象不能替代已登记契约。参考值含 id 和 contract，用于准确读取，不自动授权某次业务恢复。
 
-请求与反馈正文在契约转换前后分别捕获为有界 JSON 数据（每域深度 64、100000 值，默认文本与键合计 16 Mi UTF-16 代码单元），复制冻结。options / registration 的 `limits.requestTextUnits`、`limits.replyTextUnits` 可分别配置至 `MAX_INTERACTION_TEXT_UNITS`（64 Mi），构造和登记时固定配置。冷恢复按相同分域规则重新检查请求、反馈正文、外壳与失败诊断，不把合法独立正文重新塞入共享文本预算。拒绝 getter、Proxy、函数、活实体、循环和非 JSON 数据。固定请求经同步 persistence.create 成功后实体才可用；start 保存发送登记后仅调用一次发送者。发送返回后固定并检查反馈，持久提交成功才通知等待者。started 只表达本地意图，不能证明远端执行完成。
+请求与反馈正文在契约转换前后分别捕获为有界 JSON 数据（每域深度 64、100000 值，默认文本与键合计 16 Mi UTF-16 代码单元），复制冻结。options / registration 的 `limits.requestTextUnits`、`limits.replyTextUnits` 可分别配置至 `MAX_INTERACTION_TEXT_UNITS`（64 Mi），构造和登记时固定配置。冷恢复按相同分域规则重新检查请求、反馈正文、外壳与失败诊断，不把合法独立正文重新塞入共享文本预算。拒绝 getter、函数、活实体、循环和非 JSON 数据。原生检查拒绝 Proxy，采用作者保证模式时由宿主提供无代理的数据。[宿主对象检查](runtime-boundaries.md#宿主对象检查)
+
+固定请求经同步 persistence.create 成功后实体才可用；start 保存发送登记后仅调用一次发送者。发送返回后固定并检查反馈，持久提交成功才通知等待者。started 只表达本地意图，不能证明远端执行完成。
 
 反馈非破坏读取，多个读者不争抢消费槽位。同 ID、同正文的反馈确认不覆盖结果；不同反馈拒绝。直接调用 receive 时，反馈校验失败在提交前抛错，原状态保持不变。start 的发送者抛错或返回非法反馈时，若尚无已接纳反馈，会尝试提交失败诊断。成功提交后可读到 unavailable；提交本身失败则报告持久化故障。业务解释失败不会删除已保存反馈。PersistenceError 保留准确故障身份，不能通过重新执行外部工作来修复未知保存结果。
 

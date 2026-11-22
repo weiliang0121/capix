@@ -10,7 +10,7 @@ import ts from 'typescript';
 function install(dynamic, resources = new Resources(), capabilities = {}) {
   const scene = new Scene().add({ dynamic });
   scene.run = (work) => work.children.dynamic.invoke(work.input);
-  return new Runner(scene, resources, undefined, capabilities).build();
+  return new Runner(scene, resources, capabilities).build();
 }
 
 const finish = (value) => ({ kind: 'finish', value });

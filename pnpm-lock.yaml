@@ -14,6 +14,9 @@ importers:
       '@types/node':
         specifier: 22.19.11
         version: 22.19.11
+      '@weiliang0121/capix-changes':
+        specifier: workspace:*
+        version: link:packages/changes
       '@weiliang0121/capix-checkpoint':
         specifier: workspace:*
         version: link:packages/checkpoint
@@ -29,6 +32,9 @@ importers:
       '@weiliang0121/capix-invocation':
         specifier: workspace:*
         version: link:packages/invocation
+      '@weiliang0121/capix-measurement':
+        specifier: workspace:*
+        version: link:packages/measurement
       '@weiliang0121/capix-memory':
         specifier: workspace:*
         version: link:packages/memory
@@ -38,6 +44,15 @@ importers:
       '@weiliang0121/capix-model-provider':
         specifier: workspace:*
         version: link:packages/model-provider
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:packages/platform
+      '@weiliang0121/capix-protocol':
+        specifier: workspace:*
+        version: link:packages/protocol
+      '@weiliang0121/capix-recording':
+        specifier: workspace:*
+        version: link:packages/recording
       '@weiliang0121/capix-records':
         specifier: workspace:*
         version: link:packages/records
@@ -98,6 +113,9 @@ importers:
       '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
@@ -109,6 +127,9 @@ importers:
       '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
@@ -124,6 +145,9 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
@@ -146,6 +170,9 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -173,6 +200,9 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -194,6 +224,9 @@ importers:
       '@weiliang0121/capix-model-provider':
         specifier: workspace:*
         version: link:../model-provider
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -201,7 +234,25 @@ importers:
         specifier: workspace:*
         version: link:../view
 
-  packages/model-provider: {}
+  packages/model-provider:
+    dependencies:
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
+
+  packages/platform:
+    dependencies:
+      '@noble/hashes':
+        specifier: 2.2.0
+        version: 2.2.0
+      '@scure/base':
+        specifier: 2.2.0
+        version: 2.2.0
+      '@weiliang0121/capix-platform-node':
+        specifier: workspace:*
+        version: link:../platform-node
+
+  packages/platform-node: {}
 
   packages/protocol:
     dependencies:
@@ -212,6 +263,46 @@ importers:
       '@weiliang0121/capix-transcript':
         specifier: workspace:*
         version: link:../transcript
+
+  packages/recording:
+    dependencies:
+      '@weiliang0121/capix-changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@weiliang0121/capix-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@weiliang0121/capix-invocation':
+        specifier: workspace:*
+        version: link:../invocation
+      '@weiliang0121/capix-records':
+        specifier: workspace:*
+        version: link:../records
+      '@weiliang0121/capix-resources':
+        specifier: workspace:*
+        version: link:../resources
+      '@weiliang0121/capix-runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@weiliang0121/capix-structure':
+        specifier: workspace:*
+        version: link:../structure
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+    devDependencies:
+      '@weiliang0121/capix-checkpoint':
+        specifier: workspace:*
+        version: link:../checkpoint
+      '@weiliang0121/capix-memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@weiliang0121/capix-transcript':
+        specifier: workspace:*
+        version: link:../transcript
+      '@weiliang0121/capix-view':
+        specifier: workspace:*
+        version: link:../view
 
   packages/records:
     dependencies:
@@ -224,6 +315,9 @@ importers:
       '@weiliang0121/capix-memory':
         specifier: workspace:*
         version: link:../memory
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -242,6 +336,9 @@ importers:
       '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
 
   packages/runtime:
     dependencies:
@@ -257,15 +354,12 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@weiliang0121/capix-interaction':
-        specifier: workspace:*
-        version: link:../interaction
       '@weiliang0121/capix-invocation':
         specifier: workspace:*
         version: link:../invocation
-      '@weiliang0121/capix-records':
+      '@weiliang0121/capix-platform':
         specifier: workspace:*
-        version: link:../records
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -276,9 +370,9 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
     devDependencies:
-      '@weiliang0121/capix-measurement':
+      '@weiliang0121/capix-interaction':
         specifier: workspace:*
-        version: link:../measurement
+        version: link:../interaction
       '@weiliang0121/capix-memory':
         specifier: workspace:*
         version: link:../memory
@@ -300,6 +394,9 @@ importers:
       '@weiliang0121/capix-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -324,6 +421,9 @@ importers:
       '@weiliang0121/capix-model-provider':
         specifier: workspace:*
         version: link:../model-provider
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -349,6 +449,9 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -367,6 +470,9 @@ importers:
       '@weiliang0121/capix-diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
+      '@weiliang0121/capix-platform':
+        specifier: workspace:*
+        version: link:../platform
       '@weiliang0121/capix-resources':
         specifier: workspace:*
         version: link:../resources
@@ -901,6 +1007,10 @@ packages:
     resolution: {integrity: sha512-j37dj/h6p6pots1L7pLPPNuABEEu9WP4OYg9pW1g+nYG331j0+3canE9OagtYdytYvdSAMG+2fKU5cxep6LgjA==}
     engines: {node: '>=22.12.0'}
 
+  '@noble/hashes@2.2.0':
+    resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
+    engines: {node: '>= 20.19.0'}
+
   '@pnpm/deps.graph-sequencer@1100.0.1':
     resolution: {integrity: sha512-pOr5+q1fLYKwFN3LAJuGZEnfXDcQ73zqgDHMtGy+K+uIoUqyY+6MeDCWFwfu+4EFuq76I5EPFofoNAI+Bmmq4A==}
     engines: {node: '>=22.13'}
@@ -1047,6 +1157,9 @@ packages:
     resolution: {integrity: sha512-ee+c14ggUiM7lg4PtCjSBYU9O9dHp4FFespRnd5yj7SilUBJCL3x3aHlB+sIqbGjcPo3pEyODASnfKJuZ26YBw==}
     cpu: [x64]
     os: [win32]
+
+  '@scure/base@2.2.0':
+    resolution: {integrity: sha512-b8XEupJibegiXV+tDUseI8oLQc8ei3d/4Jkb2RpbHh3MfE054ov3uIz2dhFkB3FI8iwYkEh0gGCApkrYggkPNg==}
 
   '@shikijs/core@2.5.0':
     resolution: {integrity: sha512-uu/8RExTKtavlpH7XqnVYBrfBkUc20ngXiX9NSrBhOVZYv/7XQRKUyhtkeflY5QsxC0GbJThCerruZfsUaSldg==}
@@ -2366,6 +2479,8 @@ snapshots:
     dependencies:
       '@chevrotain/types': 13.2.0
 
+  '@noble/hashes@2.2.0': {}
+
   '@pnpm/deps.graph-sequencer@1100.0.1': {}
 
   '@rollup/rollup-android-arm-eabi@4.68.2':
@@ -2445,6 +2560,8 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.68.2':
     optional: true
+
+  '@scure/base@2.2.0': {}
 
   '@shikijs/core@2.5.0':
     dependencies:

@@ -23,7 +23,7 @@ test('Runner output subscriptions span independent runs and coexist with exact s
       return work.input;
     },
   });
-  const runner = new Runner(scene, new Resources(), undefined, { hooks: [callableHooks(scene, { output: () => collect(hookEvents) })] }).build();
+  const runner = new Runner(scene, new Resources(), { hooks: [callableHooks(scene, { output: () => collect(hookEvents) })] }).build();
   const unsubscribe = runner.output.subscribe(collect(events));
   const first = { label: 'first' };
   const second = { label: 'second' };
@@ -67,7 +67,7 @@ test('Runner publishes only the scene output; child deltas require explicit forw
   });
   const scene = new Scene({ output }).add({ child });
   scene.run = (work) => work.children.child.invoke(work.input);
-  const runner = new Runner(scene, new Resources(), undefined, { hooks: [callableHooks(child, { output: () => collect(childEvents) })] }).build();
+  const runner = new Runner(scene, new Resources(), { hooks: [callableHooks(child, { output: () => collect(childEvents) })] }).build();
   runner.output.subscribe(collect(rootEvents));
 
   assert.equal(await runner.run(null), 'child answer');
@@ -339,7 +339,7 @@ test('a released observer can start the next run without losing that run cancell
       return work.input;
     },
   });
-  runner = new Runner(scene, new Resources(), undefined, {
+  runner = new Runner(scene, new Resources(), {
     observations: [
       {
         bindInvocation: () => ({ observe() {} }),
@@ -399,7 +399,7 @@ test('Runner output subscriptions also receive restored root output while resume
     },
     0,
   );
-  const runner = new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build();
+  const runner = new Runner(scene, new Resources(), { checkpoints: { store } }).build();
   const events = [];
   runner.output.subscribe(collect(events));
 
@@ -503,7 +503,7 @@ for (const stage of ['acquired', 'validate', 'capture']) {
         return 'captured';
       })
       .register(offer, (value) => value);
-    runner = new Runner(scene, resources, undefined, {
+    runner = new Runner(scene, resources, {
       validate() {
         validations++;
         if (stage === 'validate') assert.equal(runner.cancel(), true);
@@ -547,7 +547,7 @@ test('strict release failure stays aggregated with cancellation instead of being
       return 'late';
     },
   });
-  const runner = new Runner(scene, new Resources(), undefined, {
+  const runner = new Runner(scene, new Resources(), {
     observations: [
       {
         failure: 'propagate',
@@ -583,7 +583,7 @@ test('cancellation while binding an invocation observer prevents the formal star
   let started = 0;
   let runs = 0;
   const scene = new Scene({ run: () => ++runs });
-  runner = new Runner(scene, new Resources(), undefined, {
+  runner = new Runner(scene, new Resources(), {
     hooks: [
       callableHooks(scene, {
         started: () => () => {

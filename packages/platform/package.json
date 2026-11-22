@@ -1,0 +1,76 @@
+{
+  "name": "@weiliang0121/capix-platform",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bytes": {
+      "types": "./dist/bytes.d.ts",
+      "import": "./dist/bytes.js"
+    },
+    "./hash": {
+      "types": "./dist/hash.d.ts",
+      "import": "./dist/hash.js"
+    },
+    "./equal": {
+      "types": "./dist/equal.d.ts",
+      "import": "./dist/equal.js"
+    },
+    "./identity": {
+      "types": "./dist/identity.d.ts",
+      "import": "./dist/identity.js"
+    },
+    "./inspection": {
+      "types": "./dist/inspection.d.ts",
+      "import": "./dist/inspection.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node ../../scripts/test/run.mjs --package ."
+  },
+  "dependencies": {
+    "@weiliang0121/capix-platform-node": "workspace:*",
+    "@noble/hashes": "2.2.0",
+    "@scure/base": "2.2.0"
+  },
+  "description": "Platform capabilities and portable data operations for CAPiX.",
+  "license": "MIT",
+  "author": "wei.liang (https://github.com/weiliang0121)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weiliang0121/capix.git",
+    "directory": "packages/platform"
+  },
+  "engines": {
+    "node": ">=22.23.2"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "imports": {
+    "#engine": {
+      "node": "@weiliang0121/capix-platform-node",
+      "default": "./dist/engine.js"
+    },
+    "#data-equality": {
+      "node": "@weiliang0121/capix-platform-node/equal",
+      "default": "./dist/data-equality.js"
+    }
+  }
+}

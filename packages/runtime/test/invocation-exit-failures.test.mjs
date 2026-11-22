@@ -84,13 +84,13 @@ async function checkpointedRunner(mode, pending, run) {
   }
   const store = new Journal();
   if (mode === 'normal') {
-    const runner = new Runner(scene(false), resources, undefined, { checkpoints: { store } }).build();
+    const runner = new Runner(scene(false), resources, { checkpoints: { store } }).build();
     return { runner, store, start: () => runner.run(null) };
   }
   const seed = new Journal();
-  await new Runner(scene(true), resources, undefined, { checkpoints: { store: seed } }).build().run(null);
+  await new Runner(scene(true), resources, { checkpoints: { store: seed } }).build().run(null);
   store.save(structuredClone(seed.image), 0);
-  const runner = new Runner(scene(false), resources, undefined, { checkpoints: { store } }).build();
+  const runner = new Runner(scene(false), resources, { checkpoints: { store } }).build();
   return { runner, store, start: () => runner.resume(store.image.frame.owner.contextId) };
 }
 

@@ -25,7 +25,7 @@ function observation(facts) {
 test('Runner fixes one scene and builds itself; every run starts a fresh call', async () => {
   const contexts = [];
   const root = scene();
-  const runner = new Runner(root, new Resources(), undefined, {
+  const runner = new Runner(root, new Resources(), {
     hooks: [
       callableHooks(root, {
         started: () => (context) => {
@@ -59,7 +59,7 @@ test('failed Runner builds can be corrected, but reentrant build never publishes
     },
     bindInvocation: () => ({ observe() {} }),
   };
-  runner = new Runner(root, new Resources(), undefined, { observations: [install] });
+  runner = new Runner(root, new Resources(), { observations: [install] });
   assert.throws(() => runner.build(), /needs a run function/);
   Object.assign(root, { deps: {}, run: (work) => work.input });
   assert.equal(runner.build(), runner);
@@ -75,7 +75,7 @@ test('Runner stays occupied until the real body exits, with independent occupanc
     entered.resolve();
     return released.promise;
   });
-  const runner = new Runner(root, new Resources(), undefined, { observations: [observation(facts)] }).build();
+  const runner = new Runner(root, new Resources(), { observations: [observation(facts)] }).build();
   const other = new Runner(
     scene(() => 'independent'),
     new Resources(),
@@ -115,7 +115,7 @@ test('pre-cancellation skips host validation; active cancellation waits for a st
       return call.accept();
     },
   });
-  const runner = new Runner(root, new Resources(), undefined, {
+  const runner = new Runner(root, new Resources(), {
     validate() {
       validations++;
     },
@@ -188,7 +188,7 @@ test('call hooks are registered by exact root/child identity and retain their re
       established.push(['child', context.id]);
     },
   };
-  const runner = new Runner(root, new Resources(), undefined, {
+  const runner = new Runner(root, new Resources(), {
     hooks: [callableHooks(root, rootHooks), callableHooks(child, childHooks)],
   }).build();
   rootHooks.label = 'live-receiver';
@@ -210,14 +210,14 @@ test('foreign and duplicate hook registrations fail before a structure becomes r
   const foreign = scene();
   assert.throws(
     () =>
-      new Runner(root, new Resources(), undefined, {
+      new Runner(root, new Resources(), {
         hooks: [callableHooks(foreign, {})],
       }).build(),
     /in this scene/,
   );
   assert.throws(
     () =>
-      new Runner(root, new Resources(), undefined, {
+      new Runner(root, new Resources(), {
         hooks: [callableHooks(root, {}), callableHooks(root, {})],
       }).build(),
     /Duplicate/,
@@ -233,7 +233,7 @@ test('started remains required synchronous establishment and failure never start
     executed++;
     return 'ok';
   });
-  const runner = new Runner(root, new Resources(), undefined, {
+  const runner = new Runner(root, new Resources(), {
     hooks: [
       callableHooks(root, {
         started(input) {
@@ -267,7 +267,7 @@ test('per-call validation failure releases occupancy and asynchronous validators
     executed++;
     return 'ok';
   });
-  const runner = new Runner(root, new Resources(), undefined, {
+  const runner = new Runner(root, new Resources(), {
     hooks: [
       callableHooks(root, {
         validate(input) {
@@ -293,7 +293,7 @@ test('Runner resume keeps the original identity and input and skips started regi
     run: () => assert.fail('resume must not replay the original body'),
   });
   let validated = 0;
-  const runner = new Runner(root, new Resources(), undefined, {
+  const runner = new Runner(root, new Resources(), {
     checkpoints: { store },
     hooks: [
       callableHooks(root, {
@@ -345,7 +345,6 @@ test('strict host observation failure releases occupancy without hiding the orig
       return 'ok';
     }),
     new Resources(),
-    undefined,
     { observations: [install] },
   ).build();
   await assert.rejects(runner.run(true), (error) => {
@@ -368,7 +367,7 @@ test('Runner preserves a business error without confusing it with admission fail
     },
   });
   const facts = [];
-  const runner = new Runner(root, new Resources(), undefined, { observations: [observation(facts)] }).build();
+  const runner = new Runner(root, new Resources(), { observations: [observation(facts)] }).build();
   await assert.rejects(runner.run(true), (error) => error === original);
   assert.equal(runner.isRunning, false);
   assert.equal(await runner.run(false), 'ok');
@@ -393,7 +392,6 @@ test('Runner host validation retains its receiver and rejects asynchronous admis
       return 'ok';
     }),
     new Resources(),
-    undefined,
     options,
   ).build();
   options.validate = () => assert.fail('replacement admission hook must not install');
@@ -429,7 +427,7 @@ test('child validation precedes capture while started factories still follow the
       return input;
     })
     .register(number, (value) => value);
-  const runner = new Runner(root, resources, undefined, {
+  const runner = new Runner(root, resources, {
     hooks: [
       callableHooks(child, {
         validate(input) {
@@ -458,7 +456,7 @@ test('asynchronous host factories are rejected at construction and their rejecte
     const root = scene(() => {
       executed = true;
     });
-    const runner = new Runner(root, new Resources(), undefined, {
+    const runner = new Runner(root, new Resources(), {
       hooks: [
         callableHooks(root, {
           [hook]: async () => {
@@ -513,7 +511,7 @@ test('run and resume fix top-level options before delayed child capture without 
         return options.tenant;
       })
       .register(value, (captured) => captured);
-    const runner = new Runner(root, resources, undefined, { checkpoints: { store } }).build();
+    const runner = new Runner(root, resources, { checkpoints: { store } }).build();
     if (restore)
       store.save(
         {

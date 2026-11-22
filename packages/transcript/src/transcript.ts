@@ -1,6 +1,6 @@
 import { publishFact, type ChangeProvenance } from '@weiliang0121/capix-changes';
 import type { EventConsumer } from '@weiliang0121/capix-changes';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from './validation.js';
 import { isObject } from './validation.js';

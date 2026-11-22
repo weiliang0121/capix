@@ -21,5 +21,6 @@ export class DeclaredException<F = unknown> extends RuntimeError {
     options?: ErrorOptions,
   ) {
     super(contract.name, message, facts, options);
+    if (new.target === DeclaredException) this.name = 'DeclaredException';
   }
 }

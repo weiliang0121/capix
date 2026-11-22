@@ -1,5 +1,5 @@
-import type { Stable } from '@weiliang0121/capix-contracts';
-import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Stable, ChildReceptionPermit } from '@weiliang0121/capix-contracts';
+import { receptionChildId, receive } from '#reception-scope';
 import type { InvocationRelationChange, InvocationRelationIdentity } from '../observation/facts.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationView } from './view.js';
@@ -8,17 +8,6 @@ import { InvocationRelation, type InvocationRelationOptions, type InvocationTarg
 import type { InvocationProgress } from './progress.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationProvenance, type InvocationPropagationScope, type InvocationExceptionOrigin } from './provenance.js';
-
-interface ReceptionScope {
-  readonly owner: symbol;
-  readonly childContextId: string;
-  readonly parent: ReceptionScope | undefined;
-  active: boolean;
-}
-
-// One async-context carrier for the mechanism. An ALS per parent would stay
-// enabled and add another property to every subsequent async resource.
-const receptions = new AsyncLocalStorage<ReceptionScope>();
 
 export interface ParentInvocation {
   readonly context: InvocationContext;
@@ -40,6 +29,7 @@ export class InvocationChildren implements InvocationRelationOwner {
   readonly #installed = new Set<string>();
   #nextOrder = 0;
   readonly #receptionOwner = Symbol();
+  readonly #permits = new Map<ChildReceptionPermit, string>();
   readonly view: InvocationView['children'];
   readonly #provenance: InvocationProvenance;
   readonly #calls = new Set<Promise<void>>();
@@ -96,12 +86,13 @@ export class InvocationChildren implements InvocationRelationOwner {
     return { error: failure.error, failure, delivery: propagated ? delivered : this.#provenance.deliver(scope, failure.error, origin) };
   }
   get reception(): Readonly<{ parentContextId: string; childContextId: string }> {
+    return this.resolveReception();
+  }
+  resolveReception(permit?: ChildReceptionPermit): Readonly<{ parentContextId: string; childContextId: string }> {
     this.requireHealthy();
-    let reception = receptions.getStore();
-    while (reception && reception.owner !== this.#receptionOwner) reception = reception.parent;
-    // Never skip an expired matching scope to borrow an older one's authority.
-    if (!reception?.active) throw new Error('Fixed entity operations require an active direct-child reception');
-    return Object.freeze({ parentContextId: this.context.id, childContextId: reception.childContextId });
+    const childContextId = permit === undefined ? receptionChildId(this.#receptionOwner) : this.#permits.get(permit);
+    if (childContextId === undefined) throw new Error('Fixed entity operations require an active direct-child reception permit from this parent');
+    return Object.freeze({ parentContextId: this.context.id, childContextId });
   }
   requireHealthy(): void {
     this.validate?.();
@@ -160,14 +151,18 @@ export class InvocationChildren implements InvocationRelationOwner {
       throw error;
     }
   }
-  async receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value> {
+  async receive<Value>(relation: InvocationRelation, work: (permit: ChildReceptionPermit) => Promise<Value>): Promise<Value> {
     const childContextId = relation.invocation.context.id;
-    const reception: ReceptionScope = { owner: this.#receptionOwner, childContextId, active: true, parent: receptions.getStore() };
-    try {
-      return await receptions.run(reception, work);
-    } finally {
-      reception.active = false;
-    }
+    if (this.#items.get(childContextId) !== relation || relation.reception.status !== 'receiving') throw new Error('Expected a receiving direct-child relation');
+    return receive(this.#receptionOwner, childContextId, async () => {
+      const permit = Symbol() as ChildReceptionPermit;
+      this.#permits.set(permit, childContextId);
+      try {
+        return await work(permit);
+      } finally {
+        this.#permits.delete(permit);
+      }
+    });
   }
   attach<Output>(target: InvocationTarget<Output>, options: InvocationRelationOptions = {}): InvocationRelation<Output> {
     this.changing();

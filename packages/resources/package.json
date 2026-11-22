@@ -19,8 +19,9 @@
     "test": "node ../../scripts/test/run.mjs --package ."
   },
   "dependencies": {
+    "@weiliang0121/capix-changes": "workspace:*",
     "@weiliang0121/capix-contracts": "workspace:*",
-    "@weiliang0121/capix-changes": "workspace:*"
+    "@weiliang0121/capix-platform": "workspace:*"
   },
   "description": "Resource definitions, fixed supplies, and controlled access endpoints for CAPiX.",
   "license": "MIT",

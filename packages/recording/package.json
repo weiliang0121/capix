@@ -1,0 +1,57 @@
+{
+  "name": "@weiliang0121/capix-recording",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node ../../scripts/test/run.mjs --package ."
+  },
+  "dependencies": {
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-invocation": "workspace:*",
+    "@weiliang0121/capix-records": "workspace:*",
+    "@weiliang0121/capix-resources": "workspace:*",
+    "@weiliang0121/capix-runtime": "workspace:*",
+    "@weiliang0121/capix-structure": "workspace:*",
+    "es-toolkit": "1.52.0"
+  },
+  "description": "Optional CAPiX observation installation that writes invocation, resource, and content records.",
+  "license": "MIT",
+  "author": "wei.liang (https://github.com/weiliang0121)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weiliang0121/capix.git",
+    "directory": "packages/recording"
+  },
+  "engines": {
+    "node": ">=22.23.2"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "devDependencies": {
+    "@weiliang0121/capix-checkpoint": "workspace:*",
+    "@weiliang0121/capix-memory": "workspace:*",
+    "@weiliang0121/capix-transcript": "workspace:*",
+    "@weiliang0121/capix-view": "workspace:*"
+  }
+}

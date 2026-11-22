@@ -8,7 +8,7 @@ import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 import { Resources, Runner, callableHooks, defineObservation } from '@weiliang0121/capix-runtime';
 import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 
-const build = (scene, resources = new Resources(), capabilities = {}) => new Runner(scene, resources, undefined, capabilities).build();
+const build = (scene, resources = new Resources(), capabilities = {}) => new Runner(scene, resources, capabilities).build();
 const codec = { encode: (value) => value, decode: (value) => value };
 
 test('Scene(child) registers and invokes the same member, preserving stable final data and ordinary reception', async () => {

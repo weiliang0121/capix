@@ -63,9 +63,9 @@ test('fixed transcript writes derive parent and child identity from the actual r
     run = async function (work) {
       const child = work.children.create(answer, null);
       await child.run();
-      return child.accept((content) => {
-        const first = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-        const confirmed = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+      return child.accept((content, permit) => {
+        const first = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit);
+        const confirmed = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit);
         assert.equal(first, confirmed);
         return confirmed;
       });
@@ -99,9 +99,9 @@ for (const stale of [undefined, 'endpoint', 'view']) {
         } else assert.notEqual(endpoint, firstEndpoint);
         return work.children.invoke(answer, null, {
           result: {
-            succeeded(content) {
+            succeeded(content, permit) {
               const retained = stale && work.input === 'second' ? (stale === 'view' ? firstValues.messages : firstEndpoint) : endpoint;
-              return retained.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+              return retained.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit);
             },
           },
         });
@@ -192,11 +192,11 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
       await first.run();
       await second.run();
       const gate = Promise.withResolvers();
-      const accepting = first.accept(async (content) => {
+      const accepting = first.accept(async (content, permit) => {
         await gate.promise;
-        return work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+        return work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit);
       });
-      await second.accept((content) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }));
+      await second.accept((content, permit) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }, permit));
       gate.resolve();
       await accepting;
       assert.deepEqual(

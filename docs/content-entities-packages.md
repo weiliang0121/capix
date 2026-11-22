@@ -31,7 +31,8 @@ flowchart TD
   Memory --> Changes
   Transcript --> Changes
   Runtime --> Changes
-  Runtime --> Records
+  Recording --> Runtime
+  Recording --> Records
   Records --> Changes
   Records --> Memory
   Records --> Transcript
@@ -43,7 +44,7 @@ flowchart TD
   Selection --> Resources
 ```
 
-图只展开内容和记录协作关系；共享实体、measurement 与 records 不依赖 protocol；共同契约与诊断由各自公开包提供。measurement 的 Message 来自 transcript 公开类型，WeakMap 计数仍按准确对象身份，不按文本或位置合并。Runtime 安装资源端点与可选记录预设，实体包不调用 Runtime。`observeMemory` 通过集合 `id` 与 `values(): readonly {id,value}[]` 的只读结构契约组合当前 content 与记录，按准确 memoriesId 过滤。records 的默认内容适配显式依赖 memory、transcript 的公开事实类型身份；Memory 本体不依赖 protocol 或 transcript。
+图只展开内容和记录协作关系；共享实体、measurement 与 records 不依赖 protocol；共同契约与诊断由各自公开包提供。measurement 的 Message 来自 transcript 公开类型，WeakMap 计数仍按准确对象身份，不按文本或位置合并。Runtime 装配资源和观测端口，recording 包将观测写入 Records，实体包不调用 Runtime。`observeMemory` 通过集合 `id` 与 `values(): readonly {id,value}[]` 的只读结构契约组合当前 content 与记录，按准确 memoriesId 过滤。records 的默认内容适配显式依赖 memory、transcript 的公开事实类型身份；Memory 本体不依赖 protocol 或 transcript。
 
 默认记录只投影记忆 content 与可选操作 reason，不复制未知 metadata。框架 protocol 不提供 Memory wire，业务展示由宿主明确投影。baseline 与增量采用相同形状，更新替换 value；需要主题、消息跳转或其他字段时由业务显式提供自己的投影，不能把展示 DTO 当作完整实体快照或恢复材料。
 
@@ -64,7 +65,7 @@ flowchart TD
 
 `@weiliang0121/capix-records/data` 提供纯记录 DTO、归档校验和输出读取，不加载活记录实体或 Node API。`@weiliang0121/capix-records` 根出口提供记录实体与 Helper、snapshotValue、observeMemory、RecordResource。普通 `RecordResource.read` 的 get/snapshot 只返回纯数据快照；`RecordResource.write.create` 只接收 custom 内容，实体生成身份后返回快照。`@weiliang0121/capix-records/construction` 单独提供 RecordWriterResource 的 root/add/update/boundary，准确活对象只在宿主观察窗口中使用。Recorder 的 RecordClock 仅要求 now/tick；默认时间源属于记录包，宿主可注入兼容 Runtime Clock，包本身不依赖 Runtime。
 
-Runtime `/recording` 提供自动观测预设，实体与历史恢复由 records 提供。安装内部通过资源包 Resources.bind 固定记录写口，每个事实打开无 owner 的独立窗口并关闭，使真实终态写入独立于业务 Work 的取消与退出。内部写口不回送自身资源观察链；Recorder 的变化出口、isolate/propagate 及来源失效仍按原规则工作。具体约束见 [记录机制](recording.md)。
+独立包 `@weiliang0121/capix-recording` 提供自动观测预设，实体与历史恢复由 records 提供。安装内部通过资源包 Resources.bind 固定记录写口，每个事实打开无 owner 的独立窗口并关闭，使真实终态写入独立于业务 Work 的取消与退出。内部写口不回送自身资源观察链；Recorder 的变化出口、isolate/propagate 及来源失效仍按原规则工作。具体约束见 [记录机制](recording.md)。
 
 `RuntimeError` 的唯一实现归 `@weiliang0121/capix-contracts`，Runtime 重导同一类。`ChangeCaptureError` 的唯一实现归 `@weiliang0121/capix-changes`。这两个对象的身份保持一致：宿主错误交付和资源失败分类继续识别它们，不能复制同名类。
 
@@ -104,4 +105,4 @@ resources.register(new Resource(transcript), TranscriptResource.append);
 
 公开入口由各包 package.json 与 index.ts 定义；跨包只能使用这些入口。实体不因可序列化就成为 wire，也不因有固定值就自动获得历史恢复能力。
 
-[Transcript 测试](../packages/transcript/test)、[Memory 测试](../packages/memory/test)、[View 测试](../packages/view/test) 验证各自实体契约；[实体调用链](../packages/runtime/test/entity-chain.test.mjs) 验证真实 Runtime 协调。框架测试独立于任何外部应用。具体行为见 [Transcript](transcript.md)、[Memory](memory.md)、[View](view-package.md)、[记录](recording.md) 和 [变化捕获](observation-increments.md)。
+[Transcript 测试](../packages/transcript/test)、[Memory 测试](../packages/memory/test)、[View 测试](../packages/view/test) 验证各自实体契约；[实体调用链](../packages/recording/test/entity-chain.test.mjs) 验证真实 Runtime 协调。框架测试独立于任何外部应用。具体行为见 [Transcript](transcript.md)、[Memory](memory.md)、[View](view-package.md)、[记录](recording.md) 和 [变化捕获](observation-increments.md)。

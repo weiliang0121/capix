@@ -3,7 +3,7 @@ import { RecordBook, Recorder, RecordResource } from '@weiliang0121/capix-record
 import { Resource } from '@weiliang0121/capix-resources';
 import { Node, Scene } from '@weiliang0121/capix-structure';
 import { Resources, Runner } from '@weiliang0121/capix-runtime';
-import { bindRecording } from '@weiliang0121/capix-runtime/recording';
+import { bindRecording } from '@weiliang0121/capix-recording';
 
 // Records live independently; resources grant specific operations on this entity.
 const recorder = new Recorder(new RecordBook());
@@ -14,7 +14,7 @@ const note = new Node({
 });
 
 // This optional preset records actual calls in the same entity through its own windows.
-const runner = new Runner(new Scene(note), resources, undefined, { observations: [bindRecording(recorder)] }).build();
+const runner = new Runner(new Scene(note), resources, { observations: [bindRecording(recorder)] }).build();
 const result = await runner.run('记录是一种可通过资源访问的实体');
 console.log(result.kind, result.data.value);
 console.log('已结束调用：', [...recorder.book.values()].filter((record) => record.kind === 'invocation' && record.status === 'succeeded').length);

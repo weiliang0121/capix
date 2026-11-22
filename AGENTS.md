@@ -13,7 +13,7 @@ CAPiX 是可组合、可观测的 Agent 框架。仓库维护框架包、可复�
 
 ## 包与公开边界
 
-源码统一位于 `packages/`，18 个公开包使用 `@weiliang0121/capix-` 前缀；根 workspace 与锁文件唯一。跨包只走公开出口，不导入其他包的私有 src/dist，也不建立平行兼容门面。准确依赖由 package.json 与仓库检查维护，见[架构](docs/organization.md)。
+源码统一位于 `packages/`，21 个公开包使用 `@weiliang0121/capix-` 前缀；根 workspace 与锁文件唯一。跨包只走公开出口，不导入其他包的私有 src/dist，也不建立平行兼容门面。准确依赖由 package.json 与仓库检查维护，见[架构](docs/organization.md)。
 
 | 所有者                                   | 职责                                                                    |
 | ---------------------------------------- | ----------------------------------------------------------------------- |
@@ -24,6 +24,7 @@ CAPiX 是可组合、可观测的 Agent 框架。仓库维护框架包、可复�
 | runtime                                  | 结构和机制装配、Runner、Work 适配，不建立第二棵 Bound 树                |
 | interaction                              | 独立发送、持久反馈、局部等待与可选有界过程流                            |
 | transcript / memory / view / measurement | 各自实体、视图成员及读取、使用计数；不依赖 Runtime                      |
+| recording                                | 将公开运行观测接到记录实体的可选集成                                    |
 | records / diagnostics                    | 记录实体与显式解释；唯一 PersistenceError 和诊断值                      |
 | model-provider / model-exchanges / tool  | 原生模型协议、固定起点和交换实体、普通 Group 工具预设                   |
 

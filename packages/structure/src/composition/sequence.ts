@@ -1,4 +1,4 @@
-import { types } from 'node:util';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { Callable } from '../callable.js';
 import { Group } from '../group.js';
 import { requireChildCallable } from '../members.js';
@@ -49,7 +49,7 @@ export class Sequence<const Steps extends readonly SequenceItem[], Delta = never
 
   constructor(steps: Steps & CheckedSteps<NoInfer<Steps>, NoInfer<Delta>>, ...configuration: SequenceConfiguration<NoInfer<SequenceOutput<Steps>>, Delta>) {
     super();
-    if (!Array.isArray(steps) || types.isProxy(steps)) throw new TypeError('Sequence steps must be an array');
+    if (!Array.isArray(steps) || isOpaqueObject(steps)) throw new TypeError('Sequence steps must be an array');
     const entries: Entry[] = [];
     for (let index = 0; index < steps.length; index++) {
       const item = Object.getOwnPropertyDescriptor(steps, String(index));
@@ -77,7 +77,7 @@ export class Sequence<const Steps extends readonly SequenceItem[], Delta = never
 }
 
 function requireConfiguration(value: unknown): asserts value is object {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value)) throw new TypeError('Sequence configuration must be a data object');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || isOpaqueObject(value)) throw new TypeError('Sequence configuration must be a data object');
 }
 
 function readField(configuration: object, name: string): unknown {
@@ -100,7 +100,7 @@ function snapshotOutput(options: unknown): OutputDeclaration<unknown, unknown> |
 }
 
 function prepareStep(value: unknown, index: number): Entry {
-  if (types.isProxy(value)) throw new TypeError('Sequence steps cannot be proxies');
+  if (isOpaqueObject(value)) throw new TypeError('Sequence steps cannot be proxies');
   const direct = value instanceof Callable;
   if (!direct) requireConfiguration(value);
   const configuration = direct ? undefined : (value as object);

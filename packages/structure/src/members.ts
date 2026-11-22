@@ -1,11 +1,11 @@
-import { types } from 'node:util';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { Callable } from './callable.js';
 import type { ChildCallable } from './definition/children.js';
 import type { NamedMembers } from './definition/composition.js';
 import { assertStructureConfigurable, claimStructureMembers } from './configuration.js';
 
 export function requireChildCallable(value: unknown): asserts value is ChildCallable {
-  if (types.isProxy(value)) throw new TypeError('Callable structures cannot be proxies');
+  if (isOpaqueObject(value)) throw new TypeError('Callable structures cannot be proxies');
   if (!(value instanceof Callable) || (value.kind !== 'node' && !(value.kind === 'group' && 'members' in value && Array.isArray(value.members)))) throw new TypeError('Members must be Group or Node objects');
 }
 
@@ -37,7 +37,7 @@ export function checkMemberName(name: string): void {
 
 /** Validate aliases before claiming any child, so rejected batches change no ownership. */
 export function appendNamedMembers(owner: { readonly kind: 'scene' | 'group' }, current: readonly ChildCallable[], names: NamedMembers, additions: unknown): { readonly members: readonly ChildCallable[]; readonly names: NamedMembers } {
-  if (!additions || typeof additions !== 'object' || Array.isArray(additions) || types.isProxy(additions)) throw new TypeError('Named members must be an object');
+  if (!additions || typeof additions !== 'object' || Array.isArray(additions) || isOpaqueObject(additions)) throw new TypeError('Named members must be an object');
   if (Object.getOwnPropertySymbols(additions).length) throw new TypeError('Member names must be strings');
   const entries: [string, ChildCallable][] = [];
   for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(additions))) {

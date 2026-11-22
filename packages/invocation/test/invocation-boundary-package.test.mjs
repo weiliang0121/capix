@@ -18,7 +18,8 @@ const root = fileURLToPath(new URL('../../../', import.meta.url));
 
 const invocationDirectory = resolve(root, 'packages/invocation');
 
-const dependencies = ['@weiliang0121/capix-diagnostics', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-changes', '@weiliang0121/capix-contracts', '@weiliang0121/capix-resources', 'es-toolkit'];
+const dependencies = ['@weiliang0121/capix-diagnostics', '@weiliang0121/capix-checkpoint', '@weiliang0121/capix-changes', '@weiliang0121/capix-contracts', '@weiliang0121/capix-resources', '@weiliang0121/capix-platform', 'es-toolkit'];
+const allowedImports = new Set([...dependencies, '@weiliang0121/capix-platform/identity']);
 
 test('invocation package exposes its call mechanism with only lower dependencies', async () => {
   const manifest = JSON.parse(await readFile(resolve(invocationDirectory, 'package.json'), 'utf8'));
@@ -33,7 +34,7 @@ test('invocation package exposes its call mechanism with only lower dependencies
         const source = await readFile(file, 'utf8');
         for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
           const specifier = match[2];
-          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.ok(dependencies.includes(specifier), `${file} cannot import ${specifier}`);
+          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.ok(allowedImports.has(specifier), `${file} cannot import ${specifier}`);
           if (specifier.startsWith('.')) assert.ok(!relative(invocationDirectory, resolve(dirname(file), specifier)).startsWith('..'), `${file} crosses its package boundary`);
         }
       }

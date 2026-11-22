@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { isKnownPromise } from '@weiliang0121/capix-platform/inspection';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
 import { PersistenceError, RuntimeErrorHelper } from '@weiliang0121/capix-diagnostics';
 import { isNonBlankString } from './value.js';
@@ -29,7 +30,7 @@ export class Interaction<Request, Reply> {
     try {
       const committed: unknown = this.#options.persistence?.create(this.#state);
       if (committed !== undefined) {
-        void Promise.resolve(committed).catch(() => undefined);
+        if (isKnownPromise(committed)) void Promise.prototype.then.call(committed, undefined, () => undefined);
         throw new TypeError('Interaction persistence must be synchronous');
       }
     } catch (cause) {
@@ -189,7 +190,7 @@ export class Interaction<Request, Reply> {
       try {
         const committed: unknown = this.#options.persistence?.commit(Object.freeze({ expectedRevision: this.#state.revision, state }));
         if (committed !== undefined) {
-          void Promise.resolve(committed).catch(() => undefined);
+          if (isKnownPromise(committed)) void Promise.prototype.then.call(committed, undefined, () => undefined);
           throw new TypeError('Interaction persistence must be synchronous');
         }
       } catch (cause) {

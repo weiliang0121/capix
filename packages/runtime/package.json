@@ -11,10 +11,6 @@
     "./construction": {
       "types": "./dist/construction.d.ts",
       "import": "./dist/construction.js"
-    },
-    "./recording": {
-      "types": "./dist/recording.d.ts",
-      "import": "./dist/recording.js"
     }
   },
   "scripts": {
@@ -23,16 +19,15 @@
     "test": "node ../../scripts/test/run.mjs --package ."
   },
   "dependencies": {
-    "es-toolkit": "1.52.0",
+    "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-checkpoint": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-diagnostics": "workspace:*",
+    "@weiliang0121/capix-invocation": "workspace:*",
+    "@weiliang0121/capix-platform": "workspace:*",
     "@weiliang0121/capix-resources": "workspace:*",
     "@weiliang0121/capix-structure": "workspace:*",
-    "@weiliang0121/capix-contracts": "workspace:*",
-    "@weiliang0121/capix-changes": "workspace:*",
-    "@weiliang0121/capix-records": "workspace:*",
-    "@weiliang0121/capix-checkpoint": "workspace:*",
-    "@weiliang0121/capix-invocation": "workspace:*",
-    "@weiliang0121/capix-interaction": "workspace:*",
-    "@weiliang0121/capix-diagnostics": "workspace:*"
+    "es-toolkit": "1.52.0"
   },
   "description": "Structure binding, resource assembly, and Runner for CAPiX.",
   "license": "MIT",
@@ -59,10 +54,10 @@
     "registry": "https://registry.npmjs.org"
   },
   "devDependencies": {
+    "@weiliang0121/capix-interaction": "workspace:*",
     "@weiliang0121/capix-model-exchanges": "workspace:*",
     "@weiliang0121/capix-transcript": "workspace:*",
     "@weiliang0121/capix-memory": "workspace:*",
-    "@weiliang0121/capix-measurement": "workspace:*",
     "@weiliang0121/capix-view": "workspace:*",
     "@weiliang0121/capix-model-provider": "workspace:*"
   }

@@ -5,7 +5,7 @@ import type { ReceptionDefinition } from '../checkpoint/reception.js';
 import type { ChildReference } from './reference.js';
 import type { ChildContract } from './contract.js';
 import type { ChildFacts } from './facts.js';
-import type { ChildOptions, ChildOperationOptions, ChildReceptionOptions, ChildInvocationOptions, ChildInvocationReceptionOptions } from './options.js';
+import type { ChildReceptionPermit, ChildOptions, ChildOperationOptions, ChildReceptionOptions, ChildInvocationOptions, ChildInvocationReceptionOptions } from './options.js';
 
 export interface ChildCall<Definition extends ChildContract> {
   readonly ref: ChildReference<Definition>;
@@ -15,8 +15,8 @@ export interface ChildCall<Definition extends ChildContract> {
   invoke<const Options extends ChildInvocationOptions<Definition>>(options: Options & ChildInvocationOptions<Definition>): Promise<Stable<OperationResult<Stable<CallableOutput<Definition>>, Options>>>;
   run(): Promise<Stable<CallableOutput<Definition>>>;
   accept(): Promise<Stable<CallableOutput<Definition>>>;
-  accept<Value>(receive: (output: Stable<CallableOutput<Definition>>) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>>;
-  accept<Value>(reception: ReceptionDefinition<Definition, Value>, receive: (output: Stable<CallableOutput<Definition>>) => NoInfer<Value> | NoInfer<Stable<Value>> | Promise<NoInfer<Value> | NoInfer<Stable<Value>>>): Promise<Stable<Value>>;
+  accept<Value>(receive: (output: Stable<CallableOutput<Definition>>, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>>;
+  accept<Value>(reception: ReceptionDefinition<Definition, Value>, receive: (output: Stable<CallableOutput<Definition>>, permit: ChildReceptionPermit) => NoInfer<Value> | NoInfer<Stable<Value>> | Promise<NoInfer<Value> | NoInfer<Stable<Value>>>): Promise<Stable<Value>>;
 }
 
 export interface ChildCalls<Allowed extends ChildContract = ChildContract> {

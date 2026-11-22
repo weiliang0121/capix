@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import type { RecordKind, BaseRecord as RecordData } from './data/index.js';
 import { restoreContent, sealHistorical } from './restoration/access.js';
 

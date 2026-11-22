@@ -40,7 +40,7 @@ Chat Completions 的 `stop`、`tool_calls`，Messages 的 `end_turn`、`stop_seq
 
 `ToolResult` 为 `{status:'ok'|'error',content:readonly ModelInputContent[]}`，content 接受 1–32 个文本或固定图片块。ToolFeedback 另含 toolCallId。续轮时，Provider 要求回复中的每个工具调用都有准确、完整的反馈，并按原调用顺序编码。不能用措辞暗示错误，也不把工具结果提升为 system 指令。提示策略、结果可信度和资源授权由宿主决定。
 
-公开 requireModelRequest / requireModelReply / requireToolResult / requireToolFeedback / requireModelExchange 在接纳边界完整核验，返回原对象、不冻结或缓存对可变对象的信任；Provider 生成的回复已深冻结。未知字段／版本、重复调用 ID、不完整反馈、getter、Proxy、循环和非 JSON 值拒绝，错误不含传入正文。
+公开 requireModelRequest / requireModelReply / requireToolResult / requireToolFeedback / requireModelExchange 在接纳边界完整核验，返回原对象、不冻结或缓存对可变对象的信任；Provider 生成的回复已深冻结。未知字段／版本、重复调用 ID、不完整反馈、getter、循环和非 JSON 值拒绝，错误不含传入正文。原生检查拒绝 Proxy，采用作者保证模式时由宿主提供无代理的数据。[宿主对象检查](runtime-boundaries.md#宿主对象检查)
 
 ## 工具登记与业务失败
 

@@ -11,7 +11,3 @@ export function runtimeDefinition(execution) {
     },
   }).add(execution);
 }
-
-export function recordedCall(recorder, invocation) {
-  return [...recorder.book.values()].find((record) => record.contextId === invocation.context.id);
-}

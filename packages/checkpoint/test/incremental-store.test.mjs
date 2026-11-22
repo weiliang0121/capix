@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MemoryCheckpointStore, createCheckpointValueBlock, checkpointHeadCommit, cloneCheckpointHead, checkCheckpointCommitReceipt, cloneCheckpointCommit } from '@weiliang0121/capix-checkpoint';
+import { encodeCheckpointData, decodeCheckpointData } from '@weiliang0121/capix-checkpoint/storage';
+const roundTrip = (head) => decodeCheckpointData(encodeCheckpointData(head));
 const ref = ({ id, digest }) => ({ id, digest });
 const block = createCheckpointValueBlock;
 const childRef = { contextId: 'child', parentContextId: 'parent', parentRound: 1, order: 0, target: { position: 0 } };
@@ -43,7 +45,7 @@ for (const kind of ['memory']) {
     assert.ok(basis);
     assert.equal(checkpointHeadCommit(cloneCheckpointHead(saved)), basis);
     assert.equal(checkpointHeadCommit(JSON.parse(JSON.stringify(saved))), undefined);
-    assert.deepEqual(checkpointHeadCommit(cloneCheckpointHead(structuredClone(saved))), basis);
+    assert.deepEqual(checkpointHeadCommit(cloneCheckpointHead(roundTrip(saved))), basis);
     assert.throws(() => cloneCheckpointHead(JSON.parse(JSON.stringify(saved))), /publication|logical image/, 'ordinary JSON loses negative zero and cannot silently certify a different value');
     h.store.save({ ...basis, id: 'image-3', children: [] }, 2);
     assert.deepEqual(h.store.read('parent').image.frame.children, saved.image.frame.children);
@@ -125,11 +127,15 @@ test('serialized publication is reauthenticated against all logical data and met
       value.publication.children[0].state.output.id = value.publication.frame.input.id;
     },
   ]) {
-    const value = structuredClone(head);
+    const value = roundTrip(head);
     mutate(value);
     assert.throws(() => cloneCheckpointHead(value));
   }
-  const borrowedId = structuredClone(head);
+  const lostSign = roundTrip(head);
+  lostSign.image.frame.children[0].state.output.negative = 0;
+  assert.throws(() => cloneCheckpointHead(lostSign), /publication differs/);
+  assert.equal(Object.is(store.read('parent').image.frame.children[0].state.output.negative, -0), true);
+  const borrowedId = roundTrip(head);
   borrowedId.publication.state.id = 'unpublished';
   const checked = cloneCheckpointHead(borrowedId);
   assert.throws(() => store.save({ ...checkpointHeadCommit(checked), id: 'forged-next', children: [] }, 2), /missing|retired/, 'matching data alone cannot grant membership in the owning Store');

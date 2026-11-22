@@ -15,9 +15,10 @@
     "test": "node ../../scripts/test/run.mjs --package ."
   },
   "dependencies": {
-    "@weiliang0121/capix-contracts": "workspace:*",
     "@weiliang0121/capix-changes": "workspace:*",
+    "@weiliang0121/capix-contracts": "workspace:*",
     "@weiliang0121/capix-diagnostics": "workspace:*",
+    "@weiliang0121/capix-platform": "workspace:*",
     "es-toolkit": "1.52.0"
   },
   "description": "Independent external interactions, persisted feedback, and bounded progress streams for CAPiX.",

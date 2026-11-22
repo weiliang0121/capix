@@ -29,7 +29,7 @@ export function createToolRunner(provider) {
   const interactions = new Interactions().register(contract, { send: (request) => provider.complete(request) });
   const exchanges = new ModelExchanges();
   const resources = new Resources().register(new Resource(exchanges), ModelExchangeResource).register(new Resource({ exchanges, channel: interactions.bind(contract), ...(provider.inspectRequest ? { inspection: provider } : {}) }), ToolModelResource);
-  return new Runner(new Scene(tool), resources, interactions).build();
+  return new Runner(new Scene(tool), resources).build();
 }
 
 // 离线协议示例：第一次请求选择工具，第二次使用真实工具反馈回答。

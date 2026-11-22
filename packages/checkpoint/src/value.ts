@@ -1,5 +1,6 @@
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
 import { RuntimeError } from '@weiliang0121/capix-contracts';
-import { createHash } from 'node:crypto';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
 import type { CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
 import type { CheckpointValue } from '@weiliang0121/capix-contracts';
 import { encodeCheckpointData } from './encoding.js';
@@ -41,7 +42,7 @@ function copyCheckpointValue(value: unknown): { value: CheckpointValue; json: st
     }
     if (++count > 100000 || depth > 64) return fail('structure limit exceeded');
     deepest = Math.max(deepest, depth);
-    if (typeof item === 'string') bytes += Buffer.byteLength(item, 'utf8');
+    if (typeof item === 'string') bytes += utf8ByteLength(item);
     else bytes += 8;
     if (bytes > CHECKPOINT_MAX_BYTES) return fail('byte limit exceeded');
     if (item === null || typeof item === 'boolean' || typeof item === 'string') return item;
@@ -61,7 +62,7 @@ function copyCheckpointValue(value: unknown): { value: CheckpointValue; json: st
       for (const key of keys) {
         const property = descriptors[key]!;
         if (!('value' in property) || !property.enumerable) return fail('accessor or hidden property');
-        bytes += Buffer.byteLength(key, 'utf8');
+        bytes += utf8ByteLength(key);
         const child = visit(property.value, depth + 1);
         if (array) {
           if (key !== String(values.length)) return fail('non-index array property');
@@ -75,7 +76,7 @@ function copyCheckpointValue(value: unknown): { value: CheckpointValue; json: st
   };
   const result = visit(value, 0);
   const json = JSON.stringify(result);
-  if (Buffer.byteLength(json, 'utf8') > CHECKPOINT_MAX_BYTES) fail('encoded byte limit exceeded');
+  if (utf8ByteLength(json) > CHECKPOINT_MAX_BYTES) fail('encoded byte limit exceeded');
   // Publish evidence only after the entire root passes both traversal and JSON
   // budgets. Raw inputs never receive it, including failed copies and proxies.
   if (result && typeof result === 'object' && !fixedValues.has(result)) fixedValues.set(result, { nodes: count, bytes, depth: deepest });
@@ -168,8 +169,8 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
     else checkpointReferenceChild(value, frame.children);
   }
   const encoded = encodeCheckpointData(image);
-  if (Buffer.byteLength(encoded) > CHECKPOINT_MAX_BYTES) fail('encoded image exceeds byte limit');
-  images.set(image, createHash('sha256').update(encoded).digest('hex'));
+  if (utf8ByteLength(encoded) > CHECKPOINT_MAX_BYTES) fail('encoded image exceeds byte limit');
+  images.set(image, createSha256().update(encoded).digestHex());
   return image as CheckpointImage;
 }
 export function cloneCheckpointDelivery(value: unknown): CheckpointDelivery {
@@ -178,8 +179,8 @@ export function cloneCheckpointDelivery(value: unknown): CheckpointDelivery {
   const delivery: any = copied.value;
   if (!object(delivery) || !['succeeded', 'failed', 'cancelled'].includes(delivery.status) || (delivery.status === 'succeeded' && (!Object.hasOwn(delivery, 'output') || !progress(delivery.progress)))) fail('invalid delivery');
   const encoded = encodeCheckpointData(delivery);
-  if (Buffer.byteLength(encoded) > CHECKPOINT_MAX_BYTES) fail('encoded delivery exceeds byte limit');
-  deliveries.set(delivery, createHash('sha256').update(encoded).digest('hex'));
+  if (utf8ByteLength(encoded) > CHECKPOINT_MAX_BYTES) fail('encoded delivery exceeds byte limit');
+  deliveries.set(delivery, createSha256().update(encoded).digestHex());
   return delivery as CheckpointDelivery;
 }
 

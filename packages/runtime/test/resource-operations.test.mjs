@@ -353,7 +353,7 @@ for (const failed of [false, true]) {
         }),
       },
     ];
-    const runner = new Runner(scene, new Resources().register(new Resource(null), offer), undefined, { observations }).build();
+    const runner = new Runner(scene, new Resources().register(new Resource(null), offer), { observations }).build();
     await assert.rejects(runner.run(null, { signal: controller.signal }), (error) => (failed ? error instanceof AggregateError && error.cause === failure : error instanceof InvocationCancelled));
     assert.equal(received, 0);
   });

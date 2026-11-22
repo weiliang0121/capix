@@ -6,7 +6,7 @@ import { Scene, Node, Resources, Runner } from '@weiliang0121/capix-runtime';
 
 import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
 
-const runtime = (scene, options = {}) => new Runner(scene, new Resources(), undefined, options).build();
+const runtime = (scene, options = {}) => new Runner(scene, new Resources(), options).build();
 
 function observer(facts) {
   return { bindInvocation: () => ({ observe: (fact) => facts.push(fact) }) };

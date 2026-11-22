@@ -3,7 +3,8 @@ import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
 import { requireModelRequest, requireModelReply } from '@weiliang0121/capix-model-provider';
 import { Resource } from '@weiliang0121/capix-resources';
-import { Scene, Node, Resources, Runner, Interactions, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { Scene, Node, Resources, Runner, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
 import { Tool, ToolModelResource } from '@weiliang0121/capix-tool';
 import { z } from 'zod';
 
@@ -85,6 +86,6 @@ export function assembly(configuration, modelHost, { entity = new ModelExchanges
   };
   const source = { exchanges: entity, channel: modelHost.interactions.bind(contract), ...(recovery ? { recovery: { read: (id) => modelHost.states.get(id) } } : {}), ...(inspection ? { inspection } : {}), ...(context ? { context } : {}) };
   const resources = new Resources().register(new Resource(entity), ModelExchangeResource).register(new Resource(source), ToolModelResource);
-  const runner = new Runner(scene, resources, modelHost.interactions, store ? { checkpoints: { store } } : {}).build();
+  const runner = new Runner(scene, resources, store ? { checkpoints: { store } } : {}).build();
   return { tool, entity, runner };
 }

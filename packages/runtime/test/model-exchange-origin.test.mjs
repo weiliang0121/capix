@@ -5,7 +5,8 @@ import { MemoryCheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
 import { requireModelRequest, requireModelReply } from '@weiliang0121/capix-model-provider';
 import { Resource, ResourceOffer } from '@weiliang0121/capix-resources';
-import { Scene, Group, Node, Resources, Runner, Interactions, reception, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { Scene, Group, Node, Resources, Runner, reception, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const tools = [{ name: 'lookup', description: 'Read a local source', parameters: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'], additionalProperties: false } }];
@@ -186,9 +187,9 @@ function assembly(entity, host, store, { catalogDigest = 'lookup-schema-v1', sou
       catalog: { tools, digest: catalogDigest, policyVersion: 'fixture-policy-v1' },
     });
     const first = work.children.create(model, { origin, exchanges: [] });
-    const intake = (value) => {
+    const intake = (value, permit) => {
       acceptances++;
-      return { receipt: endpoint.intake(origin, value.reply), interaction: value.interaction };
+      return { receipt: endpoint.intake(origin, value.reply, permit), interaction: value.interaction };
     };
     const initial = await first.invoke({ reception: modelAccepted, result: { succeeded: intake } });
     const call = endpoint.read(origin, initial.receipt.reference).reply.output[0];
@@ -196,9 +197,9 @@ function assembly(entity, host, store, { catalogDigest = 'lookup-schema-v1', sou
     const feedback = await toolCall.invoke({
       reception: toolAccepted,
       result: {
-        succeeded: (result) => {
+        succeeded: (result, permit) => {
           acceptances++;
-          return endpoint.receive(origin, initial.receipt.reference, call.id, result);
+          return endpoint.receive(origin, initial.receipt.reference, call.id, result, permit);
         },
       },
     });
@@ -208,8 +209,11 @@ function assembly(entity, host, store, { catalogDigest = 'lookup-schema-v1', sou
     work.checkpoint({ point, state, refs: { first: first.ref, tool: toolCall.ref, second: second.ref } });
     return { ...state, text: 'finished' };
   };
-  const resources = new Resources().register(new Resource(entity), ModelExchangeResource).register(new Resource(source), sourceOffer).registerInteraction(transport, contract);
-  const runner = new Runner(scene, resources, host.interactions, { checkpoints: { store } }).build();
+  const resources = new Resources()
+    .register(new Resource(entity), ModelExchangeResource)
+    .register(new Resource(source), sourceOffer)
+    .registerBinding(transport, () => host.interactions.bind(contract));
+  const runner = new Runner(scene, resources, { checkpoints: { store } }).build();
   return { runner, prefixes, escaped, counts: () => ({ modelRuns, toolRuns, sourceReads, acceptances }) };
 }
 

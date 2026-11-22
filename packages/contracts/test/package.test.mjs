@@ -8,6 +8,19 @@ import { fileURLToPath } from 'node:url';
 
 import * as contracts from '@weiliang0121/capix-contracts';
 
+test('RuntimeError keeps its name when a bundler renames the class and preserves author subclass names', () => {
+  const { RuntimeError } = contracts;
+  const descriptor = Object.getOwnPropertyDescriptor(RuntimeError, 'name');
+  class AuthorError extends RuntimeError {}
+  Object.defineProperty(RuntimeError, 'name', { value: 'n' });
+  try {
+    assert.equal(new RuntimeError('FAIL', 'detail').name, 'RuntimeError');
+    assert.equal(new AuthorError('FAIL', 'detail').name, 'AuthorError');
+  } finally {
+    Object.defineProperty(RuntimeError, 'name', descriptor);
+  }
+});
+
 test('contracts own shared vocabulary without a reverse implementation or wire dependency', async () => {
   assert.deepEqual(Object.keys(contracts).sort(), ['RuntimeError', 'StableValueError', 'callableKinds', 'stableValue', 'stableValueLimits']);
   const root = new URL('../', import.meta.url);

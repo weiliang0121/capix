@@ -4,6 +4,7 @@ import { RuntimeError } from '@weiliang0121/capix-contracts';
 export class RecordingError extends RuntimeError {
   constructor(cause: unknown) {
     super('RECORDING_FAILED', cause instanceof Error ? cause.message : '运行记录登记失败。', undefined, { cause });
+    if (new.target === RecordingError) this.name = 'RecordingError';
   }
 }
 

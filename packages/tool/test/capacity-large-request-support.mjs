@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { ModelExchanges, ModelExchangeResource } from '@weiliang0121/capix-model-exchanges';
 import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
 import { Resource } from '@weiliang0121/capix-resources';
-import { Scene, Resources, Runner, Interactions, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { Scene, Resources, Runner, checkpointPoint, childReference } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
 import { Tool, ToolModelResource } from '@weiliang0121/capix-tool';
 import { codec, contract, member } from './fixture.mjs';
 
@@ -83,7 +84,7 @@ export function capacityAssembly(host, { checkpoint = false, store, entity = new
   };
   const source = { exchanges: entity, channel: host.interactions.bind(contract), inspection: host.provider, recovery: { read: (id) => host.states.get(id), interactionLimits: recoveryLimits } };
   const resources = new Resources().register(new Resource(entity), ModelExchangeResource).register(new Resource(source), ToolModelResource);
-  return { entity, runner: new Runner(scene, resources, host.interactions, store ? { checkpoints: { store } } : {}).build() };
+  return { entity, runner: new Runner(scene, resources, store ? { checkpoints: { store } } : {}).build() };
 }
 
 export async function closeCapacityHost(host) {

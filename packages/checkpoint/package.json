@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@weiliang0121/capix-contracts": "workspace:*",
+    "@weiliang0121/capix-platform": "workspace:*",
     "es-toolkit": "1.52.0"
   },
   "description": "Stable checkpoint facts, incremental storage, and recovery validation for CAPiX.",

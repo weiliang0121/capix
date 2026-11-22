@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
 import type { ReplyFields } from './native-reply.js';
 import type { ModelReply } from './types.js';
 import { identity, record, shape } from './value.js';
@@ -14,9 +14,9 @@ export function geminiTerminationKind(reason: string, promptBlocked: boolean): M
 export function geminiCallId(replyId: string, partIndex: number): string {
   return (
     'gemini-call-' +
-    createHash('sha256')
+    createSha256()
       .update(JSON.stringify([replyId, partIndex]))
-      .digest('hex')
+      .digestHex()
   );
 }
 
@@ -31,7 +31,7 @@ export function geminiPartsProof(parts: readonly unknown[], output: readonly unk
         )
       : value,
   );
-  return createHash('sha256').update('capix.gemini.signed-parts.v1\n').update(material).digest('hex');
+  return createSha256().update('capix.gemini.signed-parts.v1\n').update(material).digestHex();
 }
 
 export function checkGeminiReply(native: Record<string, unknown>, { id, model, output, termination, usage }: ReplyFields): void {

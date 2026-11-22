@@ -39,7 +39,7 @@ function fixture(run, { check = () => {} } = {}) {
   };
   return {
     store,
-    runner: new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build(),
+    runner: new Runner(scene, new Resources(), { checkpoints: { store } }).build(),
     get latest() {
       return latest;
     },

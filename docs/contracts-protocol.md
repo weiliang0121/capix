@@ -20,7 +20,8 @@
 flowchart TD
   Runtime[runtime] --> Structure[structure]
   Runtime --> Resources[resources]
-  Runtime --> Records[records]
+  Recording[recording] --> Runtime
+  Recording --> Records[records]
   Runtime --> Contracts[contracts]
   Runtime --> Checkpoint[checkpoint]
   Runtime --> Invocation[invocation]

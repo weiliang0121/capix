@@ -101,7 +101,7 @@ for (const boundary of ['save', 'finish']) {
           },
         }),
     }).add(child);
-    const runner = new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build();
+    const runner = new Runner(scene, new Resources(), { checkpoints: { store } }).build();
     await assert.rejects(runner.run(null), /checkpoint/);
     assert.equal(received, 0, 'mechanism failure never enters the business failure receiver');
     assert.ok(writes[boundary] > 0);

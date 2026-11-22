@@ -38,7 +38,7 @@ Resource + ResourceOffer
 | Resources / CapturedResources        | runtime                  | 组合资源登记与结构作用域、成组捕获、收窄和 Interaction 接线   |
 | ResourceInstallation                 | runtime                  | 解算结构供给路线，为本次调用建立固定材料供给                  |
 | InvocationResources                  | runtime                  | 选择调用阶段与轮次的窗口，连接 owner，关闭阶段和调用访问      |
-| ResourceRecord                       | runtime/recording        | 资源事实的可选记录投影                                        |
+| ResourceRecord                       | recording                | 资源事实的可选记录投影                                        |
 
 资源包不导入 Scene、Callable、Invocation、Context、CP、Recorder 或 Interaction。访问窗口不递归查询祖先调用，不因父层状态改变重新解算申请。
 

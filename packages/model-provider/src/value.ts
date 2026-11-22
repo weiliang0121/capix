@@ -1,4 +1,5 @@
-import { isProxy } from 'node:util/types';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 
 export const valueLimit = 2 * 1024 * 1024;
 /** Support bound for one complete closed exchange, independent of request aggregation. */
@@ -24,15 +25,15 @@ export function requireJson(value: unknown, limit = valueLimit, additionalNodes 
       return;
     }
     if (typeof item === 'string') {
-      if (Buffer.byteLength(item) > limit) throw new TypeError('Model value exceeds byte limit');
-      add(Buffer.byteLength(JSON.stringify(item)));
+      if (utf8ByteLength(item) > limit) throw new TypeError('Model value exceeds byte limit');
+      add(utf8ByteLength(JSON.stringify(item)));
       return;
     }
     if (typeof item === 'number' && Number.isFinite(item)) {
-      add(Buffer.byteLength(JSON.stringify(item)));
+      add(utf8ByteLength(JSON.stringify(item)));
       return;
     }
-    if (typeof item !== 'object' || isProxy(item) || ancestors.has(item)) throw new TypeError('Model value must be acyclic JSON');
+    if (typeof item !== 'object' || isOpaqueObject(item) || ancestors.has(item)) throw new TypeError('Model value must be acyclic JSON');
     const array = Array.isArray(item);
     const prototype = Object.getPrototypeOf(item);
     if (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) throw new TypeError('Model value must contain plain objects and arrays');
@@ -48,7 +49,7 @@ export function requireJson(value: unknown, limit = valueLimit, additionalNodes 
       const descriptor = descriptors[key]!;
       if (!descriptor.enumerable || !('value' in descriptor)) throw new TypeError('Model value cannot contain accessors or hidden fields');
       if (array && (!/^(0|[1-9][0-9]*)$/u.test(key) || Number(key) >= item.length)) throw new TypeError('Model arrays cannot have extra fields');
-      if (!array) add(Buffer.byteLength(JSON.stringify(key)) + 1);
+      if (!array) add(utf8ByteLength(JSON.stringify(key)) + 1);
       visit(descriptor.value, depth + 1);
     }
     ancestors.delete(item);

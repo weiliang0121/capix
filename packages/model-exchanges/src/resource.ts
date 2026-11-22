@@ -1,3 +1,4 @@
+import type { ChildReceptionPermit } from '@weiliang0121/capix-contracts';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
 import type { ModelReply, ToolResult } from '@weiliang0121/capix-model-provider';
 import type { ModelExchanges } from './exchanges.js';
@@ -19,9 +20,9 @@ export const ModelExchangeResource = new ResourceOffer({
       request(prefix: ExchangePrefix) {
         return activity.runSync('request', {}, () => exchanges.request(prefix));
       },
-      intake(origin: ExchangeOriginReference, reply: ModelReply): ExchangeIntakeReceipt {
+      intake(origin: ExchangeOriginReference, reply: ModelReply, permit?: ChildReceptionPermit): ExchangeIntakeReceipt {
         return activity.runSync('intake', {}, () => {
-          const operation = requireExchangeOperation({ ...activity.reception(), position: 'model-reply' });
+          const operation = requireExchangeOperation({ ...activity.reception(permit), position: 'model-reply' });
           return Object.freeze({ reference: exchanges.intake(origin, operation, reply), operation });
         });
       },
@@ -31,9 +32,9 @@ export const ModelExchangeResource = new ResourceOffer({
       closed(origin: ExchangeOriginReference, references: readonly ExchangeReference[]) {
         return activity.runSync('closed', {}, () => exchanges.closed(origin, references));
       },
-      receive(origin: ExchangeOriginReference, reference: ExchangeReference, callId: string, result: ToolResult): ExchangeFeedbackReceipt {
+      receive(origin: ExchangeOriginReference, reference: ExchangeReference, callId: string, result: ToolResult, permit?: ChildReceptionPermit): ExchangeFeedbackReceipt {
         return activity.runSync('receive', {}, () => {
-          const operation = requireExchangeOperation({ ...activity.reception(), position: 'tool-feedback' });
+          const operation = requireExchangeOperation({ ...activity.reception(permit), position: 'tool-feedback' });
           const next = exchanges.complete(origin, reference, callId, result, operation);
           const feedback = exchanges.read(origin, next).feedback.find((item) => item.toolCallId === callId)!;
           return Object.freeze({ reference: next, operation, feedbackDigest: feedbackDigest(feedback) });

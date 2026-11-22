@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { RuntimeError, stableValue, type Stable, type InvocationOrigin } from '@weiliang0121/capix-contracts';
 import { publishFact, combineFaults, type ChangeProvenance, type EventConsumer, type ChangeCapture } from '@weiliang0121/capix-changes';
 import { PersistenceError } from '@weiliang0121/capix-diagnostics';

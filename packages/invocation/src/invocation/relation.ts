@@ -1,5 +1,5 @@
 import type { CheckpointBinding } from '../checkpoint/work.js';
-import { stableValue, type Stable, type InvocationIdentity } from '@weiliang0121/capix-contracts';
+import { stableValue, type ChildReceptionPermit, type Stable, type InvocationIdentity } from '@weiliang0121/capix-contracts';
 import type { ChildInvocationView } from './view.js';
 import type { InvocationOutputReceiver, RuntimeErrorValue } from '@weiliang0121/capix-contracts';
 import type { InvocationRelationChange } from '../observation/facts.js';
@@ -47,7 +47,7 @@ export interface InvocationRelationOwner {
   accepting<Value>(work: () => Promise<Value>): Promise<Value>;
   fail(failure: InvocationFailure): void;
   publish(relation: InvocationRelation, change: InvocationRelationChange): unknown | undefined;
-  receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value>;
+  receive<Value>(relation: InvocationRelation, work: (permit: ChildReceptionPermit) => Promise<Value>): Promise<Value>;
   captureDelivery(): InvocationPropagationScope;
   receptionFailure(relation: InvocationRelation, error: unknown, scope: InvocationPropagationScope): { error: unknown; failure: InvocationFailure; delivery: unknown };
 }
@@ -157,7 +157,7 @@ export class InvocationRelation<Output = unknown> {
     return Object.freeze(result.status === 'succeeded' ? { ...result, output: stableValue<Output>(result.output) } : { ...result, diagnostic: result.diagnostic ? stableValue<RuntimeErrorValue>(result.diagnostic) : failureDiagnostic(result.error) });
   }
 
-  accept<Value>(work: (delivered: Stable<Output>) => Value | Stable<Value> | Promise<Value | Stable<Value>>, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
+  accept<Value>(work: (delivered: Stable<Output>, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
     try {
       return this.owner.accepting(() => this.acceptResult<Value>(work, contract));
     } catch (error) {
@@ -166,7 +166,7 @@ export class InvocationRelation<Output = unknown> {
   }
 
   /** Handling a failed delivery never rewrites that child's outcome as succeeded. */
-  handle<Value>(work: (failure: unknown) => Value | Stable<Value> | Promise<Value | Stable<Value>>, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
+  handle<Value>(work: (failure: unknown, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
     try {
       return this.owner.accepting(async () => {
         if (!this.receiveFailure || this.#returned?.status !== 'failed' || !this.#returned.failure?.receptionAllowed) throw new Error('Child has no receivable failed delivery');
@@ -185,7 +185,7 @@ export class InvocationRelation<Output = unknown> {
     }
   }
 
-  private async acceptResult<Value>(work: (delivered: Stable<Output>) => Value | Stable<Value> | Promise<Value | Stable<Value>>, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
+  private async acceptResult<Value>(work: (delivered: Stable<Output>, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
     const scope = this.owner.captureDelivery();
     if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
     const delivered = this.#returned.output;
@@ -216,11 +216,11 @@ export class InvocationRelation<Output = unknown> {
     }
   }
 
-  private async receiveWithinParent<Delivered, Value>(delivered: Delivered, work: (delivered: Delivered) => Value | Stable<Value> | Promise<Value | Stable<Value>>, scope: InvocationPropagationScope, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
+  private async receiveWithinParent<Delivered, Value>(delivered: Delivered, work: (delivered: Delivered, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>, scope: InvocationPropagationScope, contract?: InvocationReceptionBinding): Promise<Stable<Value>> {
     try {
       this.owner.requireHealthy();
-      return await this.owner.receive(this, async () => {
-        const candidate = await work(delivered);
+      return await this.owner.receive(this, async (permit) => {
+        const candidate = await work(delivered, permit);
         // Do not requireActive here: a reception already entered may finish
         // local processing after cancellation, while later resource access stays guarded.
         this.owner.changing?.();

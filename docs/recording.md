@@ -2,7 +2,7 @@
 
 记录实体由 `@weiliang0121/capix-records`（`packages/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@weiliang0121/capix-records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`packages/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。`@weiliang0121/capix-records/data` 自持纯记录 DTO、归档形状及校验、输出解析与通用查询契约；它不加载 Recorder、Node API 或业务协议。
 
-Runtime 的 `@weiliang0121/capix-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `packages/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 仅处理调用结果映射。records 的 content 适配持有消息／记忆映射，并显式依赖两个内容包的事实类型身份；记录实体本体不依赖 Runtime 或结构。
+自动记录预设从 `@weiliang0121/capix-recording` 导入。该包通过 Runtime 的公开观测端口安装，导出 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约。记录实体及默认消息／记忆事实解释由 `@weiliang0121/capix-records` 提供。
 
 Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 RecordClock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 `packages/records/src/tree/`，具体关系规则位于 `tree/relation.ts`，不处理 Context、业务正文或 ExecutionRecordSnapshot。
 
@@ -105,7 +105,7 @@ CallableContext 不拥有 settings/transcriptRange 业务字段。配置资源�
 
 ## 纯数据与业务协议边界
 
-记录 DTO、归档身份与校验、readOutput 和 validateExecutionRecordSnapshot 等通用能力从 `@weiliang0121/capix-records/data` 获取；它们不再由 protocol 重导。Runtime 的记录预设消费该出口，内容观察类型从 transcriptRecord／memoryRecord 的公开参数契约推导，不新增直接实体依赖。
+记录 DTO、归档身份与校验、readOutput 和 validateExecutionRecordSnapshot 等通用能力从 `@weiliang0121/capix-records/data` 获取；它们不再由 protocol 重导。recording 包的记录预设消费该出口，内容观察类型从 transcriptRecord／memoryRecord 的公开参数契约推导，不新增直接实体依赖。
 
 调用进度 InvocationEvent 和阶段／动作／关系 phase 归 `@weiliang0121/capix-invocation/events`，准确关系身份来自 contracts。记录消费真实调用事实并保留其归属，数据出口不改变顺序、固定效果或 CP 资格。
 

@@ -7,6 +7,7 @@ export class ChangeCaptureError<Event = unknown> extends RuntimeError {
     cause: unknown,
   ) {
     super('CHANGE_CAPTURE_FAILED', '变化已落实，但捕获失败；不得通过重做工作补偿。', undefined, { cause });
+    if (new.target === ChangeCaptureError) this.name = 'ChangeCaptureError';
   }
 }
 

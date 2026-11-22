@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { ProgressChannel, type ProgressReceiver } from '@weiliang0121/capix-changes';
 import type { InvocationIdentity } from '@weiliang0121/capix-contracts';
 import type { Clock } from '@weiliang0121/capix-invocation';

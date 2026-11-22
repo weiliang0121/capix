@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from 'node:util';
+import { equalData } from '@weiliang0121/capix-platform/equal';
 import { requireOpenAIResponsesReply } from './contract.js';
 import { ModelProtocolIssue, ProviderError } from './error.js';
 import { checkResponsesCallId, responsesPrefixProof, type ResponsesSource } from './responses-wire.js';
@@ -101,7 +101,7 @@ function projectResponsesOutput(rawItems: readonly unknown[]) {
 export function reconcileResponsesItem(terminal: Record<string, unknown>, done: Record<string, unknown>): Record<string, unknown> {
   // Some endpoints provide the full reasoning ciphertext only in output_item.done.
   const item = terminal.type === 'reasoning' && terminal.encrypted_content == null && typeof done.encrypted_content === 'string' ? { ...terminal, encrypted_content: done.encrypted_content } : terminal;
-  if (!isDeepStrictEqual(item, done) && !isDeepStrictEqual(projectResponsesOutput([item]), projectResponsesOutput([done]))) throw responsesEnvelope();
+  if (!equalData(item, done) && !equalData(projectResponsesOutput([item]), projectResponsesOutput([done]))) throw responsesEnvelope();
   return item;
 }
 

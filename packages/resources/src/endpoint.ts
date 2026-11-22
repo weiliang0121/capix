@@ -1,7 +1,7 @@
 import { ResourcePortError } from './errors.js';
 import type { ResourceActivity, ResourceOperationDescription } from './activity.js';
 import type { ResourceOperation } from './methods.js';
-import type { OperationOptions, OperationResult } from '@weiliang0121/capix-contracts';
+import type { ChildReceptionPermit, OperationOptions, OperationResult } from '@weiliang0121/capix-contracts';
 
 export interface ResourceOperationSource {
   readonly offerId: string;
@@ -30,11 +30,11 @@ export class ResourceEndpointActivity {
   validate(): void {
     this.activity.validate();
   }
-  reception(): Readonly<{ parentContextId: string; childContextId: string }> {
+  reception(permit?: ChildReceptionPermit): Readonly<{ parentContextId: string; childContextId: string }> {
     this.validate();
     try {
       if (!this.activity.owner?.reception) throw new ResourcePortError('Fixed operations require a parent reception binding');
-      return this.activity.owner.reception();
+      return this.activity.owner.reception(permit);
     } catch (error) {
       this.rejectPort(error, 'Resource reception provenance failed');
     }

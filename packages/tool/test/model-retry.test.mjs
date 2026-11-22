@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ChatCompletionsProvider } from '@weiliang0121/capix-model-provider';
-import { Interactions } from '@weiliang0121/capix-runtime';
+import { Interactions } from '@weiliang0121/capix-interaction';
 import { assembly, contract, host, input, journal, member } from './fixture.mjs';
 
 const event = (value) => `data: ${typeof value === 'string' ? value : JSON.stringify(value)}\n\n`;

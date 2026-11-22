@@ -83,7 +83,7 @@ test('structure checkpoint and reception contracts reconnect to runtime recovery
         return value;
       },
     }).add({ leaf });
-    return new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build();
+    return new Runner(scene, new Resources(), { checkpoints: { store } }).build();
   };
   class Capture extends MemoryCheckpointStore {
     save(image, revision) {

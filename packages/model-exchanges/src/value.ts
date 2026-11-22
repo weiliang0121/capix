@@ -1,5 +1,6 @@
-import { createHash } from 'node:crypto';
-import { isProxy } from 'node:util/types';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { requireToolFeedback } from '@weiliang0121/capix-model-provider';
 import type { ExchangeOperation, ExchangeReference, ExchangeOriginReference, ExchangeIntakeReceipt, ExchangeFeedbackReceipt } from './types.js';
 import { maximumModelExchangeEntryBytes } from './limits.js';
@@ -15,12 +16,12 @@ export function capture(value: unknown, limit = maximumModelExchangeEntryBytes):
     if (++nodes > 2_000_000 || depth > 64) throw new TypeError('Model exchange value exceeds structural limits');
     if (item === null || typeof item === 'boolean') return item;
     if (typeof item === 'string') {
-      bytes += Buffer.byteLength(item);
+      bytes += utf8ByteLength(item);
       if (bytes > limit) throw new RangeError('Model exchange value exceeds byte limit');
       return item;
     }
     if (typeof item === 'number' && Number.isFinite(item)) return item;
-    if (typeof item !== 'object' || isProxy(item) || ancestors.has(item)) throw new TypeError('Model exchange requires acyclic JSON data');
+    if (typeof item !== 'object' || isOpaqueObject(item) || ancestors.has(item)) throw new TypeError('Model exchange requires acyclic JSON data');
     const array = Array.isArray(item);
     if (!array && Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) throw new TypeError('Model exchange requires plain JSON data');
     if (Object.getOwnPropertySymbols(item).length) throw new TypeError('Model exchange does not accept symbol properties');
@@ -31,7 +32,7 @@ export function capture(value: unknown, limit = maximumModelExchangeEntryBytes):
       if (array && key === 'length') continue;
       if (!descriptor.enumerable || !('value' in descriptor)) throw new TypeError('Model exchange does not accept accessors or hidden properties');
       if (array && (!/^(0|[1-9][0-9]*)$/u.test(key) || Number(key) >= item.length)) throw new TypeError('Model exchange array contains extra properties');
-      bytes += Buffer.byteLength(key);
+      bytes += utf8ByteLength(key);
       if (bytes > limit) throw new RangeError('Model exchange value exceeds byte limit');
       Object.defineProperty(result, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
     }
@@ -46,7 +47,7 @@ export function capture(value: unknown, limit = maximumModelExchangeEntryBytes):
 
 /** Fix only the collection envelope. Each entry is captured and checked independently. */
 export function captureSnapshotEnvelope(value: unknown, maximumEntries: number, maximumOrigins: number): Readonly<{ formatVersion: unknown; id: unknown; sequence: unknown; origins: readonly unknown[]; entries: readonly unknown[] }> {
-  if (value === null || typeof value !== 'object' || isProxy(value) || Array.isArray(value) || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) throw new TypeError('Invalid model exchange snapshot object');
+  if (value === null || typeof value !== 'object' || isOpaqueObject(value) || Array.isArray(value) || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) throw new TypeError('Invalid model exchange snapshot object');
   const fields = Object.getOwnPropertyDescriptors(value);
   const names = ['formatVersion', 'id', 'sequence', 'origins', 'entries'];
   if (Reflect.ownKeys(fields).length !== names.length || names.some((name) => !Object.hasOwn(fields, name) || !fields[name]!.enumerable || !('value' in fields[name]!))) throw new TypeError('Invalid model exchange snapshot fields');
@@ -56,7 +57,7 @@ export function captureSnapshotEnvelope(value: unknown, maximumEntries: number, 
 }
 
 function captureSnapshotArray(source: unknown, maximum: number): readonly unknown[] {
-  if (!Array.isArray(source) || isProxy(source) || Object.getPrototypeOf(source) !== Array.prototype) throw new TypeError('Invalid model exchange entries array');
+  if (!Array.isArray(source) || isOpaqueObject(source) || Object.getPrototypeOf(source) !== Array.prototype) throw new TypeError('Invalid model exchange entries array');
   if (source.length > maximum) throw new RangeError('Model exchange snapshot exceeds collection limits');
   if (Reflect.ownKeys(source).length !== source.length + 1) throw new TypeError('Model exchange entries must be a dense data array');
   const entries: unknown[] = [];
@@ -69,7 +70,7 @@ function captureSnapshotArray(source: unknown, maximum: number): readonly unknow
 }
 
 export function encodedBytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value));
+  return utf8ByteLength(JSON.stringify(value));
 }
 
 /** Property construction order is not part of an effect's identity. Arrays retain order. */
@@ -123,7 +124,7 @@ export function requireExchangeFeedbackReceipt(value: unknown): ExchangeFeedback
   return Object.freeze({ reference: requireExchangeReference(item.reference), operation: requireExchangeOperation(item.operation), feedbackDigest: item.feedbackDigest });
 }
 export function feedbackDigest(value: unknown): string {
-  return createHash('sha256')
+  return createSha256()
     .update(canonical(requireToolFeedback(capture(value))))
-    .digest('hex');
+    .digestHex();
 }

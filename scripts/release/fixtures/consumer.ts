@@ -11,7 +11,7 @@ import { Scene, Group, defineNode, checkpointPoint } from '@weiliang0121/capix-s
 import { assertStructureConfigurable } from '@weiliang0121/capix-structure/construction';
 import { Runner, Resources, type RunnerOutputEvent } from '@weiliang0121/capix-runtime';
 import { CallableBuilder, type InvocationCapabilities } from '@weiliang0121/capix-runtime/construction';
-import { invocationRecording } from '@weiliang0121/capix-runtime/recording';
+import { invocationRecording } from '@weiliang0121/capix-recording';
 import { z } from 'zod';
 import { Tool, type ToolMember, type ToolRequestContext, type ToolContextPreparation, type ToolModelSource } from '@weiliang0121/capix-tool';
 import { FactType } from '@weiliang0121/capix-changes';

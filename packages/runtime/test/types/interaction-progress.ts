@@ -50,9 +50,9 @@ const bad = new ResourceOffer({
     },
   },
 });
-new Resources().registerInteraction(good, contract);
+new Resources().registerBinding(good, () => interactions.bind(contract));
 // @ts-expect-error Matching request/reply cannot hide a mismatched delta contract.
-new Resources().registerInteraction(bad, contract);
+new Resources().registerBinding(bad, () => interactions.bind(contract));
 const plain: InteractionContract<string, string> = { key: 'plain', request: String, reply: String };
 new Interactions().register(plain, {
   send(request, progress) {

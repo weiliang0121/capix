@@ -4,11 +4,9 @@ import assert from 'node:assert/strict';
 
 import { test } from 'node:test';
 
-import { Sequence, defineNode, defineGroup, bindRecording, defineObservation } from '@weiliang0121/capix-runtime';
+import { Sequence, defineNode, defineGroup, defineObservation } from '@weiliang0121/capix-runtime';
 
-import { Recorder, RecordBook } from '@weiliang0121/capix-records';
-
-import { runtimeDefinition, recordedCall } from '../fixtures/declarations.mjs';
+import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 const metadata = { name: 'composed', label: 'Composed', source: 'test' };
 
@@ -21,13 +19,13 @@ function composed(sequence) {
   return sequence;
 }
 
-function install(composition, recorder, observations = []) {
+function install(composition, observations = []) {
   const calls = [];
   const execution = composition;
   const definition = runtimeDefinition(execution);
   const runtime = installCallable(definition, {
     providers: [],
-    observations: [...(recorder ? [bindRecording(recorder)] : []), ...observations],
+    observations,
     source: { capture: () => null },
     bindings: [
       {
@@ -144,20 +142,19 @@ test('parent acceptance failure retains successful child and does not start next
 });
 
 test('shared definitions and composition retain independent O/O/A relationships per call', async () => {
-  const recorder = new Recorder(new RecordBook());
   const leaf = attempt('identity');
   const inner = composed(new Sequence([{ node: leaf, key: 'leaf' }]));
   const outer = composed(new Sequence([{ node: inner, key: 'inner' }]));
-  const installed = install(new Sequence([{ node: outer, key: 'outer' }]), recorder);
+  const installed = install(new Sequence([{ node: outer, key: 'outer' }]));
   assert.deepEqual(await installed.runtime.run('one', {}), 'one');
   assert.deepEqual(await installed.runtime.run('two', {}), 'two');
   const [first, second] = installed.calls;
   const outerCall = first.children.values()[0].invocation;
   const innerCall = outerCall.children.values()[0].invocation;
   const leafCall = innerCall.children.values()[0].invocation;
-  assert.equal(recordedCall(recorder, outerCall).parentId, recordedCall(recorder, first).id);
-  assert.equal(recordedCall(recorder, innerCall).parentId, recordedCall(recorder, outerCall).id);
-  assert.equal(recordedCall(recorder, leafCall).parentId, recordedCall(recorder, innerCall).id);
+  assert.equal(outerCall.identity.parentContextId, first.context.id);
+  assert.equal(innerCall.identity.parentContextId, outerCall.context.id);
+  assert.equal(leafCall.identity.parentContextId, innerCall.context.id);
   assert.notEqual(outerCall, second.children.values()[0].invocation);
   assert.equal(outerCall.children.values().length, 1);
 });
@@ -195,7 +192,7 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
     },
     { failure: 'propagate' },
   );
-  const installed = install(new Sequence([{ node: use, key: 'work', input: () => null }]), undefined, [{ bindInvocation: () => ({ observe() {} }), declarations: (structure) => (structure === use ? [declaration] : []) }]);
+  const installed = install(new Sequence([{ node: use, key: 'work', input: () => null }]), [{ bindInvocation: () => ({ observe() {} }), declarations: (structure) => (structure === use ? [declaration] : []) }]);
   await assert.rejects(installed.runtime.run(null, {}), (observed) => observed.code === 'OBSERVATION_FAILED' && observed.cause === error);
   const child = installed.calls[0].children.values()[0];
   assert.equal(child.invocation.context.status, 'succeeded');

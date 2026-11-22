@@ -16,7 +16,7 @@ npm install @weiliang0121/capix-records
 
 ## 用法
 
-在宿主中创建 `new Recorder(new RecordBook())`，通过 `bindRecording(recorder)` 把观测安装到 Runner。可执行示例展示了资源登记、调用以及如何从同一 RecordBook 读取结果。[示例源码](https://github.com/weiliang0121/capix/blob/main/examples/records.mjs)
+在宿主中创建 `new Recorder(new RecordBook())`，从 `@weiliang0121/capix-recording` 导入 `bindRecording`，通过 `bindRecording(recorder)` 把观测安装到 Runner。可执行示例展示了资源登记、调用以及如何从同一 RecordBook 读取结果。[示例源码](https://github.com/weiliang0121/capix/blob/main/examples/records.mjs)
 
 ## 快照与校验范围
 

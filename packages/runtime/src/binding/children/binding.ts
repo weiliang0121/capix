@@ -1,5 +1,5 @@
 import { createCallableInvocation, restoreCallableInvocation } from '../../construction/calls.js';
-import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, OperationOptions, Stable } from '@weiliang0121/capix-contracts';
+import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, ChildOperationOptions, ChildReceptionPermit, Stable } from '@weiliang0121/capix-contracts';
 import { InvocationCancelled, type Invocation, ChildCallFailure, combineOutputReceivers } from '@weiliang0121/capix-invocation';
 import type { BoundChildren } from './bound.js';
 import type { InvocationChildReferences } from './references.js';
@@ -8,7 +8,7 @@ import type { BoundReceptions } from '../receptions.js';
 export type ChildBindingsParent = Invocation<any, any, any>;
 
 /** Public overloads have checked result/reception association before heterogeneous dispatch. */
-type InvocationChildOperationOptions<D extends ChildContract> = ChildOptions<D> & OperationOptions<Stable<CallableOutput<D>>, unknown, unknown, Stable<CallableDelta<D>>> & { readonly reception?: ReceptionDefinition<D, any> };
+type InvocationChildOperationOptions<D extends ChildContract> = Omit<ChildOperationOptions<D>, 'reception'> & { readonly reception?: ReceptionDefinition<D, any> };
 
 interface ChildAccessOptions {
   readonly children: BoundChildren;
@@ -82,7 +82,7 @@ export class InvocationChildBindings {
     return { succeeded: receiver?.succeeded?.bind(receiver), failed: receiver?.failed?.bind(receiver), contract };
   }
 
-  private async receiveTarget(relation: import('@weiliang0121/capix-invocation').InvocationRelation, succeeded?: (value: any) => unknown, failed?: (failure: unknown) => unknown, contract?: import('@weiliang0121/capix-invocation').InvocationReceptionBinding): Promise<any> {
+  private async receiveTarget(relation: import('@weiliang0121/capix-invocation').InvocationRelation, succeeded?: (value: any, permit: ChildReceptionPermit) => unknown, failed?: (failure: unknown, permit: ChildReceptionPermit) => unknown, contract?: import('@weiliang0121/capix-invocation').InvocationReceptionBinding): Promise<any> {
     const child = relation.invocation;
     try {
       await child.run();
@@ -98,15 +98,15 @@ export class InvocationChildBindings {
         throw new AggregateError([sourceFailure, windowFailure], 'Child operation failed after its reception window became unavailable', { cause: sourceFailure });
       }
       if (!failed || relation.returned?.status !== 'failed' || !relation.returned.failure?.receptionAllowed || relation.returned.error instanceof InvocationCancelled || child.context.progress.round === 0 || ['setup', 'control', 'observation'].includes(relation.returned.failure?.phase ?? 'setup')) throw error;
-      return relation.handle((failure) => {
+      return relation.handle((failure, permit) => {
         this.checkActive();
-        return failed(failure);
+        return failed(failure, permit);
       }, contract);
     }
     // A reception failure is never fed back into its own failure callback.
-    return relation.accept((output) => {
+    return relation.accept((output, permit) => {
       this.checkActive();
-      return succeeded ? succeeded(output) : output;
+      return succeeded ? succeeded(output, permit) : output;
     }, contract);
   }
 
@@ -139,17 +139,17 @@ export class InvocationChildBindings {
     const relation = entry.relation;
     const access = this;
     function accept(): Promise<Stable<CallableOutput<D>>>;
-    function accept<Value>(receive: (output: Stable<CallableOutput<D>>) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>>;
-    function accept<Value>(contract: ReceptionDefinition<D, Value>, receive: (output: Stable<CallableOutput<D>>) => NoInfer<Value | Stable<Value>> | Promise<NoInfer<Value | Stable<Value>>>): Promise<Stable<Value>>;
-    function accept<Value = CallableOutput<D>>(first?: ReceptionDefinition<D, Value> | ((output: Stable<CallableOutput<D>>) => Value | Stable<Value> | Promise<Value | Stable<Value>>), receive?: (output: Stable<CallableOutput<D>>) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>> {
+    function accept<Value>(receive: (output: Stable<CallableOutput<D>>, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>>;
+    function accept<Value>(contract: ReceptionDefinition<D, Value>, receive: (output: Stable<CallableOutput<D>>, permit: ChildReceptionPermit) => NoInfer<Value | Stable<Value>> | Promise<NoInfer<Value | Stable<Value>>>): Promise<Stable<Value>>;
+    function accept<Value = CallableOutput<D>>(first?: ReceptionDefinition<D, Value> | ((output: Stable<CallableOutput<D>>, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>), receive?: (output: Stable<CallableOutput<D>>, permit: ChildReceptionPermit) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>> {
       return access.perform(() => {
         if (first !== undefined && typeof first !== 'function' && (typeof first !== 'object' || first === null)) throw new Error('Invalid child reception contract or callback');
         const contract = typeof first === 'object' && first !== null ? access.options.receptions.require(first, entry.definition as D) : undefined;
         const callback = typeof first === 'function' ? first : receive;
         if (contract && typeof callback !== 'function') throw new Error('Typed reception requires a callback');
-        return relation.accept<Value>((output) => {
+        return relation.accept<Value>((output, permit) => {
           access.checkActive();
-          return callback ? callback(output as Stable<CallableOutput<D>>) : (output as Stable<Value>);
+          return callback ? callback(output as Stable<CallableOutput<D>>, permit) : (output as Stable<Value>);
         }, contract);
       });
     }

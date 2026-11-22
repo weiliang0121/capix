@@ -75,7 +75,7 @@ test('real hot saves publish fixed child fields once, while each point check sti
     assert.equal(work.children.facts.get(call.ref).returned.output.nested.score, 1);
     return 1;
   };
-  await new Runner(scene, new Resources(), undefined, { checkpoints: { store: port } }).build().run({ material: 'fixed' });
+  await new Runner(scene, new Resources(), { checkpoints: { store: port } }).build().run({ material: 'fixed' });
   for (const name of ['parent-input', 'child-input', 'child-output', 'accepted']) for (const method of ['encode', 'decode']) assert.equal(second[`${name}.${method}`], first[`${name}.${method}`], `${name}.${method} must not revisit old facts`);
   assert.equal(second.reception, first.reception);
   assert.equal(second.check, first.check + 1);
@@ -117,7 +117,7 @@ test('uncontracted stable data keeps undefined, missing fields and negative zero
     },
     finish: (...args) => store.finish(...args),
   };
-  await new Runner(scene, new Resources(), undefined, { checkpoints: { store: port } }).build().run(null);
+  await new Runner(scene, new Resources(), { checkpoints: { store: port } }).build().run(null);
   const next = new MemoryCheckpointStore();
   next.save(saved, 0);
   const resumedNode = new Node({ run: () => assert.fail('child must not rerun') });
@@ -134,5 +134,5 @@ test('uncontracted stable data keeps undefined, missing fields and negative zero
     resume: { run: () => 1 },
   });
   const resumed = new Scene({ checkpoint: { key: 'lossless-parent', version: 1, input: identity, output: identity, points: [resumedPoint] }, run: () => assert.fail('root must not rerun') }).add({ node: resumedNode });
-  assert.equal(await new Runner(resumed, new Resources(), undefined, { checkpoints: { store: next } }).build().resume(saved.frame.owner.contextId), 1);
+  assert.equal(await new Runner(resumed, new Resources(), { checkpoints: { store: next } }).build().resume(saved.frame.owner.contextId), 1);
 });

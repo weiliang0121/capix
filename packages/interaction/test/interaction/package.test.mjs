@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('../../../../', import.meta.url));
 
 const interactionDirectory = resolve(root, 'packages/interaction');
 
-const dependencies = ['@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-diagnostics', 'es-toolkit'];
+const dependencies = ['@weiliang0121/capix-platform', '@weiliang0121/capix-contracts', '@weiliang0121/capix-changes', '@weiliang0121/capix-diagnostics', 'es-toolkit'];
 
 const excludedPackages = ['@weiliang0121/capix-runtime', '@weiliang0121/capix-invocation', '@weiliang0121/capix-structure', '@weiliang0121/capix-resources'];
 
@@ -25,6 +25,7 @@ test('interaction package exposes external exchanges with only lower dependencie
   assert.equal(manifest.name, '@weiliang0121/capix-interaction');
   assert.deepEqual(Object.keys(manifest.exports), ['.']);
   assert.deepEqual(Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).sort(), [...dependencies].sort());
+  const imports = new Set([...dependencies, '@weiliang0121/capix-platform/bytes', '@weiliang0121/capix-platform/identity', '@weiliang0121/capix-platform/inspection']);
   async function inspect(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const file = resolve(directory, entry.name);
@@ -33,7 +34,7 @@ test('interaction package exposes external exchanges with only lower dependencie
         const source = await readFile(file, 'utf8');
         for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
           const specifier = match[2];
-          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.ok(dependencies.includes(specifier), `${file} cannot import ${specifier}`);
+          if (specifier.startsWith('@capix/') || specifier.startsWith('@weiliang0121/capix-')) assert.ok(imports.has(specifier), `${file} cannot import ${specifier}`);
           if (specifier.startsWith('.')) assert.ok(!relative(interactionDirectory, resolve(dirname(file), specifier)).startsWith('..'), `${file} crosses its package boundary`);
         }
       }

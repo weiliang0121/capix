@@ -7,5 +7,6 @@ export class PersistenceError extends RuntimeError {
     cause: unknown,
   ) {
     super('PERSISTENCE_FAILED', `Required persistence failed: ${operation}`, undefined, { cause });
+    if (new.target === PersistenceError) this.name = 'PersistenceError';
   }
 }

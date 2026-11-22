@@ -1,4 +1,4 @@
-import { isProxy } from 'node:util/types';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { isArray } from 'es-toolkit/compat';
 
 import { DEFAULT_INTERACTION_TEXT_UNITS, MAX_INTERACTION_TEXT_UNITS, type InteractionDataLimits } from './contract.js';
@@ -16,7 +16,7 @@ export function interactionDataLimits(options: InteractionDataLimits = {}): Requ
 
 /** Inspect the complete wrapper without reading accessors; deferred payloads are captured separately. */
 export function captureInteractionEnvelope<T extends object>(value: T, allowed: readonly string[], separate: readonly string[]): T {
-  if (!value || typeof value !== 'object' || isProxy(value)) throw new TypeError('Invalid persisted interaction fields');
+  if (!value || typeof value !== 'object' || isOpaqueObject(value)) throw new TypeError('Invalid persisted interaction fields');
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) throw new TypeError('Invalid persisted interaction fields');
   const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -46,7 +46,7 @@ export function captureInteractionValue<T>(value: T, maxTextUnits: number = DEFA
       if (characters > maxTextUnits) throw new TypeError('Interaction data exceeds its text limit');
       return current;
     }
-    if (typeof current !== 'object' || isProxy(current)) throw new TypeError('Interaction data must contain only JSON values');
+    if (typeof current !== 'object' || isOpaqueObject(current)) throw new TypeError('Interaction data must contain only JSON values');
     // Generic plain-object predicates can read Symbol.toStringTag. Inspect structural identity only.
     const prototype = Object.getPrototypeOf(current);
     if (!isArray(current) && prototype !== Object.prototype && prototype !== null) throw new TypeError('Interaction data must contain only JSON values');

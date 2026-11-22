@@ -12,7 +12,10 @@ test('a completed invocation leaves its independent pending interaction counted 
   const interactions = new Interactions().register(boundary, { send: () => late.promise });
   const offer = new ResourceOffer({ methods: { start: (channel, input) => channel.start(input) } });
   const start = new Node({ deps: { exchange: offer.request() }, run: (work) => work.resources.exchange.start(work.input) });
-  const runner = new Runner(new Scene(start), new Resources().registerInteraction(offer, boundary), interactions).build();
+  const runner = new Runner(
+    new Scene(start),
+    new Resources().registerBinding(offer, () => interactions.bind(boundary)),
+  ).build();
   const ref = await runner.run('question');
   assert.equal(runner.isRunning, false);
   assert.equal(interactions.pendingCount, 1);

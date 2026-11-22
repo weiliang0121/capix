@@ -4,7 +4,7 @@
 
 ## 安装与入口
 
-运行环境为 Node.js `>=22.23.2`。包使用 ESM，附带 TypeScript 类型声明。本页描述所在源码版本。npm 0.9.1 提供 Chat Completions；选择含其他适配器的版本时，可按包名核对[发布记录](https://github.com/weiliang0121/capix/releases)。
+桌面运行基线为 Node.js `>=22.23.2`。在 iOS Hermes 的 Expo 应用中，先配置[宿主入口](https://github.com/weiliang0121/capix/blob/main/packages/platform/README.md#ios-hermes-启动)，再把 `import { fetch } from 'expo/fetch'` 导入的函数传给适配器的 `fetch` 选项。JSON 和 SSE 的响应读取都需要可读取的 `Response.body`。这一组合已通过本机 HTTP 服务验证。包使用 ESM，附带 TypeScript 类型声明。本页描述所在源码版本。npm 0.9.1 提供 Chat Completions；选择含其他适配器的版本时，可按包名核对[发布记录](https://github.com/weiliang0121/capix/releases)。
 
 ```sh
 npm install @weiliang0121/capix-model-provider
@@ -123,7 +123,9 @@ const model = new GeminiGenerateContentProvider({
 
 Messages 流可在报告 `stop_reason` 后继续更新累计用量。输入、缓存读取、缓存写入和输出分别累计，后续帧省略字段或给出 `null` 时保留已知值，任一已知计数回退会以 `invalid-usage` 拒绝整轮。`message_start` 的输出计数是初值，首次输出用量以 `message_delta` 为准。适配器在 `message_stop` 交付最终回复。若 `max_tokens` 截断末个工具调用的 JSON 参数，回复保留之前完整的块及用量，略去无法解析的调用，终态为 `incomplete/max_tokens`。Tool 对整轮停止派发，包括同轮中参数已经完整的调用。[Anthropic 工具参数流](https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming) · [工具执行回归](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/messages-recovery.test.mjs)
 
-公开 `requireModelReply`、`requireModelRequest`、`requireToolResult`、`requireToolFeedback` 和 `requireModelExchange` 对未知值作完整校验，返回原对象身份，不克隆、不冻结，也不缓存对可变对象的信任。适用于资源、Interaction、实体与 CP 的接纳边界。校验拒绝旧双字段形状、未知字段/版本、重复 ID、不完整反馈、getter、Proxy、循环引用与非 JSON 值；错误不包含传入正文。Provider 自己生成的回复已深冻结。旧 `text/finishReason` 双字段回复不是新协议的有效持久值，不能自动迁移后冒充已认证反馈。
+公开 `requireModelReply`、`requireModelRequest`、`requireToolResult`、`requireToolFeedback` 和 `requireModelExchange` 对未知值作完整校验，返回原对象身份，不克隆、不冻结，也不缓存对可变对象的信任。适用于资源、Interaction、实体与 CP 的接纳边界。校验拒绝旧双字段形状、未知字段/版本、重复 ID、不完整反馈、getter、循环引用与非 JSON 值；错误不包含传入正文。原生检查拒绝 Proxy，采用作者保证模式时由宿主提供无代理的数据。[宿主对象检查](https://github.com/weiliang0121/capix/blob/main/docs/runtime-boundaries.md#宿主对象检查)
+
+Provider 自己生成的回复已深冻结。旧 `text/finishReason` 双字段回复不是新协议的有效持久值，不能自动迁移后冒充已认证反馈。
 
 ## 原生工具与续接
 

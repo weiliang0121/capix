@@ -2,13 +2,11 @@ import type { AnyCallable } from '../binding/declarations.js';
 import type { ChildResourceBinding } from '../binding/resources.js';
 import { type ChildCallable, Callable } from '@weiliang0121/capix-structure';
 import type { CallableInput, Stable } from '@weiliang0121/capix-contracts';
-import type { InteractionContract } from '@weiliang0121/capix-interaction';
-import type { InteractionChannel, Interactions } from '@weiliang0121/capix-interaction';
 import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement, Resource } from '@weiliang0121/capix-resources';
 
 export interface ResourceRegistration {
   readonly offer: ResourceIdentity;
-  bind(interactions?: Interactions): ResourceProvider<unknown>;
+  bind(): ResourceProvider<unknown>;
 }
 
 export interface ResourceCaptureScope<Options> {
@@ -71,17 +69,15 @@ export class Resources<Options extends object = {}> {
     return this;
   }
 
-  /** The resource decides how it exposes interaction access; building never sends a request. */
-  registerInteraction<Request, Reply, Delta, Value, Captured, Selection>(offer: ResourceOffer<InteractionChannel<Request, Reply, Delta>, Value, Captured, Selection>, contract: InteractionContract<NoInfer<Request>, NoInfer<Reply>, NoInfer<Delta>>): this {
-    const identity = offer.request().offer;
+  /** Resolve a requested offer's fixed supply during build, before any call opens its endpoints. */
+  registerBinding<Source, Value, Captured, Selection>(offer: ResourceOffer<Source, Value, Captured, Selection>, bind: () => Synchronous<NoInfer<Source>>): this {
     addRegistration(
       this.#registrations,
       Object.freeze({
-        offer: identity,
-        bind: (interactions?: Interactions) => {
-          if (!interactions) throw new Error(`Resource requires Interactions: ${identity.name}`);
-          const channel = interactions.bind(contract);
-          return offer.provide<unknown>(() => channel);
+        offer: offer.request().offer,
+        bind: () => {
+          const source = synchronous(bind(), 'Resource binding');
+          return offer.provide<unknown>(() => source);
         },
       }),
     );

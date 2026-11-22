@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { requireGeminiGenerateContentReply } from './contract.js';
 import { ModelProtocolIssue, ProviderError } from './error.js';
 import { geminiCallId, geminiPartsProof, geminiTerminationKind } from './gemini-contract.js';

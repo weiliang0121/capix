@@ -64,7 +64,7 @@ export function createNotesAssistant(provider, notes, { onRead = () => {}, onWri
     .register(new Resource(notes), writing)
     .register(new Resource(exchanges), ModelExchangeResource)
     .register(new Resource({ exchanges, channel: interactions.bind(contract), ...(provider.inspectRequest ? { inspection: provider } : {}) }), ToolModelResource);
-  const runner = new Runner(new Scene(assistant), resources, interactions).build();
+  const runner = new Runner(new Scene(assistant), resources).build();
   return { runner, interactions };
   // #endregion assembly
   // #endregion model

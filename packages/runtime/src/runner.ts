@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@weiliang0121/capix-platform/identity';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock, isInvocationCancelled, type InvocationControls, type CheckpointInstallation } from '@weiliang0121/capix-invocation';
 import { bindDriverObservation } from './binding/observation.js';
@@ -8,12 +8,11 @@ import type { DriverFact } from './observation/driver.js';
 import type { BuiltCallable } from './structure/construction.js';
 import { CallableBuilder } from './structure/builder.js';
 import { runEntry, type EntryChange, type EntryState } from './entry.js';
-import { snapshotInvocationCapabilities, type InvocationCapabilities } from './construction/capabilities.js';
+import { checkBuildArguments, snapshotInvocationCapabilities, type InvocationCapabilities } from './construction/capabilities.js';
 import { Scene } from '@weiliang0121/capix-structure';
 import type { CallableInput, CallableOutput, CallableDelta, Stable } from '@weiliang0121/capix-contracts';
 import type { CheckpointStore } from '@weiliang0121/capix-checkpoint';
 import { Resources } from './resource/resources.js';
-import { Interactions } from '@weiliang0121/capix-interaction';
 import type { AnyCallable } from './binding/declarations.js';
 import { RunnerOutputSubscriptions, type RunnerOutput } from './runner/output.js';
 import { RunnerCancellation } from './runner/cancellation.js';
@@ -37,7 +36,6 @@ export class Runner<Structure extends Extract<AnyCallable, { readonly kind: 'sce
   readonly id = randomUUID();
   readonly #scene: Structure;
   readonly #resources: Resources<Options>;
-  readonly #interactions: Interactions | undefined;
   readonly #options: Pick<RunnerOptions<Options>, 'hooks' | 'validate'>;
   readonly #builder: CallableBuilder;
   readonly #clock: Clock;
@@ -51,17 +49,16 @@ export class Runner<Structure extends Extract<AnyCallable, { readonly kind: 'sce
   #cancellation?: RunnerCancellation;
   #sequence = 0;
 
-  constructor(scene: Structure, resources: Resources<Options>, interactions?: Interactions, options: RunnerOptions<NoInfer<Options>> = {}) {
+  constructor(scene: Structure, resources: Resources<Options>, options: RunnerOptions<NoInfer<Options>> = {}) {
     if (!(scene instanceof Scene)) throw new TypeError('Runner requires a Scene');
     if (!(resources instanceof Resources)) throw new TypeError('Runner requires Resources');
-    if (interactions !== undefined && !(interactions instanceof Interactions)) throw new TypeError('Runner interactions must be an Interactions instance');
+    checkBuildArguments(arguments, 'new Runner(scene, resources, options?)');
     this.#scene = scene;
     this.#resources = resources;
-    this.#interactions = interactions;
     // Membership is fixed here; callback methods are resolved at the build boundary.
     this.#options = Object.freeze({ hooks: options.hooks ? Object.freeze([...options.hooks]) : undefined, validate: options.validate?.bind(options) });
     this.#clock = options.clock ?? new Clock();
-    const capabilities = snapshotInvocationCapabilities({ ...options, clock: this.#clock });
+    const capabilities = snapshotInvocationCapabilities(options, this.#clock);
     this.#checkpoints = capabilities.checkpoints;
     this.#builder = new CallableBuilder(capabilities);
     this.#observation = bindDriverObservation(this.id, capabilities.observations);
@@ -98,7 +95,7 @@ export class Runner<Structure extends Extract<AnyCallable, { readonly kind: 'sce
     if (this.#building) throw new Error('Runner build is already in progress');
     this.#building = true;
     try {
-      this.#built = this.#builder.build(this.#scene, this.#resources, this.#interactions, this.#options);
+      this.#built = this.#builder.build(this.#scene, this.#resources, this.#options);
       return this;
     } finally {
       this.#building = false;

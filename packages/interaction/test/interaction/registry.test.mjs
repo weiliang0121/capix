@@ -305,8 +305,10 @@ test('invalid registration and retention fail before work; async persistence rea
     persistence: {
       create() {},
       commit() {},
-      async read() {
-        throw new Error('asynchronous storage failed');
+      read() {
+        const result = Promise.reject(new Error('asynchronous storage failed'));
+        Object.defineProperty(result, 'catch', { get: () => assert.fail('read an overridden catch') });
+        return result;
       },
     },
   });

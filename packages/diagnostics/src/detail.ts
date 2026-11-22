@@ -1,5 +1,5 @@
 import { isArray, isFinite } from 'es-toolkit/compat';
-import { isNativeError } from 'node:util/types';
+import { isKnownNativeError, isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
 import { isBoolean, isDate, isMap, isNull, isNumber, isSet, isString, isSymbol, isUndefined } from 'es-toolkit/predicate';
 import type { RuntimeErrorDetail } from '@weiliang0121/capix-contracts';
 import { ErrorTraversal, formatLimits } from './traversal.js';
@@ -13,7 +13,8 @@ export function formatDetail(value: unknown, traversal: ErrorTraversal, depth: n
   if (value === null || typeof value !== 'object') return formatScalar(value);
   if (traversal.contains(value)) return '[Circular reference]';
   try {
-    if (isNativeError(value)) return formatNestedError(value, depth + 1);
+    if (isOpaqueObject(value)) return '[Uninspectable value]';
+    if (isKnownNativeError(value)) return formatNestedError(value, depth + 1);
     const convert: DetailConverter = (item) => formatDetail(item, traversal, depth + 1, formatNestedError);
     return traversal.within(value, () => formatObject(value, convert));
   } catch {

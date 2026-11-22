@@ -1,4 +1,5 @@
-import { Runner, Resources, Interactions, Scene, Node, callableHooks, type InteractionChannel, type InteractionContract } from '@weiliang0121/capix-runtime';
+import { Runner, Resources, Scene, Node, callableHooks } from '@weiliang0121/capix-runtime';
+import { Interactions, type InteractionChannel, type InteractionContract } from '@weiliang0121/capix-interaction';
 import { ResourceOffer } from '@weiliang0121/capix-resources';
 
 declare function expectType<Value>(value: Value): void;
@@ -39,9 +40,18 @@ expectType<Promise<string>>(runner.run({ text: 'hello' }));
 runner.run({ text: 'hello' }, { tenant: 'unexpected' });
 
 const interactions = new Interactions();
+// @ts-expect-error Runner accepts options after resources
 new Runner(scene, resources, interactions);
-// @ts-expect-error the optional third entity is Interactions
+// @ts-expect-error former fourth-argument options must move to the third position
+new Runner(scene, resources, interactions, { hooks: [] });
 new Runner(scene, resources, {});
+class EmptyRunnerOptions {}
+new Runner(scene, resources, new EmptyRunnerOptions());
+new Runner(
+  scene,
+  resources,
+  Object.assign(() => {}, { validate: () => undefined }),
+);
 const tenantResources = new Resources<Options>();
 const tenantRunner = new Runner(scene, tenantResources).build();
 expectType<Promise<Result>>(tenantRunner.run({ text: 'hello' }, { tenant: 'one' }));
@@ -55,6 +65,9 @@ tenantRunner.run({ text: 'hello' }, { tenant: 1 });
 
 const number = new ResourceOffer<number, number>({ name: 'runner.number', expose: (value) => value });
 resources.register(number, 3);
+resources.registerBinding(number, () => 3);
+// @ts-expect-error build-time supplies must be synchronous
+resources.registerBinding(number, async () => 3);
 // @ts-expect-error fixed supply is checked against the resource source type
 resources.register(number, '3');
 const text = new ResourceOffer<string, string>({ name: 'runner.text', expose: (value) => value });
@@ -108,11 +121,11 @@ declare const modelContract: InteractionContract<Request, Reply>;
 declare const wrongRequest: InteractionContract<number, Reply>;
 declare const wrongReply: InteractionContract<Request, number>;
 const models = new ResourceOffer<InteractionChannel<Request, Reply>, InteractionChannel<Request, Reply>>({ name: 'runner.models', expose: (channel) => channel });
-resources.registerInteraction(models, modelContract);
+resources.registerBinding(models, () => interactions.bind(modelContract));
 // @ts-expect-error request contract must match the resource's interaction channel
-resources.registerInteraction(models, wrongRequest);
+resources.registerBinding(models, () => interactions.bind(wrongRequest));
 // @ts-expect-error reply contract must match the resource's interaction channel
-resources.registerInteraction(models, wrongReply);
+resources.registerBinding(models, () => interactions.bind(wrongReply));
 interactions.register(modelContract, {
   send(request) {
     expectType<Readonly<Request>>(request);
@@ -151,7 +164,7 @@ const hooks = callableHooks<typeof streaming, Options>(streaming, {
     };
   },
 });
-new Runner(streaming, tenantResources, interactions, {
+new Runner(streaming, tenantResources, {
   hooks: [hooks],
   validate(options) {
     expectType<Options>(options);
@@ -179,7 +192,7 @@ callableHooks(streaming, {
   // @ts-expect-error call hooks do not supply or capture resources
   capture: () => 'not a source',
 });
-new Runner(streaming, tenantResources, undefined, {
+new Runner(streaming, tenantResources, {
   // @ts-expect-error host validation must be synchronous
   validate: async () => undefined,
 });
@@ -188,11 +201,11 @@ const tooNarrow = callableHooks<typeof streaming, Options & { readonly admin: tr
     expectType<true>(options.admin);
   },
 });
-new Runner(streaming, tenantResources, undefined, {
+new Runner(streaming, tenantResources, {
   // @ts-expect-error hook requirements cannot silently enlarge the configured host options
   hooks: [tooNarrow],
 });
-new Runner(streaming, tenantResources, undefined, {
+new Runner(streaming, tenantResources, {
   // @ts-expect-error host validation cannot require an undeclared option either
   validate(options: Options & { readonly admin: true }) {
     void options;

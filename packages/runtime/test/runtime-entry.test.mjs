@@ -10,7 +10,7 @@ function observation(observe, failure = 'propagate') {
 function host(kind, run, { observations = [], validate } = {}) {
   const scene = new Scene({ run });
   if (kind === 'Runner') {
-    const runner = new Runner(scene, new Resources(), undefined, { observations, validate }).build();
+    const runner = new Runner(scene, new Resources(), { observations, validate }).build();
     return { run: (input, options = {}) => runner.run(input, options), running: () => runner.isRunning };
   }
   const driver = new Driver({ observations });

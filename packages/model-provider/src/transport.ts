@@ -1,3 +1,4 @@
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
 import { deliverModelConsumer, isRequestCancellation, ModelAttemptTransportFailure, ModelEmissionFailure, ModelProtocolIssue, ProviderError, ProviderRequestLimitError } from './error.js';
 import { retryAfterMilliseconds, retryDelay, retrySettings, waitForRetry } from './retry.js';
 import type { RetrySettings } from './retry.js';
@@ -165,7 +166,7 @@ export class ModelHttpTransport<R extends ModelReply> {
       const requestBytes = measureModelRequest(request);
       const streaming = request.stream === true;
       const { body, read } = this.protocol.encode(request, streaming);
-      const wireBytes = Buffer.byteLength(body);
+      const wireBytes = utf8ByteLength(body);
       if (wireBytes > maximumModelWireRequestBytes) throw new TypeError('Model wire request exceeds byte limit');
       return { body, read, streaming, inspection: Object.freeze({ requestBytes, wireBytes, limits: Object.freeze({ maxRequestBytes: this.#configuration.maxRequestBytes, maxWireRequestBytes: this.#configuration.maxWireRequestBytes }) }) };
     } catch (error) {

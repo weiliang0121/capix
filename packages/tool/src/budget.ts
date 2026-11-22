@@ -1,4 +1,5 @@
-import { types } from 'node:util';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { isOpaqueObject, isKnownPromise } from '@weiliang0121/capix-platform/inspection';
 import { maximumModelExchangeEntryBytes, type ModelExchangeEntry, type ModelExchangeOrigin } from '@weiliang0121/capix-model-exchanges';
 import { assertModelContinuation, maximumModelExchangeBytes, maximumModelRequestBytes, maximumModelWireRequestBytes, requireModelExchange, requireModelReply, requireModelRequest, requireToolFeedback, requireToolResult, type ModelExchange, type ModelReply, type ModelRequest, type ModelRequestInspection, type ModelRequestReservation, type ToolResult } from '@weiliang0121/capix-model-provider';
 
@@ -40,7 +41,7 @@ export class ToolBudgetError extends Error {
   }
 }
 function bytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value), 'utf8');
+  return utf8ByteLength(JSON.stringify(value));
 }
 function within(code: ToolBudgetError['code'], value: number, limit: number, phase: ToolBudgetError['phase'] = 'actual'): void {
   if (value > limit) throw new ToolBudgetError(code, value, limit, phase);
@@ -72,10 +73,10 @@ export function assertToolOutputBytes<Value>(value: Value, limit: number): Value
     if (item === null || typeof item === 'boolean' || (typeof item === 'number' && Number.isFinite(item))) return add(bytes(item));
     if (typeof item === 'string') {
       // Reject a known lower bound before allocating a potentially much larger encoded string.
-      within('TOOL_OUTPUT_LIMIT', total + Buffer.byteLength(item), limit);
+      within('TOOL_OUTPUT_LIMIT', total + utf8ByteLength(item), limit);
       return add(bytes(item));
     }
-    if (!item || typeof item !== 'object' || types.isProxy(item) || ancestors.has(item)) throw new TypeError('Tool output must be finite acyclic JSON');
+    if (!item || typeof item !== 'object' || isOpaqueObject(item) || ancestors.has(item)) throw new TypeError('Tool output must be finite acyclic JSON');
     const array = Array.isArray(item);
     if (!array && Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) throw new TypeError('Tool output must contain plain JSON objects');
     const descriptors = Object.getOwnPropertyDescriptors(item);
@@ -122,14 +123,17 @@ export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteB
   assertModelContinuation(request, reservation, projection?.additionalNodes ?? 0);
   if (budgets.maxWireRequestBytes !== undefined && !inspection) throw new TypeError('An explicit tool wire request budget requires host request inspection');
   const measured = inspection?.inspectRequest(request);
-  if (measured && typeof measured === 'object' && 'then' in measured) {
-    void Promise.resolve(measured).catch(() => undefined);
+  if (isKnownPromise(measured)) {
+    void Promise.prototype.then.call(measured, undefined, () => undefined);
+    throw new TypeError('Tool request inspection must be synchronous');
+  }
+  if (measured && typeof measured === 'object' && (isOpaqueObject(measured) || 'then' in measured)) {
     throw new TypeError('Tool request inspection must be synchronous');
   }
   if (inspection && (!measured || typeof measured !== 'object' || !Number.isSafeInteger(measured.requestBytes) || measured.requestBytes < 0 || !Number.isSafeInteger(measured.wireBytes) || measured.wireBytes < 0)) throw new TypeError('Tool request inspection must synchronously return finite byte counts');
   const providerLimits = measured?.limits;
   if (providerLimits !== undefined) {
-    if (!providerLimits || typeof providerLimits !== 'object' || Array.isArray(providerLimits) || types.isProxy(providerLimits)) throw new TypeError('Tool provider limits must be fixed byte budgets');
+    if (!providerLimits || typeof providerLimits !== 'object' || Array.isArray(providerLimits) || isOpaqueObject(providerLimits)) throw new TypeError('Tool provider limits must be fixed byte budgets');
     const fields = Object.getOwnPropertyDescriptors(providerLimits);
     if (Reflect.ownKeys(fields).length !== 2 || ['maxRequestBytes', 'maxWireRequestBytes'].some((key) => !fields[key] || !fields[key]!.enumerable || !('value' in fields[key]!) || !Number.isSafeInteger(fields[key]!.value) || fields[key]!.value < 1)) throw new TypeError('Tool provider limits must contain positive request and wire budgets');
   }
@@ -149,7 +153,7 @@ export function assertToolRequestBytes(request: ModelRequest, budgets: ToolByteB
   if (wireBytes !== undefined && wireLimit !== undefined && phase === 'reserved') {
     if (!reservation || typeof inspection?.reserveWireBytes !== 'function') throw new TypeError('A tool wire budget with pending feedback or context requires reserveWireBytes');
     const upper = inspection.reserveWireBytes(request, reservation);
-    if (types.isPromise(upper)) void Promise.prototype.then.call(upper, undefined, () => undefined);
+    if (isKnownPromise(upper)) void Promise.prototype.then.call(upper, undefined, () => undefined);
     if (!Number.isSafeInteger(upper) || upper < wireBytes) throw new TypeError('Tool wire reservation must synchronously bound the complete inspected body');
     wireBytes = upper;
   }

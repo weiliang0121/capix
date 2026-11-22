@@ -1,5 +1,7 @@
-import { createHash } from 'node:crypto';
-import { isDeepStrictEqual, types } from 'node:util';
+import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
+import { isOpaqueObject } from '@weiliang0121/capix-platform/inspection';
+import { equalData } from '@weiliang0121/capix-platform/equal';
 import { z } from 'zod';
 import type { ModelImageContext } from '@weiliang0121/capix-model-exchanges';
 import { cloneCheckpointValue } from '@weiliang0121/capix-checkpoint';
@@ -23,7 +25,7 @@ export interface ToolCatalog {
 
 /** Read configuration without executing getters. Nodes and schema behavior remain capabilities. */
 function fields(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value) || Object.getOwnPropertySymbols(value).length) throw new TypeError('Tool configuration must contain data properties');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || isOpaqueObject(value) || Object.getOwnPropertySymbols(value).length) throw new TypeError('Tool configuration must contain data properties');
   const result: Record<string, unknown> = Object.create(null);
   for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
     if (!descriptor.enumerable || !('value' in descriptor)) throw new TypeError('Tool configuration must contain enumerable data properties');
@@ -41,12 +43,12 @@ export function toolEntries(value: unknown, checkpoint: boolean, maxFeedbackByte
     const item = fields(configuration);
     if (Object.keys(item).some((key) => !['node', 'description', 'input', 'maxOutputBytes', 'maxFeedbackBytes', 'result'].includes(key))) throw new TypeError('Unknown tool member configuration');
     const node = item.node;
-    if (types.isProxy(node) || !(node instanceof Callable) || (node.kind !== 'node' && node.kind !== 'group')) throw new TypeError('A tool member must be a Node or Group');
+    if (isOpaqueObject(node) || !(node instanceof Callable) || (node.kind !== 'node' && node.kind !== 'group')) throw new TypeError('A tool member must be a Node or Group');
     if (seen.has(node)) throw new TypeError('Tool members require distinct structure identities');
     if (checkpoint && !node.checkpoint) throw new TypeError('Recoverable Tool requires checkpoint contracts on its members');
     if (typeof item.description !== 'string' || !item.description.trim()) throw new TypeError('A tool member requires a description');
     const input = item.input as z.ZodType;
-    if (!input || types.isProxy(input) || typeof input.parse !== 'function') throw new TypeError('A tool member requires an input schema');
+    if (!input || isOpaqueObject(input) || typeof input.parse !== 'function') throw new TypeError('A tool member requires an input schema');
     const result = fields(item.result);
     if (Object.keys(result).some((key) => key !== 'succeeded' && key !== 'failed') || typeof result.succeeded !== 'function' || (result.failed !== undefined && typeof result.failed !== 'function')) throw new TypeError('A tool member requires a result mapping');
     const maxOutputBytes = item.maxOutputBytes;
@@ -86,7 +88,7 @@ export function createToolCatalog(entries: readonly ToolEntry[], policyVersion: 
   });
   requireModelRequest({ messages: [{ role: 'user', content: '' }], tools });
   const basis = cloneCheckpointValue({ formatVersion: 1, policyVersion, precheckVersion: 5, execution, tools, members: entries.map(({ name, position, registration }) => ({ name, position, kind: registration.node.kind, maxOutputBytes: registration.maxOutputBytes ?? null, maxFeedbackBytes: registration.maxFeedbackBytes ?? execution.budgets.maxFeedbackBytes, checkpoint: registration.node.checkpoint ? { key: registration.node.checkpoint.key, version: registration.node.checkpoint.version } : null })) });
-  return Object.freeze({ policyVersion, ...(execution.imageContext === undefined ? {} : { imageContext: execution.imageContext }), tools: Object.freeze(tools), digest: createHash('sha256').update(canonical(basis)).digest('hex') });
+  return Object.freeze({ policyVersion, ...(execution.imageContext === undefined ? {} : { imageContext: execution.imageContext }), tools: Object.freeze(tools), digest: createSha256().update(canonical(basis)).digestHex() });
 }
 export type ToolSelection = { readonly kind: 'accepted'; readonly entry: ToolEntry; readonly input: unknown } | { readonly kind: 'rejected'; readonly result: ToolResult };
 export function selectTool(entries: readonly ToolEntry[], catalog: ToolCatalog, call: ModelToolCall): ToolSelection {
@@ -101,7 +103,7 @@ export function selectTool(entries: readonly ToolEntry[], catalog: ToolCatalog, 
   try {
     const captured = cloneCheckpointValue(input);
     const parsed = entry.registration.input.parse(captured);
-    if (!isDeepStrictEqual(parsed, captured)) throw new TypeError('Tool input schema must preserve the fixed model arguments');
+    if (!equalData(parsed, captured)) throw new TypeError('Tool input schema must preserve the fixed model arguments');
     return { kind: 'accepted', entry, input: parsed };
   } catch (error) {
     if (!(error instanceof z.ZodError)) throw error;
@@ -130,7 +132,7 @@ function schemaIssues(error: z.ZodError, schema: JsonObject) {
     const expected = issue.code === 'invalid_type' && expectedTypes.has(issue.expected) ? issue.expected : undefined;
     return { path, ...(path.length < issue.path.length ? { pathTruncated: true } : {}), reason: reasons.has(issue.code) ? issue.code : 'invalid_value', ...(expected ? { expected } : {}) };
   });
-  while (Buffer.byteLength(JSON.stringify({ issues, truncated: error.issues.length > issues.length }), 'utf8') > 2048) issues.pop();
+  while (utf8ByteLength(JSON.stringify({ issues, truncated: error.issues.length > issues.length })) > 2048) issues.pop();
   return { issues, truncated: error.issues.length > issues.length };
 }
 function reject(code: string, message: string, details?: ReturnType<typeof schemaIssues>): ToolSelection {

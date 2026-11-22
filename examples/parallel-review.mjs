@@ -112,8 +112,8 @@ async function runReview(modules) {
     )
     .register(new Resource(exchanges), ModelExchangeResource)
     .register(new Resource({ exchanges, channel: interactions.bind(contract) }), ToolModelResource)
-    .registerInteraction(verificationModel, contract);
-  const runner = new Runner(new Scene(coordinator), resources, interactions).build();
+    .registerBinding(verificationModel, () => interactions.bind(contract));
+  const runner = new Runner(new Scene(coordinator), resources).build();
   // #endregion wiring
   try {
     const result = await runner.run(modules);

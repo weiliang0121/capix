@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createSha256 } from '@weiliang0121/capix-platform/hash';
 import { requireModelRequest } from '@weiliang0121/capix-model-provider';
 import type { ModelExchangeBasis, ModelExchangeOrigin, ModelImageContext } from './types.js';
 import { capture, counter, identity, record, type JsonValue } from './value.js';
@@ -38,9 +38,9 @@ export function exchangeOriginDigest(basis: ModelExchangeBasis): string {
     if (typeof value === 'number' && Object.is(value, -0)) return '-0';
     return JSON.stringify(value);
   }
-  return createHash('sha256')
+  return createSha256()
     .update(encode(basis as unknown as JsonValue))
-    .digest('hex');
+    .digestHex();
 }
 
 /** Capture policy data before reading it, including for Tool constructor configuration. */
