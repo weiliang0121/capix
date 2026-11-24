@@ -2,6 +2,7 @@ import { utf8ByteLength } from '@weiliang0121/capix-platform/bytes';
 import { deliverModelConsumer, isRequestCancellation, ModelAttemptTransportFailure, ModelEmissionFailure, ModelProtocolIssue, ProviderError, ProviderRequestLimitError } from './error.js';
 import { retryAfterMilliseconds, retryDelay, retrySettings, waitForRetry } from './retry.js';
 import type { RetrySettings } from './retry.js';
+import { assertTrailingMessageSupport } from './continuation.js';
 import { measureModelRequest } from './contract.js';
 import { maximumModelRequestBytes, maximumModelWireRequestBytes, valueLimit } from './value.js';
 import type { ModelHttpConfiguration, ModelControls, ModelAttemptFailure, ModelAttemptEvent, ModelReply, ModelRequest, ModelRequestInspection } from './types.js';
@@ -164,6 +165,7 @@ export class ModelHttpTransport<R extends ModelReply> {
   private prepareRequest(request: ModelRequest) {
     try {
       const requestBytes = measureModelRequest(request);
+      assertTrailingMessageSupport(request, this.protocol.format);
       const streaming = request.stream === true;
       const { body, read } = this.protocol.encode(request, streaming);
       const wireBytes = utf8ByteLength(body);

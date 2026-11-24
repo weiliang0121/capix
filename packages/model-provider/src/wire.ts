@@ -1,6 +1,6 @@
 import { isChatCompletionsReply, requireChatCompletionsReply, terminationKind } from './contract.js';
 import { ProviderError } from './error.js';
-import type { ModelExchange, ModelInputContent, ModelOutput, ChatCompletionsReply, ModelRequest } from './types.js';
+import type { ModelExchange, ModelMessage, ModelInputContent, ModelOutput, ChatCompletionsReply, ModelRequest } from './types.js';
 import { acceptUsage } from './usage.js';
 import { freezeJson, record, toolLimit } from './value.js';
 
@@ -32,7 +32,10 @@ export function acceptWireReply(value: unknown): ChatCompletionsReply {
 }
 
 export function encodeMessages(request: ModelRequest): unknown[] {
-  return [...request.messages.map((message) => ({ role: message.role, content: typeof message.content === 'string' ? message.content : message.content.map(encodeContent) })), ...(request.exchanges ?? []).flatMap(encodeExchange)];
+  return [...request.messages.map(encodeMessage), ...(request.exchanges ?? []).flatMap(encodeExchange), ...(request.trailingMessages ?? []).map(encodeMessage)];
+}
+function encodeMessage(message: ModelMessage): unknown {
+  return { role: message.role, content: typeof message.content === 'string' ? message.content : message.content.map(encodeContent) };
 }
 function encodeExchange({ reply, feedback }: ModelExchange): unknown[] {
   if (!isChatCompletionsReply(reply)) throw new TypeError('Chat Completions cannot continue this exchange');

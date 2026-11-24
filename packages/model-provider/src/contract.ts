@@ -157,10 +157,8 @@ export function measureModelRequest(value: unknown, additionalNodes = 0): number
   return bytes;
 }
 
-function checkRequest(value: unknown): asserts value is ModelRequest {
-  shape(value, ['messages'], ['exchanges', 'tools', 'toolChoice', 'maxTokens', 'responseFormat', 'temperature', 'stream']);
-  if (!Array.isArray(value.messages) || !value.messages.length) throw new TypeError('At least one model message is required');
-  for (const message of value.messages) {
+function checkMessages(messages: readonly unknown[]): void {
+  for (const message of messages) {
     shape(message, ['role', 'content']);
     if (typeof message.role !== 'string' || !['system', 'user', 'assistant'].includes(message.role)) throw new TypeError('Model message has an unsupported role or content');
     if (typeof message.content !== 'string') {
@@ -170,6 +168,16 @@ function checkRequest(value: unknown): asserts value is ModelRequest {
         else checkInputContent(item);
       }
     }
+  }
+}
+
+function checkRequest(value: unknown): asserts value is ModelRequest {
+  shape(value, ['messages'], ['exchanges', 'trailingMessages', 'tools', 'toolChoice', 'maxTokens', 'responseFormat', 'temperature', 'stream']);
+  if (!Array.isArray(value.messages) || !value.messages.length) throw new TypeError('At least one model message is required');
+  checkMessages(value.messages);
+  if (value.trailingMessages !== undefined) {
+    if (!Array.isArray(value.trailingMessages)) throw new TypeError('Trailing model messages must be an array');
+    checkMessages(value.trailingMessages);
   }
   if (value.exchanges !== undefined) {
     if (!Array.isArray(value.exchanges)) throw new TypeError('Model exchanges must be an array');

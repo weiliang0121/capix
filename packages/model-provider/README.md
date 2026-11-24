@@ -50,6 +50,8 @@ console.log(modelReplyText(reply));
 
 使用同一 Chat 协议的其他服务可以更换完整 `endpoint`、模型名与凭证。本仓使用构造的 DeepSeek 和百炼 Qwen 函数调用样本验证两轮 JSON/SSE 请求，覆盖面限定在夹具使用的字段。[离线端点回归](https://github.com/weiliang0121/capix/blob/main/packages/tool/test/chat-endpoints.test.mjs)
 
+Chat Completions 按顺序发送 `messages`、每条已关闭的 `exchanges` 及可选的 `trailingMessages`。尾部使用与 `messages` 相同的角色和内容规则，位于最后一条工具反馈及其图片附件之后。调用方可为本次请求附上新的文本或图片；`inspectRequest` 和 `reserveWireBytes` 均计入完整尾部。其他三个适配器在检查或发送非空尾部时返回 `REQUEST`，诊断原因为 `unsupported-trailing-messages`。省略尾部或传空数组均保持原来的 wire 消息。Tool 与 ModelExchanges 的固定起点只接受前缀消息。
+
 ## Anthropic Messages
 
 ```js

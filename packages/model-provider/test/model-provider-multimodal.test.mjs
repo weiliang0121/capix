@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, requireModelRequest, requireToolResult, requireModelExchange } from '@weiliang0121/capix-model-provider';
+import { assertModelRequestNodeCapacity, ChatCompletionsProvider, requireModelRequest, requireToolResult, requireModelExchange } from '@weiliang0121/capix-model-provider';
 
 const png = { kind: 'image', mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC' };
 const text = (text) => ({ kind: 'text', text });
@@ -197,4 +197,68 @@ test('raised request budgets admit large fixed images without expanding feedback
   );
   await assert.rejects(model.complete(tooMany), (error) => error.code === 'REQUEST');
   assert.equal(sends, 1);
+});
+
+test('Chat preserves the encoded history, including tool image attachments, before each request tail', async () => {
+  const sent = [];
+  const model = provider(async (_url, init) => {
+    sent.push(JSON.parse(init.body));
+    return Response.json(raw);
+  });
+  const fixed = {
+    messages: [
+      { role: 'system', content: 'prefix' },
+      { role: 'user', content: 'question' },
+    ],
+    tools: [{ name: 'capture', description: 'Take a picture', parameters: { type: 'object' } }],
+    exchanges: [{ reply, feedback: [{ toolCallId: 'call', status: 'ok', content: [text('photo'), png] }] }],
+  };
+  await model.complete(fixed);
+  const prefix = sent[0].messages;
+  assert.deepEqual(prefix.at(-1).content.at(-1), wireImage);
+  for (const content of ['first', '第二次']) {
+    const request = {
+      ...fixed,
+      trailingMessages: [
+        { role: 'assistant', content: 'context follows' },
+        { role: 'user', content: [text(content), png] },
+      ],
+    };
+    const inspection = model.inspectRequest(request);
+    const reserved = model.reserveWireBytes(request, { feedback: [], contextGrowthBytes: 0 });
+    await model.complete(request);
+    const body = sent.at(-1);
+    assert.deepEqual(body, { ...sent[0], messages: [...prefix, { role: 'assistant', content: 'context follows' }, { role: 'user', content: [{ type: 'text', text: content }, wireImage] }] });
+    assert.equal(inspection.requestBytes, Buffer.byteLength(JSON.stringify(request)));
+    assert.equal(inspection.wireBytes, Buffer.byteLength(JSON.stringify(body)));
+    assert.equal(reserved, inspection.wireBytes);
+  }
+});
+
+test('malformed tails reject before sending and every accepted tail counts toward capacity', async () => {
+  let sends = 0;
+  const fetch = async () => {
+    sends++;
+    return Response.json(raw);
+  };
+  const model = provider(fetch);
+  const base = { messages: [{ role: 'user', content: 'base' }] };
+  for (const trailingMessages of [null, {}, Array(1), [{ role: 'tool', content: 'forged' }], [{ role: 'assistant', content: [png] }], [{ role: 'user', content: [{ ...png, data: '' }] }]]) {
+    const request = { ...base, trailingMessages };
+    assert.throws(() => requireModelRequest(request), TypeError);
+    assert.throws(() => model.inspectRequest(request), { code: 'REQUEST' });
+    await assert.rejects(model.complete(request), { code: 'REQUEST' });
+  }
+  const full = { ...base, trailingMessages: [{ role: 'user', content: [png] }] };
+  assertModelRequestNodeCapacity(base, 99_995);
+  assert.throws(() => assertModelRequestNodeCapacity(full, 99_995), /structural limits/);
+  const sizes = model.inspectRequest(full);
+  for (const [limit, metric] of [
+    ['maxRequestBytes', 'requestBytes'],
+    ['maxWireRequestBytes', 'wireBytes'],
+  ]) {
+    const bounded = new ChatCompletionsProvider({ endpoint: 'https://fixture.test/chat/completions', model: 'fixture', apiKey: 'fixture', fetch, [limit]: sizes[metric] - 1 });
+    await assert.rejects(bounded.complete(full), { code: 'REQUEST_LIMIT', metric });
+  }
+  assert.equal(sends, 0);
 });

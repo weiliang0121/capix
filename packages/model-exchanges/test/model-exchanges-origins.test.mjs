@@ -112,6 +112,9 @@ test('origin validation refuses authority, callbacks, undefined, accessors and p
       item.request.tools = [];
     },
     (item) => {
+      item.request.trailingMessages = [{ role: 'user', content: 'tail' }];
+    },
+    (item) => {
       item.request.exchanges = [];
     },
     (item) => {

@@ -78,6 +78,7 @@ test('Gemini replays whole signed parts and closes same-name parallel calls by t
   ];
   const next = { ...request, messages: [...request.messages, { role: 'user', content: 'Updated context' }], exchanges: [{ reply: JSON.parse(JSON.stringify(reply)), feedback }] };
   assertModelContinuation(next, { feedback: [], contextGrowthBytes: 99, mutableContext: true });
+  assert.throws(() => assertModelContinuation({ ...next, trailingMessages: next.messages }), { code: 'REQUEST' });
   await provider.complete(next);
   const turns = JSON.parse(sent.at(-1).body).contents;
   assert.deepEqual(turns.at(-2), { role: 'model', parts: parallelParts });

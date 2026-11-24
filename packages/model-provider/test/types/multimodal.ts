@@ -1,4 +1,4 @@
-import type { ModelImageInput, ModelInputContent, ModelMessage, ModelOutput, ToolResult } from '@weiliang0121/capix-model-provider';
+import type { ModelRequest, ModelImageInput, ModelInputContent, ModelMessage, ModelOutput, ToolResult } from '@weiliang0121/capix-model-provider';
 
 const image: ModelImageInput = { kind: 'image', mimeType: 'image/png', data: 'fixed-base64' };
 const content: readonly ModelInputContent[] = [{ kind: 'text', text: 'Look' }, image];
@@ -7,6 +7,9 @@ const system: ModelMessage = { role: 'system', content: [{ kind: 'text', text: '
 // @ts-expect-error Portable system messages cannot introduce image input.
 const invalidSystem: ModelMessage = { role: 'system', content };
 const assistant: ModelMessage = { role: 'assistant', content: [{ kind: 'text', text: 'Answer' }] };
+const request: ModelRequest = { messages: [system], trailingMessages: [user, assistant] };
+// @ts-expect-error Trailing messages use the same role-specific image rules.
+const invalidTail: ModelRequest = { messages: [system], trailingMessages: [{ role: 'assistant', content }] };
 const result: ToolResult = { status: 'ok', content };
 // @ts-expect-error Assistant messages cannot introduce image input.
 const invalidAssistant: ModelMessage = { role: 'assistant', content: [image] };
@@ -16,4 +19,4 @@ const output: ModelOutput = image;
 const remote: ModelImageInput = { kind: 'image', mimeType: 'image/png', url: 'https://example.test/image.png' };
 // @ts-expect-error SVG is outside the image input domain.
 const svg: ModelImageInput = { kind: 'image', mimeType: 'image/svg+xml', data: 'fixed-base64' };
-void [user, system, assistant, result, invalidAssistant, output, remote, svg];
+void [request, invalidTail, user, system, assistant, result, invalidAssistant, output, remote, svg];

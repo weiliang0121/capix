@@ -56,7 +56,7 @@ ModelExchangeResource             ModelExchangeViewSource
 ## 起点与请求
 
 - `begin(id, basis)` 固定整个纯数据输入。同 ID、同内容只确认，不新增提交或变化；不同内容明确拒绝。没有回复的空起点也进入持久序列。`origin(ref)` 核对集合、ID 和完整起点摘要后返回固定内容。
-- `basis.request` 支持 ModelRequest 的消息与选项，不接受 `tools` 或 `exchanges`；目录统一放在 `basis.catalog`，历史由实体组织。选项保持原样，不隐含默认覆盖。空 `catalog.tools` 表达无工具模型调用，重建请求省略 `tools` 字段。
+- `basis.request` 接收固定前缀 `messages` 和生成选项。工具目录放在 `basis.catalog`，历史由实体组织。`trailingMessages` 由调用方在重建后的单次 Chat Completions 请求上提供。选项保持原样，不隐含默认覆盖。空 `catalog.tools` 表达无工具模型调用，重建请求省略 `tools` 字段。
 - `catalog.digest` 和 `policyVersion` 由执行结构提供兼容依据；实体另外计算 `origin.digest`，覆盖完整初始请求和目录。构造模型请求时只将 `catalog.tools` 作为工具定义发送。摘要、策略版本及可选的 `imageContext` 留在起点中，图片策略用于投影工具反馈。目录仅接受纯数据。恢复时，执行方仍须核对当前结构与保存目录是否兼容，实体不会从函数推导执行语义。
 - `previewFeedback(prefix, reference, feedback, reservations?)` 对顺序中的下一条交换临时补全剩余反馈槽。已知结果传实际反馈，待执行的槽传空文本占位，再通过 `{ toolCallId, maxBytes }` 指定该槽完整反馈的字节上限。返回的 `request` 应用与正式请求相同的图片保留策略，`omissionBytes` 按交换给出未来图片可能引入的省略标记字节上界。预览只读，可在工具执行前反复调用。
 - `closed(origin, refs)` 要求引用属于同一起点、revision 准确、顺序为该起点最前面的 K 个交换，且每个工具反馈槽完整。允许选择较短的历史前缀以重建原请求；不能重排、跳过中间项或重复同一交换。它只确认反馈完整性，不判断当前业务能否继续。

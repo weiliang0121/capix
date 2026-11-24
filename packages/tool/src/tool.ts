@@ -22,7 +22,7 @@ function inputCodecFor(catalog: ToolCatalog) {
     z
       .strictObject({
         request: z.custom<ToolInput['request']>((value) => {
-          if (value === null || typeof value !== 'object' || 'tools' in value || 'exchanges' in value) return false;
+          if (value === null || typeof value !== 'object' || 'tools' in value || 'exchanges' in value || 'trailingMessages' in value) return false;
           requireModelRequest({ ...value, tools: catalog.tools });
           return true;
         }),
