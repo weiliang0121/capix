@@ -89,6 +89,8 @@ export interface ModelRequest {
   readonly messages: readonly ModelMessage[];
   /** Closed exchanges appended in order after the fixed message prefix. */
   readonly exchanges?: readonly ModelExchange[];
+  /** Ordered messages after all closed exchanges. Supported by Chat Completions. */
+  readonly trailingMessages?: readonly ModelMessage[];
   readonly tools?: readonly ModelTool[];
   readonly toolChoice?: ModelToolChoice;
   readonly maxTokens?: number;
@@ -105,7 +107,7 @@ export interface ModelStreamProgress {
 export interface ModelProtocolDiagnostic {
   readonly protocol: ModelReply['native']['format'];
   readonly phase: 'request' | 'response' | 'stream';
-  readonly reason: 'invalid-request' | 'invalid-json' | 'invalid-utf8' | 'missing-body' | 'unexpected-content-type' | 'invalid-envelope' | 'missing-response-id' | 'invalid-response-id' | 'missing-model' | 'invalid-model' | 'invalid-candidate' | 'invalid-part' | 'invalid-usage' | 'missing-terminal' | 'truncated-event' | 'inconsistent-stream-identity' | 'event-order' | 'invalid-event' | 'unsupported-response-format' | 'missing-thinking-signature' | 'invalid-block' | 'unsupported-block' | 'missing-reasoning-ciphertext' | 'store-mismatch' | 'predecessor-mismatch';
+  readonly reason: 'invalid-request' | 'unsupported-trailing-messages' | 'invalid-json' | 'invalid-utf8' | 'missing-body' | 'unexpected-content-type' | 'invalid-envelope' | 'missing-response-id' | 'invalid-response-id' | 'missing-model' | 'invalid-model' | 'invalid-candidate' | 'invalid-part' | 'invalid-usage' | 'missing-terminal' | 'truncated-event' | 'inconsistent-stream-identity' | 'event-order' | 'invalid-event' | 'unsupported-response-format' | 'missing-thinking-signature' | 'invalid-block' | 'unsupported-block' | 'missing-reasoning-ciphertext' | 'store-mismatch' | 'predecessor-mismatch';
 }
 /** Bounded diagnostics from one attempt; neither upstream effects nor billing are inferred. */
 export interface ModelAttemptFailure {
@@ -152,7 +154,7 @@ export interface ModelRequestReservation {
   readonly contextGrowthBytes: number;
   /** Set when that message can be replaced or removed even at zero byte growth. */
   readonly mutableContext?: true;
-  /** With mutableContext, only the final user string may change to another user string or be removed. All earlier messages are fixed. */
+  /** With mutableContext, only the final user string in messages may change to another user string or be removed. The trailingMessages array is fixed. */
   readonly contextShape?: 'trailing-user-text';
   /** Sum of the full common JSON byte budgets of possible image omission markers, before subtracting any displaced image bytes. */
   readonly imageOmissionBytes?: number;

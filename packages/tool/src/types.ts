@@ -23,7 +23,7 @@ export interface ToolMember<Member extends ChildCallable> {
 }
 
 export type ToolMembers<Definitions extends Readonly<Record<string, ChildCallable>>> = { readonly [Name in keyof Definitions]: ToolMember<Definitions[Name]> };
-export type ToolBaseRequest = Omit<ModelRequest, 'tools' | 'exchanges'>;
+export type ToolBaseRequest = Omit<ModelRequest, 'tools' | 'exchanges' | 'trailingMessages'>;
 export interface ToolInput {
   readonly request: ToolBaseRequest;
 }

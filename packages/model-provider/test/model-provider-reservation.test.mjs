@@ -106,3 +106,27 @@ test('a trailing user text declaration requires a mutable final user string', ()
   assert.throws(() => chat.reserveWireBytes(request, unmarked), /Invalid trailing user text/);
   assert.throws(() => chat.reserveWireBytes(request, { ...exact, contextShape: 'arbitrary' }), /Invalid trailing user text/);
 });
+
+test('adapters without tail support reject nonempty tails at inspection, reservation and send', async () => {
+  let sends = 0;
+  const config = {
+    endpoint: 'https://offline.invalid/models/m:generateContent',
+    model: 'm',
+    apiKey: 'offline',
+    bindingId: 'fixture',
+    fetch: async () => {
+      sends++;
+    },
+  };
+  const providers = [new AnthropicMessagesProvider({ ...config, anthropicVersion: '2023-06-01', maxTokens: 4096 }), new OpenAIResponsesProvider(config), new GeminiGenerateContentProvider(config)];
+  const base = { messages: [{ role: 'user', content: 'base' }] };
+  const request = { ...base, trailingMessages: [{ role: 'user', content: 'tail' }] };
+  for (const provider of providers) {
+    assert.equal(provider.inspectRequest({ ...base, trailingMessages: [] }).wireBytes, provider.inspectRequest(base).wireBytes);
+    const match = (error) => error.code === 'REQUEST' && error.diagnostic?.reason === 'unsupported-trailing-messages';
+    assert.throws(() => provider.inspectRequest(request), match);
+    assert.throws(() => provider.reserveWireBytes(request, { feedback: [], contextGrowthBytes: 0 }), match);
+    await assert.rejects(provider.complete(request), match);
+  }
+  assert.equal(sends, 0);
+});

@@ -8,7 +8,7 @@ export interface ModelImageContext {
 
 /** Fixed protocol data. The catalog carries no Node, callback or resource authority. */
 export interface ModelExchangeBasis {
-  readonly request: Omit<ModelRequest, 'tools' | 'exchanges'>;
+  readonly request: Omit<ModelRequest, 'tools' | 'exchanges' | 'trailingMessages'>;
   readonly catalog: {
     readonly tools: readonly ModelTool[];
     /** Compatibility identifier supplied by the structure that will execute tools. */

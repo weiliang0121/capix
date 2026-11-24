@@ -351,8 +351,8 @@ for (const checkpoint of [false, true])
     });
 
 for (const checkpoint of [false, true])
-  for (const replacement of [{ tools: [] }, { exchanges: [] }, { tools: undefined }, { exchanges: undefined }])
-    test(`Tool rejects request-owned catalog/history (checkpoint=${checkpoint}, field=${Object.keys(replacement)[0]}, undefined=${Object.values(replacement)[0] === undefined})`, async () => {
+  for (const replacement of [{ tools: [] }, { exchanges: [] }, { trailingMessages: [{ role: 'user', content: 'tail' }] }, { tools: undefined }, { exchanges: undefined }])
+    test(`Tool rejects fields outside the fixed base request (checkpoint=${checkpoint}, field=${Object.keys(replacement)[0]}, undefined=${Object.values(replacement)[0] === undefined})`, async () => {
       const model = host(() => final);
       const saves = journal();
       const fixture = assembly({ policyVersion: 'v1', checkpoint, tools: { lookup: member('lookup', () => ({ text: 'unused' }), checkpoint) } }, model, { store: saves.store });

@@ -77,7 +77,7 @@ const text = await runner.run({ request: { messages: [{ role: 'user', content: '
 
 交换资源管理固定内容；模型资源使用该实体重建请求，经独立 Interaction 发送/等待。两次登记必须使用同一个实体。没有父输入 capture、专用 installer 或隐藏的按次供给对象。每次 Tool 调用创建独立起点，多个调用可共享实体而不混用交换顺序；共享实体的存量上限仍共同计费。
 
-输入 `{ request }` 保留初始消息、toolChoice、maxTokens、responseFormat、temperature、stream；不能替换 `tools` 或 `exchanges`。每次模型子调用接收固定的 `{ origin, exchanges }` 前缀；启用 `requestContext` 且宿主选出字符串时，子输入还包含本次的 `context` 文本，发送资源才展开累计请求。`stream` 可供 Provider 读取 SSE，但本预设只交付最终正文，不转交候选模型正文。`stages` 提供内部模型与工具的结构 ID，供宿主按真实观测事件投影进度。
+输入 `{ request }` 接受固定前缀 `messages` 以及 toolChoice、maxTokens、responseFormat、temperature、stream。Tool 自行组装 `tools` 和 `exchanges`，并在输入边界拒绝单次 Provider 请求使用的 `trailingMessages`。每次模型子调用接收固定的 `{ origin, exchanges }` 前缀；启用 `requestContext` 且宿主选出字符串时，子输入还包含本次的 `context` 文本，发送资源才展开累计请求。`stream` 可供 Provider 读取 SSE，但本预设只交付最终正文，不转交候选模型正文。`stages` 提供内部模型与工具的结构 ID，供宿主按真实观测事件投影进度。
 
 离线例子：`pnpm build && node examples/tool.mjs`，输出 `你好`。完整代码见 [examples/tool.mjs](https://github.com/weiliang0121/capix/blob/main/examples/tool.mjs)。
 
